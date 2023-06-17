@@ -7,15 +7,64 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "linenoise.h"
 
 #define unused(x) (void) (x);
 
+enum {
+  INT3 = 0xcc,
+  BTM_BYTE_MASK = 0xff,
+};
+
+typedef struct {
+  pid_t pid;
+  void *addr;
+  bool is_enabled;
+  uint8_t orig_data;
+} breakpoint;
+
+// Enable the given breakpoint by replacing the
+// instruction at `addr` with `int 3` (0xcc). This
+// will make the child raise `SIGTRAP` once the
+// instruction is reached.
+void break_enable(breakpoint* bp) {
+  assert(bp != NULL);
+
+  // Read and return a word at `bp->addr` in the tracee's memory.
+  long data = ptrace(PTRACE_PEEKDATA, bp->pid, bp->addr, NULL);
+  // Save the original bottom byte.
+  bp->orig_data = (uint8_t) (data & BTM_BYTE_MASK);
+  // Set the new bottom byte to `int 3`.
+  long int3_data = ((data & ~BTM_BYTE_MASK) | INT3);
+  // Update the word in the tracee's memory.
+  ptrace(PTRACE_POKEDATA, bp->pid, bp->addr, int3_data);
+
+  bp->is_enabled = true;
+}
+
+// Disable a breakpoint, restoring the original instruction.
+void break_disable(breakpoint* bp) {
+  assert(bp != NULL);
+
+  // `ptrace` only operatores on whole words, so we need
+  // to read what's currently there first, then replace the
+  // modified low byte and write it to the address.
+
+  long modified_data = ptrace(PTRACE_PEEKDATA, bp->pid, bp->addr, NULL);
+  long restored_data = ((modified_data & ~BTM_BYTE_MASK) | bp->orig_data);
+  ptrace(PTRACE_POKEDATA, bp->pid, bp->addr, restored_data);
+
+  bp->is_enabled = false;
+}
+
 typedef struct {
   const char* prog_name;
   pid_t pid;
-} dbg_t;
+  breakpoint* bps;
+  size_t nbp;
+} debugger;
 
 bool is_command(
   const char *restrict in,
@@ -26,7 +75,25 @@ bool is_command(
     || (strcmp(in, long_form) == 0);
 }
 
-void dbg_continue(dbg_t dbg) {
+void dbg_break(debugger* dbg, void *addr) {
+  assert(dbg != NULL);
+
+  breakpoint bp = {
+    .pid = dbg->pid,
+    .addr = addr,
+    .is_enabled = false,
+    .orig_data = 0x00,
+  };
+
+  break_enable(&bp);
+  
+  dbg->nbp += 1;
+  dbg->bps = (breakpoint*) realloc (dbg->bps, dbg->nbp * sizeof(breakpoint));
+  assert(dbg->bps != NULL);
+  dbg->bps[dbg->nbp - 1] = bp;
+}
+
+void dbg_continue(debugger dbg) {
   errno = 0;
   // Continue child process execution.
   ptrace(PTRACE_CONT, dbg.pid, NULL, NULL);
@@ -46,7 +113,7 @@ void dbg_continue(dbg_t dbg) {
  * continue: continue execution until next breakpoint is hit. 
  *
  */
-void dbg_cmd(dbg_t dbg, const char *line_buf) {
+void dbg_cmd(debugger dbg, const char *line_buf) {
   assert(line_buf != NULL);
 
   // Copy line_buf to allow modifying it.
@@ -64,6 +131,21 @@ void dbg_cmd(dbg_t dbg, const char *line_buf) {
     printf("Empty command 🤨\n");
   } else if (is_command(cmd, "c", "continue")) {
     dbg_continue(dbg);
+  } else if (is_command(cmd, "b", "break")) {
+    char *addr_str = strtok_r(line, " \t", &saveptr);
+    if (addr_str == NULL) {
+      printf("Missing address after break 😠");
+    } else {
+      char *addr_end = addr_str;  // Copy start.
+      long addr = strtol(addr_str, &addr_end, 16);
+      if (addr_str[0] == '\0' && *addr_end == '\0') {
+        // Some number was parsed and the entire
+        // string is valid.
+        dbg_break(&dbg, (void*) addr);
+      } else {
+        printf("Invalid address after break 🤦");
+      }
+    }
   } else {
     printf("I don't know that 🤔\n");
   }
@@ -71,7 +153,7 @@ void dbg_cmd(dbg_t dbg, const char *line_buf) {
   free(line);
 }
 
-void dbg_run(dbg_t dbg) {
+void dbg_run(debugger dbg) {
 
   // Suspend executaion until state change of
   // child process `pid`.
@@ -131,7 +213,12 @@ int main(int argc, char *argv[]) {
 
   } else if (pid >= 1) {
     printf("Let's get to it! %d\n", pid);
-    dbg_t debugger = { prog_name, pid };
+    debugger debugger = {
+      prog_name,
+      pid,
+      NULL,
+      0,
+    };
     dbg_run(debugger);
   }
 
