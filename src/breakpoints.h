@@ -9,12 +9,12 @@
 
 typedef struct {
   pid_t pid;
-  void *addr;
+  uint64_t addr;
   bool is_enabled;
   uint8_t orig_data;
-} breakpoint;
+} Breakpoint;
 
-void enable_breakpoint(breakpoint *bp);
-void disable_breakpoint(breakpoint *bp);
+void enable_breakpoint(Breakpoint *bp);
+void disable_breakpoint(Breakpoint *bp);
 
 #endif // _SPRAY_BREAKPOINTS_H_

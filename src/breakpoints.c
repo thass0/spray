@@ -9,7 +9,7 @@
 // instruction at `addr` with `int 3` (0xcc). This
 // will make the child raise `SIGTRAP` once the
 // instruction is reached.
-void enable_breakpoint(breakpoint *bp) {
+void enable_breakpoint(Breakpoint *bp) {
   assert(bp != NULL);
 
   // Read and return a word at `bp->addr` in the tracee's memory.
@@ -25,7 +25,7 @@ void enable_breakpoint(breakpoint *bp) {
 }
 
 // Disable a breakpoint, restoring the original instruction.
-void disable_breakpoint(breakpoint* bp) {
+void disable_breakpoint(Breakpoint* bp) {
   assert(bp != NULL);
 
   // `ptrace` only operatores on whole words, so we need
