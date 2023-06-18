@@ -15,7 +15,7 @@ typedef struct {
 } Debugger;
 
 // Setup a debugger. This forks the child process.
-int setup_debugger(const char *prog_name, Debugger* dest);
+int setup_debugger(const char *prog_name, Debugger* store);
 
 // Run a debugger.
 void run_debugger(Debugger dbg);

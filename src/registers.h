@@ -4,6 +4,7 @@
 #define _SPARY_REGISTERS_H_
 
 #include "magic.h"
+#include "ptrace.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -54,21 +55,21 @@ static const reg_descriptor reg_descriptors[N_REGISTERS] = {
   { gs, 55, "gs" },
 };
 
-uint64_t get_register_value(pid_t pid, x86_reg reg);
-void set_register_value(pid_t pid, x86_reg reg, uint64_t value);
+x86_word get_register_value(pid_t pid, x86_reg reg);
+void set_register_value(pid_t pid, x86_reg reg, x86_word word);
 
 /* If `dwarf_regnum` refers to a known register, then
- * `true` is returned and `dest` is set to the  content
+ * `true` is returned and `store` is set to the  content
  * of that register. Otherwise this function returns
- * `false` and `dest` stays untouched.
+ * `false` and `store` stays untouched.
  */
-bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *dest);
+bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store);
 
 const char *get_name_from_register(x86_reg reg);
 /* If `name` refers to a known register, then
- * `true` is returned and `dest` is set to that register.
- * Otherwise this function returns `false` and `dest` stays untouched.
+ * `true` is returned and `store` is set to that register.
+ * Otherwise this function returns `false` and `store` stays untouched.
  */
-bool get_register_from_name(const char *name, x86_reg *dest);
+bool get_register_from_name(const char *name, x86_reg *store);
 
 #endif  // _SPARY_REGISTERS_H_

@@ -7,9 +7,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "ptrace.h"
+
 typedef struct {
   pid_t pid;
-  uint64_t addr;
+  x86_addr addr;
   bool is_enabled;
   uint8_t orig_data;
 } Breakpoint;

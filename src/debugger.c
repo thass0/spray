@@ -1,6 +1,7 @@
 #include "debugger.h"
 #include "magic.h"
 #include "registers.h"
+#include "ptrace.h"
 
 #include "linenoise.h"
 
@@ -12,7 +13,6 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
-#include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/personality.h>
 
@@ -68,51 +68,58 @@ bool is_command(
     || (strcmp(in, long_form) == 0);
 }
 
-bool read_hex(char *restrict str, uint64_t *dest) {
+bool read_hex(char *restrict str, uint64_t *store) {
   char *str_end = str;
   uint64_t value = strtol(str, &str_end, 16);
   if (str[0] != '\0' && *str_end == '\0') {
-    *dest = value;
+    *store = value;
     return true;
   } else {
     return false;
   }
 }
 
-void exec_command_memory_read(pid_t pid, uint64_t addr) {
-  printf("         0x%016lx\n",
-    ptrace(PTRACE_PEEKDATA, pid, addr, NULL));
+void exec_command_memory_read(pid_t pid, x86_addr addr) {
+  x86_word read = { 0 };
+  pt_call_result res = pt_read_memory(pid, addr, &read);
+  unused(res);
+  printf("         0x%016lx\n", read.value);
 }
 
-void exec_command_memory_write(pid_t pid, uint64_t addr, uint64_t value) {
-  ptrace(PTRACE_POKEDATA, pid, addr, value);
+void exec_command_memory_write(pid_t pid, x86_addr addr, x86_word word) {
+  pt_write_memory(pid, addr, word);
   // Print readout of write result:
-  printf("         0x%016lx (read after write)\n",
-    ptrace(PTRACE_PEEKDATA, pid, addr, NULL));
+  x86_word stored = { 0 };
+  pt_call_result res = pt_read_memory(pid, addr, &stored);
+  unused(res);
+  printf("         0x%016lx (read after write)\n", stored.value);
 }
 
 void exec_command_register_read(pid_t pid, x86_reg reg, const char *restrict reg_name) {
+  x86_word reg_word = get_register_value(pid, reg);
   printf("%8s 0x%016lx\n",
-    reg_name, get_register_value(pid, reg));
+    reg_name, reg_word.value);
 }
 
-void exec_command_register_write(pid_t pid, x86_reg reg, const char *restrict reg_name, uint64_t value) {
-  set_register_value(pid, reg, value);
+void exec_command_register_write(pid_t pid, x86_reg reg, const char *restrict reg_name, x86_word word) {
+  set_register_value(pid, reg, word);
   // Print readout of write result:
+  x86_word written = get_register_value(pid, reg);
   printf("%8s 0x%016lx (read after write)\n", reg_name,
-    get_register_value(pid, reg));
+    written.value);
 }
 
 void exec_command_print(pid_t pid) {
   for (size_t i = 0; i < N_REGISTERS; i++) {
     reg_descriptor desc = reg_descriptors[i];
-    printf("\t%8s 0x%016lx", desc.name, get_register_value(pid, desc.r));
+    x86_word reg_word = get_register_value(pid, desc.r);
+    printf("\t%8s 0x%016lx", desc.name, reg_word.value);
     // Always put two registers on the same line.
     if (i % 2 == 1) { printf("\n"); }
   }
 }
 
-void exec_command_break(Debugger* dbg, uint64_t addr) {
+void exec_command_break(Debugger* dbg, x86_addr addr) {
   assert(dbg != NULL);
 
   Breakpoint bp = {
@@ -130,19 +137,24 @@ void exec_command_break(Debugger* dbg, uint64_t addr) {
   dbg->bps[dbg->nbp - 1] = bp;
 }
 
-void exec_command_continue(Debugger dbg) {
+void exec_command_continue(pid_t pid) {
   errno = 0;
   // Continue child process execution.
-  ptrace(PTRACE_CONT, dbg.pid, NULL, NULL);
+  pt_continue_execution(pid);
 
   if (errno == ESRCH) {
     printf("The process is dead 😭\n");
   }
 
-  // Again, pause it until it receives another signal.
+  /* Wait for the tracee to be stopped by receiving a
+   * signal. Once the tracee is stopped again we can
+   * continue to poke at it. Effectively this is just
+   * waiting until the next breakpoint sends the tracee
+   * another SIGTRAP.
+   */
   int wait_status;
   int options = 0;
-  waitpid(dbg.pid, &wait_status, options);
+  waitpid(pid, &wait_status, options);
 }
 
 #define CMD_DELIM " \t"
@@ -163,19 +175,18 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
   char *cmd = strtok_r(line, CMD_DELIM, &saveptr);
 
   do {
-    
     if (cmd == NULL) {
       empty_command_error();
     } else if (is_command(cmd, "c", "continue")) {
-      exec_command_continue(*dbg);
+      exec_command_continue(dbg->pid);
     } else if (is_command(cmd, "b", "break")) {
       // Pass `NULL` to `strtok_r` to continue scanning `line`.
       char *addr_str = strtok_r(NULL, CMD_DELIM, &saveptr);
       if (addr_str == NULL) {
         missing_error(error_messages[BREAK_ADDR]);
       } else {
-        uint64_t addr;
-        if (read_hex(addr_str, &addr)) {
+        x86_addr addr;
+        if (read_hex(addr_str, &addr.value)) {
           exec_command_break(dbg, addr);
         } else {
           invalid_error(error_messages[BREAK_ADDR]);
@@ -218,9 +229,9 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           if (value_str == NULL) {
             missing_error(error_messages[REGISTER_WRITE_VALUE]);
           } else {
-            uint64_t value;
-            if (read_hex(value_str, &value)) {
-              exec_command_register_write(dbg->pid, reg, name, value);
+            x86_word word;
+            if (read_hex(value_str, &word.value)) {
+              exec_command_register_write(dbg->pid, reg, name, word);
             } else {
               invalid_error(error_messages[REGISTER_WRITE_VALUE]);
             }
@@ -231,14 +242,13 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       }
     } else if (is_command(cmd, "m", "memory")) {
       char *addr_str = strtok_r(NULL, CMD_DELIM, &saveptr);
-      uint64_t addr;
+      x86_addr addr;
       if (addr_str == NULL) {
         missing_error(error_messages[MEMORY_ADDR]);
         break;
       } else {
-        char *addr_str_end = addr_str;
-        uint64_t addr_buf = strtol(addr_str, &addr_str_end, 16);
-        if (addr_str[0] != '\0' && *addr_str_end == '\0') {
+        x86_addr addr_buf;
+        if (read_hex(addr_str, &addr_buf.value)) {
           addr = addr_buf;
         } else {
           invalid_error(error_messages[MEMORY_ADDR]);
@@ -257,9 +267,9 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         if (value_str == NULL) {
           missing_error(error_messages[MEMORY_WRITE_VALUE]);
         } else {
-          uint64_t value;
-          if (read_hex(value_str, &value)) {
-            exec_command_memory_write(dbg->pid, addr, value);
+          x86_word word;
+          if (read_hex(value_str, &word.value)) {
+            exec_command_memory_write(dbg->pid, addr, word);
           } else {
             invalid_error(error_messages[MEMORY_WRITE_VALUE]);
           }
@@ -275,8 +285,8 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
   free(line);
 }
 
-int setup_debugger(const char *prog_name, Debugger* dest) {
-  assert(dest != NULL);
+int setup_debugger(const char *prog_name, Debugger* store) {
+  assert(store != NULL);
 
   pid_t pid = fork();
   if (pid == -1) {
@@ -288,7 +298,7 @@ int setup_debugger(const char *prog_name, Debugger* dest) {
     personality(ADDR_NO_RANDOMIZE);
 
     // Flag *this* process as the tracee.
-    ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+    pt_trace_me();
 
     // Replace the current process with the
     // given program to debug. Only pass its
@@ -297,7 +307,7 @@ int setup_debugger(const char *prog_name, Debugger* dest) {
   } else if (pid >= 1) {
     /* Parent process */
     printf("🐛🐛🐛 %d 🐛🐛🐛\n", pid);
-    *dest = (Debugger) { prog_name, pid, NULL, 0 };
+    *store = (Debugger) { prog_name, pid, NULL, 0 };
   }
 
   return 0;

@@ -2,8 +2,6 @@
 #include "magic.h"
 
 #include <assert.h>
-#include <sys/ptrace.h>
-
 
 // Enable the given breakpoint by replacing the
 // instruction at `addr` with `int 3` (0xcc). This
@@ -13,13 +11,18 @@ void enable_breakpoint(Breakpoint *bp) {
   assert(bp != NULL);
 
   // Read and return a word at `bp->addr` in the tracee's memory.
-  uint64_t data = ptrace(PTRACE_PEEKDATA, bp->pid, bp->addr, NULL);
+  x86_word data = { 0 };
+  pt_call_result res =
+    pt_read_memory(bp->pid, bp->addr, &data);
+  unused(res);
   // Save the original bottom byte.
-  bp->orig_data = (uint8_t) (data & BTM_BYTE_MASK);
+  bp->orig_data = (uint8_t) (data.value & BTM_BYTE_MASK);
   // Set the new bottom byte to `int 3`.
-  uint64_t int3_data = ((data & ~BTM_BYTE_MASK) | INT3);
+  // When the tracee raises this interrupt, it is sent a
+  // SIGTRAP. Receiving this signals stops it.
+  x86_word int3_data = { ((data.value & ~BTM_BYTE_MASK) | INT3) };
   // Update the word in the tracee's memory.
-  ptrace(PTRACE_POKEDATA, bp->pid, bp->addr, int3_data);
+  pt_write_memory(bp->pid, bp->addr, int3_data);
 
   bp->is_enabled = true;
 }
@@ -32,9 +35,12 @@ void disable_breakpoint(Breakpoint* bp) {
   // to read what's currently there first, then replace the
   // modified low byte and write it to the address.
 
-  uint64_t modified_data = ptrace(PTRACE_PEEKDATA, bp->pid, bp->addr, NULL);
-  uint64_t restored_data = ((modified_data & ~BTM_BYTE_MASK) | bp->orig_data);
-  ptrace(PTRACE_POKEDATA, bp->pid, bp->addr, restored_data);
+  x86_word modified_data = { 0 };
+  pt_call_result res
+    = pt_read_memory(bp->pid, bp->addr, &modified_data);
+  unused(res);
+  x86_word restored_data = { ((modified_data.value & ~BTM_BYTE_MASK) | bp->orig_data) };
+  pt_write_memory(bp->pid, bp->addr, restored_data);
 
   bp->is_enabled = false;
 }
