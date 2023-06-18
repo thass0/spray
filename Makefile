@@ -12,8 +12,8 @@ DEPS = $(OBJECTS:%.o=%.d)
 
 .PHONY = all clean run
 
-all: $(BINARY)
-	@echo --- Build done ---
+all: $(BINARY) README
+	@echo Build successful 👍️
 
 run: all
 	./$(BINARY) $(args)
@@ -28,6 +28,10 @@ $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
+
+README: src/spray.c
+	@sed -n '/\/\*/,/\*\// { s/\/\*//; s/\*\///; s/^\s*//; p; }' $< > $@
+	@echo Rebuilt README
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(DEPS) $(TEST_BUILD_DIR)
