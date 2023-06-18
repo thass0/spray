@@ -35,6 +35,17 @@ bool is_command(
     || (strcmp(in, long_form) == 0);
 }
 
+bool read_hex(char *restrict str, uint64_t *dest) {
+  char *str_end = str;
+  uint64_t value = strtol(str, &str_end, 16);
+  if (str[0] != '\0' && *str_end == '\0') {
+    *dest = value;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void dbg_print_registers(pid_t pid) {
   for (size_t i = 0; i < N_REGISTERS; i++) {
     reg_descriptor desc = reg_descriptors[i];
@@ -77,6 +88,15 @@ void dbg_continue(debugger dbg) {
   waitpid(dbg.pid, &wait_status, options);
 }
 
+uint64_t dbg_read_mem(pid_t pid, void *addr) {
+  return ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+}
+
+void dbg_write_mem(pid_t pid, void *addr, uint64_t value) {
+  uint64_t res = ptrace(PTRACE_POKEDATA, pid, addr, value);
+  perror("memory write");
+}
+
 #define CMD_DELIM " \t"
 
 /* Evaluate a debug command. Available commands are:
@@ -90,6 +110,10 @@ void dbg_continue(debugger dbg) {
  *   (register | r) (write | wr) <name> <value>: write <value> to register <name>.
  *
  *   (register | r) (print | dump): read the values of all registers
+ *
+ *   (memory | m) <address> (read | rd)
+ *
+ *   (memory | m) <address> (write | wr) <value>
  *
  * Where <address> and <value> are validated with `strtol(..., 16)`. 
  * All valid register names can be found in the `reg_descriptors`
@@ -164,9 +188,9 @@ void dbg_cmd(debugger* dbg, const char *line_buf) {
               printf("Missing value after 'register write %s' 😠\n", name);
             } else {
               char *value_end = value_str;
-              uint64_t addr = strtol(value_str, &value_end, 16);
+              uint64_t value = strtol(value_str, &value_end, 16);
               if (value_str[0] != '\0' && *value_end == '\0') {
-                set_register_value(dbg->pid, reg, addr);
+                set_register_value(dbg->pid, reg, value);
                 printf("%8s 0x%016lx (read after write)\n", name,
                   get_register_value(dbg->pid, reg));
               } else {
@@ -183,10 +207,47 @@ void dbg_cmd(debugger* dbg, const char *line_buf) {
         puts("Invalid operation after 'register' 🤦");
       }
     }
+  } else if (is_command(cmd, "m", "memory")) {
+    char *addr_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+    uint64_t addr;
+    if (addr_str == NULL) {
+      printf("Missing address after 'memory' 😠\n");
+    } else {
+      char *addr_str_end = addr_str;
+      uint64_t addr_buf = strtol(addr_str, &addr_str_end, 16);
+      if (addr_str[0] != '\0' && *addr_str_end == '\0') {
+        addr = addr_buf;
+      } else {
+        printf("Invalid address after 'memory' 🤦\n");
+        goto cleanup;
+      }
+    }
+    char *op_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+    if (op_str == NULL) {
+      printf("Missing memory operation");
+    } else if (is_command(op_str, "rd", "read")) {
+      printf("0x%016lx\n",
+        dbg_read_mem(dbg->pid, (void*) addr));
+    } else if (is_command(op_str, "wr", "write")) {
+      char *value_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+      if (value_str == NULL) {
+        printf("Missing memory write value 😠\n");
+      } else {
+        uint64_t value;
+        if (read_hex(value_str, &value)) {
+          dbg_write_mem(dbg->pid, (void*) addr, value);
+          printf("0x%016lx (read after write)\n",
+            dbg_read_mem(dbg->pid, (void*) addr));
+        } else {
+          printf("Invalid valud for memory write 🤦\n");
+        }
+      }
+    }
   } else {
     puts("I don't know that 🤔");
   }
 
+  cleanup:
   free(line);
 }
 
