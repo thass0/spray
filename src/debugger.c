@@ -157,7 +157,9 @@ void exec_command_continue(pid_t pid) {
   waitpid(pid, &wait_status, options);
 }
 
-#define CMD_DELIM " \t"
+static inline char *get_next_command_token(char *restrict line) {
+  return strtok(line, " \t");
+}
 
 void handle_debug_command(Debugger* dbg, const char *line_buf) {
   assert(dbg != NULL);
@@ -167,12 +169,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
   char *line = strdup(line_buf);
   assert(line != NULL);  // Only `NULL` if allocation failed.
   
-  // Start parsing `line` word by word.
-  // `strtok` advanced until the first non-delimiter
-  // bytes is found. Hence, it will handle multiple
-  // spaces, too.
-  char *saveptr;
-  char *cmd = strtok_r(line, CMD_DELIM, &saveptr);
+  const char *cmd = get_next_command_token(line);
 
   do {
     if (cmd == NULL) {
@@ -181,7 +178,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       exec_command_continue(dbg->pid);
     } else if (is_command(cmd, "b", "break")) {
       // Pass `NULL` to `strtok_r` to continue scanning `line`.
-      char *addr_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+      char *addr_str = get_next_command_token(NULL);
       if (addr_str == NULL) {
         missing_error(error_messages[BREAK_ADDR]);
       } else {
@@ -193,7 +190,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
     } else if (is_command(cmd, "r", "register")) {
-      char *name = strtok_r(NULL, CMD_DELIM, &saveptr);
+      const char *name = get_next_command_token(NULL);
       x86_reg reg;
       if (name == NULL) {
         missing_error(error_messages[REGISTER_NAME]);
@@ -216,7 +213,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
 
-      char *op_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+      const char *op_str = get_next_command_token(NULL);
       if (op_str == NULL) {
         missing_error(error_messages[REGISTER_OPERATION]);
       } else {
@@ -225,7 +222,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           exec_command_register_read(dbg->pid, reg, name);
         } else if (is_command(op_str, "wr", "write")) {
           /* Write */
-          char *value_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+          char *value_str = get_next_command_token(NULL);
           if (value_str == NULL) {
             missing_error(error_messages[REGISTER_WRITE_VALUE]);
           } else {
@@ -241,7 +238,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
     } else if (is_command(cmd, "m", "memory")) {
-      char *addr_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+      char *addr_str = get_next_command_token(NULL);
       x86_addr addr;
       if (addr_str == NULL) {
         missing_error(error_messages[MEMORY_ADDR]);
@@ -256,14 +253,14 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
 
-      char *op_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+      const char *op_str = get_next_command_token(NULL);
       if (op_str == NULL) {
         missing_error(error_messages[MEMORY_OPERATION]);
       } else if (is_command(op_str, "rd", "read")) {
         /* Read */
         exec_command_memory_read(dbg->pid, addr);
       } else if (is_command(op_str, "wr", "write")) {
-        char *value_str = strtok_r(NULL, CMD_DELIM, &saveptr);
+        char *value_str = get_next_command_token(NULL);
         if (value_str == NULL) {
           missing_error(error_messages[MEMORY_WRITE_VALUE]);
         } else {
