@@ -149,8 +149,11 @@ bool find_bp_at_addr(Debugger dbg, x86_addr location, size_t *store_idx) {
 }
 
 void step_over_breakpoint(Debugger dbg) {
-  /* Subtract one because execution will go past
-   * the breakpoint before stopping. */
+  /* Subtract one because the processor will increment IP
+     when executing int 3, too. The SIGTRAP will only be
+     raised after.
+     This computes the actual address of the breakpoint.
+  */
   x86_addr possible_bp_addr = { get_ip(dbg.pid).value - 1 };
 
   size_t bp_idx;

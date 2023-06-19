@@ -1,4 +1,4 @@
-CC = gcc
+CC = clang
 CFLAGS = -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
 LDFLAGS =
 CPPFLAGS =
@@ -10,9 +10,11 @@ OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
+README = README.md
+
 .PHONY = all clean run
 
-all: $(BINARY) README
+all: $(BINARY) $(README)
 	@echo Build successful 👍️
 
 run: all
@@ -29,9 +31,9 @@ $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
 
-README: src/spray.c
+$(README): src/spray.c
 	@sed -n '/\/\*/,/\*\// { s/\/\*//; s/\*\///; s/^\s*//; p; }' $< > $@
-	@echo Rebuilt README
+	@echo Rebuilt $(README)
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(DEPS) $(TEST_BUILD_DIR)
