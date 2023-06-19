@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main(void) {
-  fprintf(stderr, "I am a debugable program\n");
+  fprintf(stderr, "Hello, World\n");
   return 0;
 }

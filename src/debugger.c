@@ -79,6 +79,103 @@ bool read_hex(char *restrict str, uint64_t *store) {
   }
 }
 
+/* Get and set the instruction pointer. */
+x86_addr get_ip(pid_t pid) {
+  return (x86_addr) { get_register_value(pid, rip).value };
+}
+
+void set_ip(pid_t pid, x86_addr ip) {
+  set_register_value(pid, rip, (x86_word) { ip.value });
+}
+
+void wait_for_signal(pid_t pid) {
+  /* Wait for the tracee to be stopped by receiving a
+   * signal. Once the tracee is stopped again we can
+   * continue to poke at it. Effectively this is just
+   * waiting until the next breakpoint sends the tracee
+   * another SIGTRAP. */
+  /* In general the following events are awaited by `waitpid`:
+   * - child is terminated
+   * - child is stopped by a signal
+   * - child resumes from a signal
+   */
+  int wait_status;  /* Store status info here. */
+  int options = 0;  /* Normal behviour. */
+  waitpid(pid, &wait_status, options);
+
+  /* Display some info about the state-change which
+   * has just stopped the tracee. This helps grasp
+   * what state the tracee is in now that we can
+   * inspect it. */
+
+  // Did the tracee terminate normally?
+  if (WIFEXITED(wait_status)) {
+    printf("Child exited with code %d\n",
+      WEXITSTATUS(wait_status));
+  }
+  // Was the tracee terminated by a signal?
+  else if (WIFSIGNALED(wait_status)) {
+    printf("Child was terminated by signal %s\n",
+      sigabbrev_np(WTERMSIG(wait_status)));
+  }
+  // Did the tracee receive a `SIGCONT` signal?
+  else if (WIFCONTINUED(wait_status)) {
+    printf("Child was resumed\n");
+  }
+  // Was the tracee stopped by another signal?
+  else if (WIFSTOPPED(wait_status)) {
+    printf("Child was stopped by SIG%s\n",
+      sigabbrev_np(WSTOPSIG(wait_status)));
+  }
+}
+
+/* Set `store_idx` to the breakpoints index if there
+ * is a breakpoint with the given address. */
+bool find_bp_at_addr(Debugger dbg, x86_addr location, size_t *store_idx) {
+  size_t i = 0;
+  for ( ; i < dbg.nbp; i++) {
+    if (dbg.bps[i].addr.value == location.value) {
+      break;
+    }
+  }
+
+  if (i == dbg.nbp) {
+    /* Reached end without match an address. */
+    return false;
+  } else {
+    *store_idx = i;
+    return true;
+  }
+}
+
+void step_over_breakpoint(Debugger dbg) {
+  /* Subtract one because execution will go past
+   * the breakpoint before stopping. */
+  x86_addr possible_bp_addr = { get_ip(dbg.pid).value - 1 };
+
+  size_t bp_idx;
+  if (find_bp_at_addr(dbg, possible_bp_addr, &bp_idx)) {
+    Breakpoint *bp = &dbg.bps[bp_idx];
+
+    if (bp->is_enabled) {
+      /* Reset the tracee instruction pointer to the
+       * instruction that raised the SIGTRAP. */
+      x86_addr prev_inst_addr = possible_bp_addr;
+      set_ip(dbg.pid, prev_inst_addr);
+
+      /* Disable the breakpoint, run only the original
+       * instruction and then reenable it before we
+       * continue. */
+      disable_breakpoint(bp);
+      pt_single_step(dbg.pid);
+      // Wait until the tracee has received
+      // the signal to single step.
+      wait_for_signal(dbg.pid);
+      enable_breakpoint(bp);
+    }
+  }
+}
+
 void exec_command_memory_read(pid_t pid, x86_addr addr) {
   x86_word read = { 0 };
   pt_call_result res = pt_read_memory(pid, addr, &read);
@@ -137,24 +234,18 @@ void exec_command_break(Debugger* dbg, x86_addr addr) {
   dbg->bps[dbg->nbp - 1] = bp;
 }
 
-void exec_command_continue(pid_t pid) {
-  errno = 0;
-  // Continue child process execution.
-  pt_continue_execution(pid);
+void exec_command_continue(Debugger dbg) {
+  step_over_breakpoint(dbg);
 
+  // Continue child process execution.
+  errno = 0;
+  pt_continue_execution(dbg.pid);
   if (errno == ESRCH) {
     printf("The process is dead 😭\n");
+    return;
   }
 
-  /* Wait for the tracee to be stopped by receiving a
-   * signal. Once the tracee is stopped again we can
-   * continue to poke at it. Effectively this is just
-   * waiting until the next breakpoint sends the tracee
-   * another SIGTRAP.
-   */
-  int wait_status;
-  int options = 0;
-  waitpid(pid, &wait_status, options);
+  wait_for_signal(dbg.pid);
 }
 
 static inline char *get_next_command_token(char *restrict line) {
@@ -175,7 +266,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
     if (cmd == NULL) {
       empty_command_error();
     } else if (is_command(cmd, "c", "continue")) {
-      exec_command_continue(dbg->pid);
+      exec_command_continue(*dbg);
     } else if (is_command(cmd, "b", "break")) {
       // Pass `NULL` to `strtok_r` to continue scanning `line`.
       char *addr_str = get_next_command_token(NULL);

@@ -3,6 +3,9 @@
 #ifndef _SPRAY_DEBUGGER_H_
 #define _SPRAY_DEBUGGER_H_
 
+// Required to use `sigabbrev_np`
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 
 #include "breakpoints.h"
