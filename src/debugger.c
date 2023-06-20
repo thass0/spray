@@ -79,13 +79,13 @@ bool read_hex(char *restrict str, uint64_t *store) {
   }
 }
 
-/* Get and set the instruction pointer. */
-x86_addr get_ip(pid_t pid) {
+/* Get and set the program counter. */
+x86_addr get_pc(pid_t pid) {
   return (x86_addr) { get_register_value(pid, rip).value };
 }
 
-void set_ip(pid_t pid, x86_addr ip) {
-  set_register_value(pid, rip, (x86_word) { ip.value });
+void set_pc(pid_t pid, x86_addr pc) {
+  set_register_value(pid, rip, (x86_word) { pc.value });
 }
 
 void wait_for_signal(pid_t pid) {
@@ -149,12 +149,12 @@ bool find_bp_at_addr(Debugger dbg, x86_addr location, size_t *store_idx) {
 }
 
 void step_over_breakpoint(Debugger dbg) {
-  /* Subtract one because the processor will increment IP
+  /* Subtract one because the processor will increment PC
      when executing int 3, too. The SIGTRAP will only be
      raised after.
      This computes the actual address of the breakpoint.
   */
-  x86_addr possible_bp_addr = { get_ip(dbg.pid).value - 1 };
+  x86_addr possible_bp_addr = { get_pc(dbg.pid).value - 1 };
 
   size_t bp_idx;
   if (find_bp_at_addr(dbg, possible_bp_addr, &bp_idx)) {
@@ -164,7 +164,7 @@ void step_over_breakpoint(Debugger dbg) {
       /* Reset the tracee instruction pointer to the
        * instruction that raised the SIGTRAP. */
       x86_addr prev_inst_addr = possible_bp_addr;
-      set_ip(dbg.pid, prev_inst_addr);
+      set_pc(dbg.pid, prev_inst_addr);
 
       /* Disable the breakpoint, run only the original
        * instruction and then reenable it before we
