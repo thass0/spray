@@ -1,6 +1,6 @@
-#include <stdio.h>
-
 int main(void) {
-  fprintf(stderr, "Hello, World\n");
+  int a = 1;
+  int b = 2;
+  int c = a + b;
   return 0;
 }
