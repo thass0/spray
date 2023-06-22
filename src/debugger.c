@@ -133,13 +133,13 @@ void wait_for_signal(pid_t pid) {
  * is a breakpoint with the given address. */
 bool find_bp_at_addr(Debugger dbg, x86_addr location, size_t *store_idx) {
   size_t i = 0;
-  for ( ; i < dbg.nbp; i++) {
-    if (dbg.bps[i].addr.value == location.value) {
+  for ( ; i < dbg.n_breakpoints; i++) {
+    if (dbg.breakpoints[i].addr.value == location.value) {
       break;
     }
   }
 
-  if (i == dbg.nbp) {
+  if (i == dbg.n_breakpoints) {
     /* Reached end without match an address. */
     return false;
   } else {
@@ -158,7 +158,7 @@ void step_over_breakpoint(Debugger dbg) {
 
   size_t bp_idx;
   if (find_bp_at_addr(dbg, possible_bp_addr, &bp_idx)) {
-    Breakpoint *bp = &dbg.bps[bp_idx];
+    Breakpoint *bp = &dbg.breakpoints[bp_idx];
 
     if (bp->is_enabled) {
       /* Reset the tracee instruction pointer to the
@@ -231,10 +231,10 @@ void exec_command_break(Debugger* dbg, x86_addr addr) {
 
   enable_breakpoint(&bp);
   
-  dbg->nbp += 1;
-  dbg->bps = (Breakpoint*) realloc (dbg->bps, dbg->nbp * sizeof(Breakpoint));
-  assert(dbg->bps != NULL);
-  dbg->bps[dbg->nbp - 1] = bp;
+  dbg->n_breakpoints += 1;
+  dbg->breakpoints = (Breakpoint*) realloc (dbg->breakpoints, dbg->n_breakpoints * sizeof(Breakpoint));
+  assert(dbg->breakpoints != NULL);
+  dbg->breakpoints[dbg->n_breakpoints - 1] = bp;
 }
 
 void exec_command_continue(Debugger dbg) {
@@ -376,8 +376,55 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
   free(line);
 }
 
+void init_load_address(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  // Is this a dynamic executable?
+  if (dbg->elf.type == ELF_TYPE_DYN) {
+    // Open the process' `/proc/<pid>/maps` file.
+    char proc_maps_filepath[PROC_MAPS_FILEPATH_LEN];
+    snprintf(
+      proc_maps_filepath,
+      PROC_MAPS_FILEPATH_LEN,
+      "/proc/%d/maps",
+      dbg->pid);
+
+    FILE *proc_map = fopen(proc_maps_filepath, "r");
+    assert(proc_map != NULL);
+
+    // Read the first address from the file.
+    // This is OK since address space
+    //  layout randomization is disabled.
+    char *addr = NULL;
+    size_t n = 0;
+    ssize_t nread = getdelim(&addr, &n, (int) '-', proc_map);
+    fclose(proc_map);
+    assert(nread != -1);
+
+    x86_addr load_address = { 0 };
+    assert(read_hex(addr, &load_address.value) == true);
+
+    free(addr);
+
+    // Now upate the debugger instance on success.
+    dbg->load_address = load_address;
+  }
+}
+
 int setup_debugger(const char *prog_name, Debugger* store) {
   assert(store != NULL);
+
+  // Parse the ELF header.
+  ElfFile elf_buf;  /* Must buffer currently because `parse_elf`
+                       might change `elf_buf` even on error.
+                       This function however should only modify
+                       `store` if it's successful. */
+  elf_parse_result res = parse_elf(prog_name, &elf_buf);
+  if (res != ELF_PARSE_OK) {
+    fprintf(stderr, "ELF parse failed: %s",
+      elf_parse_result_name(res));
+    return -1;
+  }
 
   pid_t pid = fork();
   if (pid == -1) {
@@ -398,7 +445,17 @@ int setup_debugger(const char *prog_name, Debugger* store) {
   } else if (pid >= 1) {
     /* Parent process */
     printf("🐛🐛🐛 %d 🐛🐛🐛\n", pid);
-    *store = (Debugger) { prog_name, pid, NULL, 0 };
+    // Now we can finally touch `store` 😄.
+    *store = (Debugger) {
+      .prog_name=prog_name,
+      .pid=pid,
+      .breakpoints=NULL,
+      .n_breakpoints=0,
+      .elf=elf_buf,
+      /* `load_address` is really initialized by `init_load_address`. */
+      .load_address.value=0
+    };
+    init_load_address(store);
   }
 
   return 0;

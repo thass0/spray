@@ -9,12 +9,15 @@
 #include <stdlib.h>
 
 #include "breakpoints.h"
+#include "parse_elf.h"
 
 typedef struct {
   const char *prog_name;
   pid_t pid;
-  Breakpoint *bps;
-  size_t nbp;
+  Breakpoint *breakpoints;
+  size_t n_breakpoints;
+  ElfFile elf;
+  x86_addr load_address;
 } Debugger;
 
 // Setup a debugger. This forks the child process.

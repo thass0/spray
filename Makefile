@@ -1,7 +1,10 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
 LDFLAGS =
-CPPFLAGS =
+
+export PKG_CONFIG_PATH = libelfin/elf:libelfin/dwarf
+CPPFLAGS = $$(pkg-config --cflags libelf++ libdwarf++)
+
 
 BUILD_DIR = build
 SOURCE_DIR = src
