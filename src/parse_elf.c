@@ -148,8 +148,7 @@ elf_parse_result parse_elf(const char *filepath, ElfFile *elf_store) {
   }
 
   // Is the object file type in the accepted range?
-  if (ELF_TYPE_NONE <= elf_header.e_type
-    && elf_header.e_type <= ELF_TYPE_CORE) {
+  if (elf_header.e_type <= ELF_TYPE_CORE) {
     // `e_type` maps to `elf_type` in this range.
     elf_store->type = (elf_type) elf_header.e_type;
   } else {
