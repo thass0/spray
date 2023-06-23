@@ -3,8 +3,6 @@
 
 #include "../src/parse_elf.h"
 
-#include "stdio.h"
-
 TEST(accept_valid_executable) {
   const char *filepath = "tests/assets/linux_x86_bin";
   ElfFile elf_file = {0};
@@ -18,8 +16,8 @@ TEST(reject_invalid_executables) {
   // were compiled for unsupported targets (32-bit, ARM etc.)
   // All of them should be rejects.
 
-  // 32 bit Intel 80386 binary.
-  const char *filepath = "tests/assets/linux_i386_bin";
+  // 32 bit binary.
+  const char *filepath = "tests/assets/linux_32_bin";
   ElfFile elf_file = {0};
   elf_parse_result res = parse_elf(filepath, &elf_file);
   assert_int(res, ==, ELF_PARSE_DISLIKE);

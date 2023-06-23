@@ -3,11 +3,19 @@
 #include "munit.h"
 
 extern MunitTest parse_elf_tests[];
+extern MunitTest libelfin_wrapper_tests[];
 
 static MunitSuite suites[] = {
   {
     "/parse_elf",
     parse_elf_tests,
+    NULL,
+    1,
+    MUNIT_SUITE_OPTION_NONE
+  },
+  {
+    "/libelfin_wrapper",
+    libelfin_wrapper_tests,
     NULL,
     1,
     MUNIT_SUITE_OPTION_NONE
