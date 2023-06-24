@@ -1,21 +1,13 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
-LDFLAGS = $$(pkg-config --cflags --libs libelf++ libdwarf++) -g -lstdc++
-
-CXX = clang++
-# Turning off `-Wval-extension` and `-Wunused-parameter`
-# is necessary because libelfin raises them.
-CXXFLAGS = -fsanitize=address -g -Wall -Wextra -pedantic-errors -std=c++0x -Wno-vla-extension -Wno-unused-parameter
-
-export PKG_CONFIG_PATH = libelfin/elf:libelfin/dwarf
+LDFLAGS =
 CPPFLAGS =
 
 BUILD_DIR = build
 SOURCE_DIR = src
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
 SOURCES += $(wildcard $(SOURCE_DIR)/*.cc)
-OBJECTS := $(patsubst $(SOURCE_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SOURCES))
-OBJECTS := $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(OBJECTS))
+OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -38,9 +30,6 @@ $(BINARY): $(OBJECTS)
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(SOURCE_DIR) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.cc | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MMD -I$(SOURCE_DIR) -c $< -o $@
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
@@ -69,10 +58,6 @@ $(TEST_BINARY): $(TEST_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -I$(SOURCE_DIR) -I$(TEST_SOURCE_DIR) $(TEST_OBJECTS) -o $(TEST_BINARY)
 
 -include $(TEST_DEPS)
-
-# Only run this until freeing libelfin internal
-# allocation using the `new` operator are fixed.
-export ASAN_OPTIONS=detect_leaks=0
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_SOURCE_DIR)/%.c | $(TEST_BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(TEST_SOURCE_DIR) -c $< -o $@

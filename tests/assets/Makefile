@@ -1,8 +1,5 @@
-# Build the test binaries, using DWARF4 until
-# I've found a library with good DWARF5 support.
-
 CC = clang
-CFLAGS = -gdwarf-4
+CFLAGS = -g
 
 .PHONY = all clean
 
