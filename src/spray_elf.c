@@ -1,4 +1,4 @@
-#include "parse_elf.h"
+#include "spray_elf.h"
 
 #include "magic.h"
 

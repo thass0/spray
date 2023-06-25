@@ -1,7 +1,7 @@
 #define MUNIT_ENABLE_ASSERT_ALIASES
 #include "munit.h"
 
-#include "../src/parse_elf.h"
+#include "../src/spray_elf.h"
 
 TEST(accept_valid_executable) {
   const char *filepath = "tests/assets/linux_x86_bin";

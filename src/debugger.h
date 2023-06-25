@@ -9,7 +9,7 @@
 #include <stdlib.h>
 
 #include "breakpoints.h"
-#include "parse_elf.h"
+#include "spray_elf.h"
 
 typedef struct {
   const char *prog_name;

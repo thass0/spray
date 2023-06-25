@@ -2,8 +2,8 @@
 
 #pragma once
 
-#ifndef _SPARY_PARSE_ELF_H_
-#define _SPRAY_PARSE_ELF_H_
+#ifndef _SPARY_SPRAY_ELF_H_
+#define _SPRAY_SPRAY_ELF_H_
 
 #define _GNU_SOURCE
 
