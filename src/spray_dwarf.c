@@ -45,6 +45,10 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   }
 }
 
+/* NOTE: The return value of `search_dwarf_die` and `search_dwarf_dbg`
+   only signals the outcome of the libdwarf calls. Therefore the return
+   value `DW_DLV_OK` doesn't mean that the search was successful in that
+   we found something. It only means that there wasn't a error with DWARF. */
 
 int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error,
   int is_info, int in_level,
@@ -55,7 +59,10 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
   Dwarf_Die cur_die = in_die;
   Dwarf_Die child_die = NULL;
 
-  search_callback(dbg, in_die, search_for, search_findings);
+  bool in_die_found = search_callback(dbg, in_die, search_for, search_findings);
+  if (in_die_found) {
+    return DW_DLV_OK;
+  }
 
   while (1) {
     Dwarf_Die sib_die = NULL;
@@ -65,12 +72,16 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
       return DW_DLV_ERROR;
     } else if (res == DW_DLV_OK) {
       /* We found a child: recurse! */
-      search_dwarf_die(dbg, child_die, error,
+      res = search_dwarf_die(dbg, child_die, error,
         is_info, in_level + 1,
         search_callback, search_for, search_findings);
   
       dwarf_dealloc(dbg, child_die, DW_DLA_DIE);
       child_die = NULL;
+
+      if (res == DW_DLV_ERROR) {
+        return DW_DLV_ERROR;
+      }
     }
 
     /* `DW_DLV_OK` or `DW_DLV_NO_ENTRY`. */
@@ -78,22 +89,24 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
     res = dwarf_siblingof_b(dbg, cur_die,
       is_info, &sib_die,
       error);
-    if (res == DW_DLV_ERROR) {
-      exit(1);
-    } else {
-      /* Is `cur_die` a sibling of the initial DIE? */
-      if (cur_die != in_die) {
-        dwarf_dealloc(dbg, cur_die, DW_DLA_DIE);
-        cur_die = NULL;
-      }
+
+    /* Is `cur_die` a sibling of the initial DIE? */
+    if (cur_die != in_die) {
+      dwarf_dealloc(dbg, cur_die, DW_DLA_DIE);
+      cur_die = NULL;
     }
 
     if (res == DW_DLV_NO_ENTRY) {
       /* Level is empty now. */
       return DW_DLV_OK;
+    } else if (res == DW_DLV_ERROR){
+      return DW_DLV_ERROR;
     } else if (res == DW_DLV_OK) {
       cur_die = sib_die;
-      search_callback(dbg, sib_die, search_for, search_findings);
+      bool sib_die_found = search_callback(dbg, sib_die, search_for, search_findings);
+      if (sib_die_found) {
+        return DW_DLV_OK;
+      }
     }
   }
 }
@@ -161,6 +174,13 @@ int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
 
     res = search_dwarf_die(dbg, cu_die, error, is_info, 0,
       search_callback, search_for, search_findings);
+
+    dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+    cu_die = NULL;
+
+    if (res == DW_DLV_ERROR) {
+      return DW_DLV_ERROR;
+    }
   }
 }
 
@@ -275,7 +295,7 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     return NULL;
   } else {
     /* Search completed without error. `fn_name`
-       might still be NULL if it wasn't fount. */
+       might still be NULL if it wasn't found. */
     return fn_name;
   }
 }
@@ -368,8 +388,6 @@ bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
   return false;
 }
 
-#include <stdio.h>
-
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   Dwarf_Error error = NULL;
 
@@ -388,7 +406,7 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     return (LineEntry) { .ln=-1, .cl=-1 };
   } else {
     /* No DWARF error during search. Result
-       is -1 if no line entry was found. */
+       is `-1` if no line entry was found. */
     return line_entry;
   }
 }
