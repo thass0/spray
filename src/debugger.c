@@ -68,7 +68,7 @@ bool is_command(
     || (strcmp(in, long_form) == 0);
 }
 
-bool read_hex(char *restrict str, uint64_t *store) {
+bool parse_hex_num(char *restrict str, uint64_t *store) {
   char *str_end = str;
   uint64_t value = strtol(str, &str_end, 16);
   if (str[0] != '\0' && *str_end == '\0') {
@@ -77,6 +77,10 @@ bool read_hex(char *restrict str, uint64_t *store) {
   } else {
     return false;
   }
+}
+
+x86_addr offset_load_address(Debugger dbg, x86_addr addr) {
+  return (x86_addr) { addr.value - dbg.load_address.value };
 }
 
 /* Get and set the program counter. */
@@ -277,7 +281,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         missing_error(error_messages[BREAK_ADDR]);
       } else {
         x86_addr addr;
-        if (read_hex(addr_str, &addr.value)) {
+        if (parse_hex_num(addr_str, &addr.value)) {
           exec_command_break(dbg, addr);
         } else {
           invalid_error(error_messages[BREAK_ADDR]);
@@ -321,7 +325,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
             missing_error(error_messages[REGISTER_WRITE_VALUE]);
           } else {
             x86_word word;
-            if (read_hex(value_str, &word.value)) {
+            if (parse_hex_num(value_str, &word.value)) {
               exec_command_register_write(dbg->pid, reg, name, word);
             } else {
               invalid_error(error_messages[REGISTER_WRITE_VALUE]);
@@ -339,7 +343,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         break;
       } else {
         x86_addr addr_buf;
-        if (read_hex(addr_str, &addr_buf.value)) {
+        if (parse_hex_num(addr_str, &addr_buf.value)) {
           addr = addr_buf;
         } else {
           invalid_error(error_messages[MEMORY_ADDR]);
@@ -359,7 +363,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           missing_error(error_messages[MEMORY_WRITE_VALUE]);
         } else {
           x86_word word;
-          if (read_hex(value_str, &word.value)) {
+          if (parse_hex_num(value_str, &word.value)) {
             exec_command_memory_write(dbg->pid, addr, word);
           } else {
             invalid_error(error_messages[MEMORY_WRITE_VALUE]);
@@ -402,7 +406,7 @@ void init_load_address(Debugger *dbg) {
     assert(nread != -1);
 
     x86_addr load_address = { 0 };
-    assert(read_hex(addr, &load_address.value) == true);
+    assert(parse_hex_num(addr, &load_address.value) == true);
 
     free(addr);
 
@@ -462,7 +466,6 @@ int setup_debugger(const char *prog_name, Debugger* store) {
 }
 
 void run_debugger(Debugger dbg) {
-
   // Suspend executaion until state change of child process `pid`.
   int wait_status;
   int options = 0;

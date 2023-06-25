@@ -1,3 +1,5 @@
 **/a.out
 build/
 libdwarf/
+.cache
+compile_commands.json
