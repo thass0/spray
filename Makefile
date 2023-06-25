@@ -1,7 +1,7 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
-LDFLAGS =
 CPPFLAGS =
+LDFLAGS = -ldwarf
 
 BUILD_DIR = build
 SOURCE_DIR = src
@@ -29,7 +29,7 @@ $(BINARY): $(OBJECTS)
 -include $(DEPS)
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(SOURCE_DIR) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(SOURCE_DIR) -Ilibdwarf/src/lib/libdwarf -c $< -o $@
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
@@ -60,7 +60,7 @@ $(TEST_BINARY): $(TEST_OBJECTS)
 -include $(TEST_DEPS)
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_SOURCE_DIR)/%.c | $(TEST_BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(TEST_SOURCE_DIR) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -MMD -I$(TEST_SOURCE_DIR) -Ilibdwarf/src/lib/libdwarf -c $< -o $@
 
 $(TEST_BUILD_DIR):
 	mkdir $(TEST_BUILD_DIR)
