@@ -259,8 +259,9 @@ bool find_name_in_die(Dwarf_Debug dbg, Dwarf_Die die,
 
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   Dwarf_Error error = NULL;
-  char *fn_name = NULL;  // <- Store the function name here.
+
   Dwarf_Addr pc_addr = pc.value;
+  char *fn_name = NULL;  // <- Store the function name here.
   
   int res = search_dwarf_dbg(dbg, &error,
     find_name_in_die,
@@ -273,10 +274,122 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   } else if (res == DW_DLV_NO_ENTRY) {
     return NULL;
   } else {
-    /* Success. `find_name_in_die` must have
-       allocated memory for `fn_name`. */
-    assert(fn_name != NULL);
+    /* Search completed without error. `fn_name`
+       might still be NULL if it wasn't fount. */
     return fn_name;
+  }
+}
+
+bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+  void *const search_for, void *const search_findings
+) {
+  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
+  LineEntry *line_entry = (LineEntry *) search_findings;
+
+  int res;
+  Dwarf_Unsigned line_table_version = 0;
+  Dwarf_Small line_table_count = 0;  /* 0 and 1 are normal. 2 means
+                                      experimental two-level line table. */
+  Dwarf_Line_Context line_context = NULL;
+  Dwarf_Error error = NULL;
+
+  res = dwarf_srclines_b(die,
+    &line_table_version, &line_table_count,
+    &line_context, &error);
+
+  if (res != DW_DLV_OK) {
+    if (DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  } else if (line_table_count == 2) {
+    /* two-level line table is not currently supported. */
+    return false;
+  }
+
+  Dwarf_Line *lines = NULL;
+  Dwarf_Signed n_lines = 0;
+
+  res = dwarf_srclines_from_linecontext(line_context,
+    &lines, &n_lines,
+    &error);
+
+  if (res != DW_DLV_OK) {
+    dwarf_srclines_dealloc_b(line_context);
+    if (DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  for (unsigned i = 0; i < n_lines; i++) {
+    Dwarf_Addr line_addr = 0;
+    res = dwarf_lineaddr(lines[i], &line_addr,
+      &error);
+
+    if (res != DW_DLV_OK) {
+      break;
+    }
+
+    if (line_addr == *pc) {
+      Dwarf_Unsigned lineno;
+      res = dwarf_lineno(lines[i], &lineno,
+        &error);
+
+      if (res != DW_DLV_OK) {
+        break;
+      }
+
+      /* `dwarf_lineoff_b` returns the column number. */
+      Dwarf_Unsigned colno;
+      res = dwarf_lineoff_b(lines[i], &colno,
+        &error);
+
+      if (res != DW_DLV_OK) {
+        break;
+      }
+
+      dwarf_srclines_dealloc_b(line_context);
+
+      line_entry->ln = lineno;
+      line_entry->cl = colno;
+      return true;
+    }
+  }
+
+  dwarf_srclines_dealloc_b(line_context);
+
+  if (res == DW_DLV_ERROR) {
+    dwarf_dealloc_error(dbg, error);
+  }
+
+  /* Reached end of loop without finding
+     a line entry with the address. */
+  return false;
+}
+
+#include <stdio.h>
+
+LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+  Dwarf_Error error = NULL;
+
+  Dwarf_Addr pc_addr = pc.value;
+  LineEntry line_entry = { .ln=-1, .cl=-1 };
+
+  int res = search_dwarf_dbg(dbg, &error,
+    find_line_entry_in_die,
+    &pc_addr,
+    &line_entry);
+
+  if (res == DW_DLV_ERROR) {
+    dwarf_dealloc_error(dbg, error);
+    return (LineEntry) { .ln=-1, .cl=-1 };
+  } else if (res == DW_DLV_NO_ENTRY) {
+    return (LineEntry) { .ln=-1, .cl=-1 };
+  } else {
+    /* No DWARF error during search. Result
+       is -1 if no line entry was found. */
+    return line_entry;
   }
 }
 
