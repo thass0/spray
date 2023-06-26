@@ -39,6 +39,9 @@ TEST(get_line_entry_from_pc_works) {
     LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
     assert_int(line_entry.ln, ==, 4);
     assert_int(line_entry.cl, ==, 13);
+    assert_ptr_not_null(line_entry.filepath);
+    /* Ignore the part of the filepath that is host specific. */
+    assert_ptr_not_null(strstr(line_entry.filepath, "tests/assets/debug_me.c"));
   }
   {  /* Sad path 😢. */
     x86_addr pc = { 0xdeabbeef };
@@ -46,6 +49,7 @@ TEST(get_line_entry_from_pc_works) {
     /* -1 indicates error. */
     assert_int(line_entry.ln, ==, -1);
     assert_int(line_entry.cl, ==, -1);
+    assert_ptr_equal(line_entry.filepath, NULL);
   }
 
   dwarf_finish(dbg);

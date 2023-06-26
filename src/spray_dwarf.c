@@ -300,11 +300,18 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
+/* Mutable line entry. Used to find the info. */
+typedef struct {
+  int ln;
+  int cl;
+  char *filepath;
+} MutLineEntry;
+
 bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
   void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  LineEntry *line_entry = (LineEntry *) search_findings;
+  MutLineEntry *line_entry = (MutLineEntry *) search_findings;
 
   int res;
   Dwarf_Unsigned line_table_version = 0;
@@ -369,6 +376,15 @@ bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
         break;
       }
 
+      /* `dwarf_linesrc` returns the file name.
+         `line_entryr->filepath` is set here on succcess. */
+      res = dwarf_linesrc(lines[i], &line_entry->filepath,
+        &error);
+
+      if (res != DW_DLV_OK) {
+        break;
+      }
+
       dwarf_srclines_dealloc_b(line_context);
 
       line_entry->ln = lineno;
@@ -392,8 +408,11 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   Dwarf_Error error = NULL;
 
   Dwarf_Addr pc_addr = pc.value;
-  LineEntry line_entry = { .ln=-1, .cl=-1 };
+  LineEntry line_entry = { .ln=-1, .cl=-1, .filepath=NULL };
 
+  /* Because all fields in `LineEntry` are const
+     `find_line_entry_in_die` will cast them to
+     be mutable and modify them. */
   int res = search_dwarf_dbg(dbg, &error,
     find_line_entry_in_die,
     &pc_addr,
@@ -401,9 +420,9 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
 
   if (res == DW_DLV_ERROR) {
     dwarf_dealloc_error(dbg, error);
-    return (LineEntry) { .ln=-1, .cl=-1 };
+    return (LineEntry) { .ln=-1, .cl=-1, .filepath=NULL };
   } else if (res == DW_DLV_NO_ENTRY) {
-    return (LineEntry) { .ln=-1, .cl=-1 };
+    return (LineEntry) { .ln=-1, .cl=-1, .filepath=NULL };
   } else {
     /* No DWARF error during search. Result
        is `-1` if no line entry was found. */

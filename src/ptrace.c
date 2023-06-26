@@ -79,3 +79,11 @@ pt_call_result pt_single_step(pid_t pid) {
   }
 }
 
+pt_call_result pt_get_signal_info(pid_t pid, siginfo_t *siginfo) {
+  assert(siginfo != NULL);
+  if (ptrace(PTRACE_GETSIGINFO, pid, NULL, siginfo) == -1) {
+    return PT_ERR;
+  } else {
+    return PT_OK;
+  }
+}

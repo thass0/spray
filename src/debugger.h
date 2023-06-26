@@ -10,14 +10,16 @@
 
 #include "breakpoints.h"
 #include "spray_elf.h"
+#include "spray_dwarf.h"
 
 typedef struct {
-  const char *prog_name;
-  pid_t pid;
-  Breakpoint *breakpoints;
-  size_t n_breakpoints;
-  ElfFile elf;
-  x86_addr load_address;
+  const char *prog_name;  /* Tracee program name. */
+  pid_t pid;  /* Tracee pid. */
+  Breakpoint *breakpoints;  /* Breakpoints set in tracee. */
+  size_t n_breakpoints;  /* Number of breakpoints. */
+  ElfFile elf;  /* Tracee ELF information. */
+  x86_addr load_address;  /* Load address. Set for PIEs, 0 otherwise. */
+  Dwarf_Debug dwarf;  /* Libdwarf debug information. */
 } Debugger;
 
 // Setup a debugger. This forks the child process.

@@ -10,13 +10,15 @@
 
 #include <stdbool.h>
 
+/* Initialized debug info. Returns NULL on error. */
 Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error);
 
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 typedef struct {
-  int ln;
-  int cl;
+  const int ln;
+  const int cl;
+  const char *filepath;
 } LineEntry;
 
 /* Returns `ln=-1` if there is no line entry for the PC. */

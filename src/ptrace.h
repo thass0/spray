@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <signal.h>
 #include <sys/user.h>
 
 /* Strong types to separate address and
@@ -34,6 +35,8 @@ pt_call_result pt_write_registers(pid_t pid, struct user_regs_struct *regs);
 pt_call_result pt_continue_execution(pid_t pid);
 pt_call_result pt_trace_me(void);
 pt_call_result pt_single_step(pid_t pid);
+
+pt_call_result pt_get_signal_info(pid_t pid, siginfo_t *siginfo);
 
 #endif // _SPRAY_PTRACE_H_
 
