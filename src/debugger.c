@@ -59,84 +59,6 @@ static inline void unknown_cmd_error(void) {
   printf("I don't know that 🤔\n");
 }
 
-enum print_source_block_size {
-  LINE_BLOCK_SIZE = 128,
-};
-
-int print_source(const char *source_file, unsigned lineno, unsigned n_context) {
-  assert(source_file != NULL);
-
-  FILE *f = fopen(source_file, "r");
-  if (f == NULL) {
-    return -1;
-  }
-
-  /* Calculate context window into file. */
-  unsigned start_lineno = lineno <= n_context ? 1 : lineno - n_context;
-  unsigned end_lineno = lineno + n_context + 1;
-
-  /* Does the desired context exceed the upper limit? */
-  if (lineno < n_context) {
-    end_lineno += n_context - lineno;
-  }
-
-  /* Expect `end_lineno` to be within the number of total lines. */
-  size_t n_lines = end_lineno;
-  size_t n_read = 0;  /* Number of lines read. */
-  char **lines = (char **) calloc (n_lines, sizeof(char *));
-
-  size_t n_chars_read = 0;  /* Required by `getline(3)` not used rn. */
-  for (; n_read < n_lines; n_read++) {
-    /* Allocate more memory before the first loop
-       condition fails. */
-    if (n_read + 1 >= n_lines) {
-      size_t new_alloc_start_offset = n_lines;
-      n_lines += LINE_BLOCK_SIZE;
-      lines = (char **) realloc (lines, n_lines * sizeof(char *));
-      /* Zero all the newly allocated memory. */
-      memset(lines + new_alloc_start_offset,
-        0, LINE_BLOCK_SIZE * sizeof(char *));
-    }
-
-    if (getline(&lines[n_read], &n_chars_read, f) == -1) {
-      /* EOF. */
-      break;
-    }
-  }
-
-  /* Is the line context we want to display
-     outside of the possible range of lines? */
-  if (end_lineno > n_read) {
-    end_lineno = n_read;
-  }
-
-  /* NOTE: Line numbers are one-indexed; we must
-     subtract one to access arrays. */
-  for (
-    unsigned cur_lineno = start_lineno;
-    cur_lineno <= end_lineno;
-    cur_lineno++
-  ) {
-    if (cur_lineno == lineno) {
-      /* Highlight current line. */
-      fputs(" -> ", stdout);
-    } else {
-      fputs("    ", stdout);
-    }
-
-    /* The string read by `getline(3)` ends in a newline. */
-    fputs(lines[cur_lineno - 1], stdout);
-  }
-
-  /* Free everything that was allocated up to this point. */
-  for (size_t i = 0; i < n_lines; i++) {
-    free(lines[i]);
-  }
-  free(lines);
-  
-  return 0;
-}
-
 bool is_command(
   const char *restrict in,
   const char *restrict short_from,
@@ -187,7 +109,7 @@ void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
       x86_addr offset_pc = offset_load_address(dbg, get_pc(dbg.pid));
 
       LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, offset_pc);
-      print_source(line_entry.filepath, line_entry.ln, 3);
+      print_source(dbg.files, line_entry.filepath, line_entry.ln, 3);
       return;
     }
     /* Did we single step? */
@@ -584,6 +506,7 @@ int setup_debugger(const char *prog_name, Debugger* store) {
       /* `load_address` is initialized by `init_load_address`. */
       .load_address.value=0,
       .dwarf=dwarf,
+      .files=init_source_files(),
     };
     init_load_address(store);
   }
@@ -604,6 +527,7 @@ void run_debugger(Debugger dbg) {
     linenoiseFree(line_buf);
   }
 
+  free_source_files(dbg.files);
   dwarf_finish(dbg.dwarf);
   free(dbg.breakpoints);
 }

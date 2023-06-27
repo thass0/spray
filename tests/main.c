@@ -4,6 +4,7 @@
 
 extern MunitTest parse_elf_tests[];
 extern MunitTest dwarf_tests[];
+extern MunitTest debugger_tests[];
 
 static MunitSuite suites[] = {
   {
@@ -16,6 +17,13 @@ static MunitSuite suites[] = {
   {
     "/dwarf_tests",
     dwarf_tests,
+    NULL,
+    1,
+    MUNIT_SUITE_OPTION_NONE
+  },
+  {
+    "/debugger_tests",
+    debugger_tests,
     NULL,
     1,
     MUNIT_SUITE_OPTION_NONE

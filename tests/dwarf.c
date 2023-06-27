@@ -3,8 +3,6 @@
 
 #include "../src/spray_dwarf.h"
 
-#include <stdio.h>
-
 TEST(get_function_from_pc_works) {
   Dwarf_Error error = NULL;
   Dwarf_Debug dbg = dwarf_init("tests/assets/linux_x86_bin", &error);

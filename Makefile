@@ -1,5 +1,7 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -Ilibdwarf/src/lib/libdwarf
+# Disable warnins causes by hashmap.
+# CFLAGS += -Wno-zero-length-array -Wno-language-extension-token -Wno-missing-field-initializers -Wno-gnu-statement-expression-from-macro-expansion
 CPPFLAGS = -MMD
 LDFLAGS = -ldwarf
 

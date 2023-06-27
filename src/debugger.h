@@ -11,6 +11,7 @@
 #include "breakpoints.h"
 #include "spray_elf.h"
 #include "spray_dwarf.h"
+#include "source_files.h"
 
 typedef struct {
   const char *prog_name;  /* Tracee program name. */
@@ -20,6 +21,7 @@ typedef struct {
   ElfFile elf;  /* Tracee ELF information. */
   x86_addr load_address;  /* Load address. Set for PIEs, 0 otherwise. */
   Dwarf_Debug dwarf;  /* Libdwarf debug information. */
+  SourceFiles *files;
 } Debugger;
 
 // Setup a debugger. This forks the child process.

@@ -3,3 +3,4 @@ build/
 libdwarf/
 .cache
 compile_commands.json
+src/hashmap.*
