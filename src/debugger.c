@@ -345,7 +345,8 @@ void exec_command_break(Debugger* dbg, x86_addr addr) {
   enable_breakpoint(&bp);
   
   dbg->n_breakpoints += 1;
-  dbg->breakpoints = (Breakpoint*) realloc (dbg->breakpoints, dbg->n_breakpoints * sizeof(Breakpoint));
+  dbg->breakpoints = (Breakpoint*)
+    realloc (dbg->breakpoints, dbg->n_breakpoints * sizeof(Breakpoint));
   assert(dbg->breakpoints != NULL);
   dbg->breakpoints[dbg->n_breakpoints - 1] = bp;
 }
@@ -602,4 +603,7 @@ void run_debugger(Debugger dbg) {
     linenoiseHistoryAdd(line_buf);
     linenoiseFree(line_buf);
   }
+
+  dwarf_finish(dbg.dwarf);
+  free(dbg.breakpoints);
 }
