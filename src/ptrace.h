@@ -24,7 +24,7 @@ typedef struct { uint64_t value; } x86_addr;
 /* On success all functions below return `PT_OK`.
    Otherwise they return `PT_ERR`. */
 
-typedef enum { PT_OK = 0, PT_ERR = 1} pt_call_result;
+typedef enum { PT_OK = 0, PT_ERR = 1 } pt_call_result;
 
 pt_call_result pt_read_memory(pid_t pid, x86_addr addr, x86_word *store);
 pt_call_result pt_write_memory(pid_t pid, x86_addr addr, x86_word word);

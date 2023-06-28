@@ -93,6 +93,23 @@ void set_pc(pid_t pid, x86_addr pc) {
   set_register_value(pid, rip, (x86_word) { pc.value });
 }
 
+/* Continue execution of child process. */
+int continue_execution(pid_t pid) {
+  errno = 0;
+  pt_continue_execution(pid);
+  /* Is the process still alive? */
+  if (errno == ESRCH) {
+    printf("The process is dead 😭\n");
+    return -1;
+  }
+  return 0;
+}
+
+/* Forward declare `wait_for_signal` to allow specific
+   signal handlers used by `wait_for_signal` to call
+   wait again. */
+void wait_for_signal(Debugger dbg);
+
 void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
   switch (siginfo.si_code) {
     /* Did the tracee hit a breakpoint? */
@@ -119,6 +136,16 @@ void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
       printf("Unknown SIGTRAP code %d\n", siginfo.si_code);
       return;
   }
+}
+
+void handle_sigwinch(Debugger dbg) {
+  /* Ignore changes in window size by telling the
+     tracee to continue in that case and then wait for
+     the next interesting signal. */
+  if (continue_execution(dbg.pid) == -1) {
+    return;
+  }
+  wait_for_signal(dbg);
 }
 
 void wait_for_signal(Debugger dbg) {
@@ -166,6 +193,9 @@ void wait_for_signal(Debugger dbg) {
         break;
       case SIGTRAP:
         handle_sigtrap(dbg, siginfo);
+        break;
+      case SIGWINCH:
+        handle_sigwinch(dbg);
         break;
       default:
         printf("Child was stopped by SIG%s\n",
@@ -278,15 +308,9 @@ void exec_command_break(Debugger* dbg, x86_addr addr) {
     next signal. */
 void exec_command_continue(Debugger dbg) {
   step_over_breakpoint(dbg);
-
-  // Continue child process execution.
-  errno = 0;
-  pt_continue_execution(dbg.pid);
-  if (errno == ESRCH) {
-    printf("The process is dead 😭\n");
+  if (continue_execution(dbg.pid) == -1) {
     return;
   }
-
   wait_for_signal(dbg);
 }
 
