@@ -2,6 +2,8 @@
 #include "munit.h"
 
 #include "../src/source_files.h"
+#include "../src/breakpoints.h"
+#include "../src/debugger.h"
 
 #define FILE_PATH "tests/assets/debug_me.c"
 
@@ -24,8 +26,28 @@ TEST(storing_files_works) {
   return MUNIT_OK;
 }
 
+TEST(breakpoints_work) {
+  Debugger dbg;
+  assert_int(setup_debugger("tests/assets/linux_x86_bin", &dbg), ==, 0);
+
+  x86_addr bp_addr1 = { 0x00401122 };
+
+  enable_breakpoint(dbg.breakpoints, bp_addr1);
+  assert_true(lookup_breakpoint(dbg.breakpoints, bp_addr1));
+  assert_true(is_enabled_breakpoint(dbg.breakpoints, bp_addr1));
+
+  disable_breakpoint(dbg.breakpoints, bp_addr1);
+  assert_true(lookup_breakpoint(dbg.breakpoints, bp_addr1));
+  assert_false(is_enabled_breakpoint(dbg.breakpoints, bp_addr1));
+
+  free_debugger(dbg);
+  
+  return MUNIT_OK;
+}
+
 
 MunitTest debugger_tests[] = {
   REG_TEST(storing_files_works),
+  REG_TEST(breakpoints_work),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };

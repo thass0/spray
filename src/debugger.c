@@ -205,42 +205,18 @@ void wait_for_signal(Debugger dbg) {
   }
 }
 
-/* Set `store_idx` to the breakpoints index if there
- * is a breakpoint with the given address. */
-bool find_bp_at_addr(Debugger dbg, x86_addr location, size_t *store_idx) {
-  size_t i = 0;
-  for ( ; i < dbg.n_breakpoints; i++) {
-    if (dbg.breakpoints[i].addr.value == location.value) {
-      break;
-    }
-  }
-
-  if (i == dbg.n_breakpoints) {
-    /* Reached end without match an address. */
-    return false;
-  } else {
-    *store_idx = i;
-    return true;
-  }
-}
-
 /* Execute the instruction at the breakpoints location
    and stop the tracee again. */
 void step_over_breakpoint(Debugger dbg) {
   x86_addr possible_bp_addr = get_pc(dbg.pid);
 
-  size_t bp_idx;
-  if (find_bp_at_addr(dbg, possible_bp_addr, &bp_idx)) {
-    Breakpoint *bp = &dbg.breakpoints[bp_idx];
-
-    if (bp->is_enabled) {
-      /* Disable the breakpoint, run the original
-         instruction and stop. */
-      disable_breakpoint(bp);
-      pt_single_step(dbg.pid);
-      wait_for_signal(dbg);
-      enable_breakpoint(bp);
-    }
+  if (is_enabled_breakpoint(dbg.breakpoints, possible_bp_addr)) {
+    /* Disable the breakpoint, run the original
+       instruction and stop. */
+    disable_breakpoint(dbg.breakpoints, possible_bp_addr);
+    pt_single_step(dbg.pid);
+    wait_for_signal(dbg);
+    enable_breakpoint(dbg.breakpoints, possible_bp_addr);
   }
 }
 
@@ -284,23 +260,9 @@ void exec_command_print(pid_t pid) {
   }
 }
 
-void exec_command_break(Debugger* dbg, x86_addr addr) {
-  assert(dbg != NULL);
-
-  Breakpoint bp = {
-    .pid = dbg->pid,
-    .addr = addr,
-    .is_enabled = false,
-    .orig_data = 0x00,
-  };
-
-  enable_breakpoint(&bp);
-  
-  dbg->n_breakpoints += 1;
-  dbg->breakpoints = (Breakpoint*)
-    realloc (dbg->breakpoints, dbg->n_breakpoints * sizeof(Breakpoint));
-  assert(dbg->breakpoints != NULL);
-  dbg->breakpoints[dbg->n_breakpoints - 1] = bp;
+void exec_command_break(Breakpoints *breakpoints, x86_addr addr) {
+  assert(breakpoints != NULL);
+  enable_breakpoint(breakpoints, addr);
 }
 
 /*  Execute the instruction at the current breakpoint,
@@ -341,7 +303,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       } else {
         x86_addr addr;
         if (parse_hex_num(addr_str, &addr.value)) {
-          exec_command_break(dbg, addr);
+          exec_command_break(dbg->breakpoints, addr);
         } else {
           invalid_error(error_messages[BREAK_ADDR]);
         }
@@ -519,13 +481,12 @@ int setup_debugger(const char *prog_name, Debugger* store) {
     execl(prog_name, prog_name, NULL);
   } else if (pid >= 1) {
     /* Parent process */
-    printf("🐛🐛🐛 %d 🐛🐛🐛\n", pid);
+
     // Now we can finally touch `store` 😄.
     *store = (Debugger) {
       .prog_name=prog_name,
       .pid=pid,
-      .breakpoints=NULL,
-      .n_breakpoints=0,
+      .breakpoints=init_breakpoints(pid),
       .elf=elf_buf,
       /* `load_address` is initialized by `init_load_address`. */
       .load_address.value=0,
@@ -538,8 +499,17 @@ int setup_debugger(const char *prog_name, Debugger* store) {
   return 0;
 }
 
+void free_debugger(Debugger dbg) {
+  free_source_files(dbg.files);
+  free_breakpoints(dbg.breakpoints);
+  dwarf_finish(dbg.dwarf);
+}
+
 void run_debugger(Debugger dbg) {
-  // Suspend executaion until state change of child process `pid`.
+  printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
+
+  /* Wait until the tracee has received the initial
+     SIGTRAP. Don't handle the signal like in `wait_for_signal`. */
   int wait_status;
   int options = 0;
   waitpid(dbg.pid, &wait_status, options);
@@ -550,8 +520,5 @@ void run_debugger(Debugger dbg) {
     linenoiseHistoryAdd(line_buf);
     linenoiseFree(line_buf);
   }
-
-  free_source_files(dbg.files);
-  dwarf_finish(dbg.dwarf);
-  free(dbg.breakpoints);
+  free_debugger(dbg);
 }
