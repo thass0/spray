@@ -87,6 +87,19 @@ static inline void print_word(x86_word word) {
   printf("0x%016lx", word.value);
 }
 
+/* Remove offset of position independet executables
+   from the given address to make it work with DWARF. */
+x86_addr real_addr_to_dwarf(Debugger dbg, x86_addr real) {
+  return (x86_addr) { real.value - dbg.load_address.value };
+}
+
+/* Add the offset of position independent executables
+   to the given address. This turns an address from DWARF
+   info a real address. */
+x86_addr dwarf_addr_to_real(Debugger dbg, x86_addr dwarf) {
+  return (x86_addr) { dwarf.value + dbg.load_address.value };
+}
+
 /* Get the program counter. */
 x86_addr get_pc(pid_t pid) {
   return (x86_addr) { get_register_value(pid, rip).value };
@@ -95,9 +108,9 @@ x86_addr get_pc(pid_t pid) {
 /* Get the program counter and remove any offset which is
    added to the physical process counter in PIEs. The DWARF
    debug info doesn't know about this offset. */
-x86_addr get_offset_pc(Debugger dbg) {
+x86_addr get_dwarf_pc(Debugger dbg) {
   x86_addr pc = get_pc(dbg.pid);
-  return (x86_addr) { pc.value - dbg.load_address.value };
+  return real_addr_to_dwarf(dbg, pc);
 }
 
 /* Set the program counter. */
@@ -106,7 +119,7 @@ void set_pc(pid_t pid, x86_addr pc) {
 }
 
 void print_current_source(Debugger dbg) {
-  x86_addr pc = get_offset_pc(dbg);
+  x86_addr pc = get_dwarf_pc(dbg);
   LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, pc);
   if (line_entry_is_ok(line_entry)) {
     print_source(
@@ -285,11 +298,19 @@ void step_out(Debugger dbg) {
 }
 
 void single_step(Debugger dbg) {
-  int init_lineno = get_line_entry_from_pc(dbg.dwarf, get_offset_pc(dbg)).ln;
+  int init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
 
-  while (get_line_entry_from_pc(dbg.dwarf, get_offset_pc(dbg)).ln == init_lineno) {
+  while (get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln == init_lineno) {
     single_step_instruction_skip_breakpoints(dbg);
   }
+}
+
+void step_over(Debugger dbg) {
+  const char *func = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  x86_addr func_entry = { 0 };
+  get_at_low_pc(dbg.dwarf, func, &func_entry);
+  x86_addr func_end = { 0 };
+  get_at_high_pc(dbg.dwarf, func, &func_end);
 }
 
 /* This amount of indentation ensures that the

@@ -1,5 +1,7 @@
 #include "spray_dwarf.h"
 
+#include "magic.h"
+
 #include <dwarf.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,8 +54,8 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
 
 int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error,
   int is_info, int in_level,
-  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, void *const, void *const),
-  void *const search_for, void *const search_findings
+  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const),
+  const void *const search_for, void *const search_findings
 ) {  
   int res = DW_DLV_OK;
   Dwarf_Die cur_die = in_die;
@@ -117,8 +119,8 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
    the findins in `search_findings`.
    `search_callback` returns `true` if `search_for` has been found. */
 int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
-  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, void *const, void *const),
-  void *const search_for, void *const search_findings
+  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const),
+  const void *const search_for, void *const search_findings
 ) {
   Dwarf_Half version_stamp = 0;  /* Store version number (2 - 5). */
   Dwarf_Unsigned abbrev_offset = 0; /* .debug_abbrev offset from CU just read. */
@@ -184,8 +186,46 @@ int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
   }
 }
 
+int get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
+  Dwarf_Addr *lowpc, Dwarf_Addr *highpc
+) {
+  int res = 0;
+
+  Dwarf_Addr lowpc_buf;
+  res = dwarf_lowpc(die, &lowpc_buf, error);
+
+  if (res != DW_DLV_OK) {
+    return res;
+  }
+
+  Dwarf_Half high_form = 0;
+  enum Dwarf_Form_Class high_class = DW_FORM_CLASS_UNKNOWN;
+
+  Dwarf_Addr highpc_buf;
+  res = dwarf_highpc_b(die,
+    &highpc_buf, &high_form,
+    &high_class, error);
+
+  if (res != DW_DLV_OK) {
+    return res;
+  }
+
+  if (
+    high_form != DW_FORM_addr &&
+    !dwarf_addr_form_is_indexed(high_form)
+  ) {
+    /* `highpc_buf` is an offset of `lowpc_buf`. */
+    highpc_buf += lowpc_buf;
+  }
+
+  *lowpc = lowpc_buf;
+  *highpc = highpc_buf;
+
+  return res;
+}
+
 /* Switches `pc_in_die` to `true` if it finds that `pc` lies
-   between `DW_AT_pc_low` and `DW_AT_pc_hight` of the DIE. */
+   between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE. */
 int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool *pc_in_die) {
   int res = DW_DLV_OK;
   Dwarf_Half die_tag = 0;
@@ -197,30 +237,11 @@ int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool
   }
 
   if (die_tag == DW_TAG_subprogram) {
-    Dwarf_Addr low_addr = 0;
-    Dwarf_Addr high_addr = 0;
-    res = dwarf_lowpc(die, &low_addr, error);
+    Dwarf_Addr lowpc, highpc;
+    res = get_high_and_low_pc(die, error, &lowpc, &highpc);
     if (res != DW_DLV_OK) {
       return res;
-    }
-    Dwarf_Half high_form = 0;
-    enum Dwarf_Form_Class high_class = DW_FORM_CLASS_UNKNOWN;
-    res = dwarf_highpc_b(die,
-      &high_addr, &high_form,
-      &high_class, error);
-    if (res != DW_DLV_OK) {
-      return res;
-    }
-
-    if (
-      high_form != DW_FORM_addr &&
-      !dwarf_addr_form_is_indexed(high_form)
-    ) {
-      /* `high_addr` was just an offset of `low_addr`. */
-      high_addr += low_addr;
-    }
-
-    if (low_addr <= pc && pc <= high_addr) {
+    } else if (lowpc <= pc && pc <= highpc) {
       *pc_in_die = true;
     }
   }
@@ -235,7 +256,7 @@ int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool
    Allocated memory for the function name of it returns
    `true`. This memory must be released by the caller. */
 bool find_name_in_die(Dwarf_Debug dbg, Dwarf_Die die,
-  void *const search_for, void *const search_findings
+  const void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
   char **fn_name = (char **) search_findings;
@@ -308,7 +329,7 @@ typedef struct {
 } MutLineEntry;
 
 bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
-  void *const search_for, void *const search_findings
+  const void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
   MutLineEntry *line_entry = (MutLineEntry *) search_findings;
@@ -435,6 +456,129 @@ bool line_entry_is_ok(LineEntry line_entry) {
      && line_entry.cl != -1
      && line_entry.filepath != NULL
   ) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+typedef struct {
+  /* Addresses are unsigned and we should allow them
+     to have any value. Therefore `is_set` signals
+     whether or not they are set. The alternative of
+     using e.g. `-1` as the unset value doesn't work. */
+  bool is_set;
+  x86_addr lowpc;
+  x86_addr highpc;
+} SubprogAttr;
+
+/* Search callback that looks for a DIE describing the
+   subprogram with the name `search_for` and stores the
+   attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
+bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+  const void *const search_for, void *const search_findings
+) {
+  const char *fn_name = (const char *) search_for;
+  SubprogAttr *attr = (SubprogAttr *) search_findings;
+
+  int res = DW_DLV_OK;
+  Dwarf_Error error;
+
+  Dwarf_Half die_tag = 0;
+  res = dwarf_tag(die,
+    &die_tag, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  /* Is the given DIE about a function? */
+  if (die_tag == DW_TAG_subprogram) {
+    /* Check if the function name matches */
+    char *fn_name_buf = NULL;
+    res = dwarf_die_text(die, DW_AT_name,  
+      &fn_name_buf, &error);
+
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return false;
+    }
+
+    /* Do the names match? */
+    if (strcmp(fn_name_buf, fn_name) == 0) {
+      Dwarf_Addr lowpc, highpc;
+      res = get_high_and_low_pc(die, &error, &lowpc, &highpc);
+
+      if (res != DW_DLV_OK) {
+        if (res == DW_DLV_ERROR) {
+          dwarf_dealloc_error(dbg, error);
+        }
+        return false;
+      }
+
+      attr->lowpc = (x86_addr) { lowpc };
+      attr->highpc = (x86_addr) { highpc };
+      attr->is_set = true;
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
+SubprogAttr get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
+  assert(dbg != NULL);
+  assert(fn_name != NULL);
+
+  Dwarf_Error error = NULL;
+  SubprogAttr attr = { .is_set=false };
+
+  int res = search_dwarf_dbg(dbg, &error,  
+    find_subprog_attributes_in_die,
+    fn_name, &attr);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return (SubprogAttr) { .is_set=false };
+  } else {
+    return attr;
+  }
+}
+
+bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *lowpc_dest) {
+  assert(dbg != NULL);
+  assert(lowpc_dest != NULL);
+
+  if (fn_name == NULL) {
+    return false;
+  }
+
+  SubprogAttr attr = get_subprog_attr(dbg, fn_name);
+  if (attr.is_set) {
+    lowpc_dest->value = attr.lowpc.value;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest) {  
+  assert(dbg != NULL);
+  assert(fn_name != NULL);
+  assert(highpc_dest != NULL);
+
+  SubprogAttr attr = get_subprog_attr(dbg, fn_name);
+  if (attr.is_set) {
+    highpc_dest->value = attr.highpc.value;
     return true;
   } else {
     return false;

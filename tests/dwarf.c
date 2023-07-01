@@ -3,9 +3,18 @@
 
 #include "../src/spray_dwarf.h"
 
+#include <limits.h>
+
+#define BIN_NAME "tests/assets/linux_x86_bin"
+#define SRC_NAME "tests/assets/debug_me.c"
+
+enum magic {
+  RAND_DATA_BUF_SIZE = 32,
+};
+
 TEST(get_function_from_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init("tests/assets/linux_x86_bin", &error);
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
   assert_ptr_not_null(dbg);
 
   {  /* Happy path 😚. */
@@ -29,7 +38,7 @@ TEST(get_function_from_pc_works) {
 
 TEST(get_line_entry_from_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init("tests/assets/linux_x86_bin", &error);
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
   assert_ptr_not_null(dbg);
 
   {  /* Happy path. */
@@ -39,7 +48,7 @@ TEST(get_line_entry_from_pc_works) {
     assert_int(line_entry.cl, ==, 7);
     assert_ptr_not_null(line_entry.filepath);
     /* Ignore the part of the filepath that is host specific. */
-    assert_ptr_not_null(strstr(line_entry.filepath, "tests/assets/debug_me.c"));
+    assert_ptr_not_null(strstr(line_entry.filepath, SRC_NAME));
   }
   {  /* Sad path 😢. */
     x86_addr pc = { 0xdeabbeef };
@@ -54,9 +63,37 @@ TEST(get_line_entry_from_pc_works) {
   return MUNIT_OK;
 }
 
+TEST(get_low_and_high_pc_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+
+  {  /* Happy */
+    /* PC retrieved using `dwarfdump`. */
+    char *func = get_function_from_pc(dbg, (x86_addr) { 0x00401120 });
+    x86_addr func_entry = { 0 };
+    assert_true(get_at_low_pc(dbg, func, &func_entry));
+    x86_addr func_end = { 0 };
+    assert_true(get_at_high_pc(dbg, func, &func_end));
+    free(func);
+  } {  /* Sad */
+    x86_addr func_entry = { 0 };
+    char random_fn_name[RAND_DATA_BUF_SIZE];
+    munit_rand_memory(RAND_DATA_BUF_SIZE, (uint8_t *) random_fn_name);
+    assert_false(get_at_low_pc(dbg, random_fn_name, &func_entry));
+    x86_addr func_end = { 0 };
+    assert_false(get_at_high_pc(dbg, random_fn_name, &func_end));
+  }
+
+  dwarf_finish(dbg);
+
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
   REG_TEST(get_function_from_pc_works),  
   REG_TEST(get_line_entry_from_pc_works),
+  REG_TEST(get_low_and_high_pc_works),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };
 
