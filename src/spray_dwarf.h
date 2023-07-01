@@ -24,4 +24,8 @@ typedef struct {
 /* Returns `ln=-1` if there is no line entry for the PC. */
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
+/* Returns `true` if the line entry can be used.
+   Otherwise returns `false` if it signals an error. */
+bool line_entry_is_ok(LineEntry line_entry);
+
 #endif  // _SPRAY_DWARF_H_

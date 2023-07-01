@@ -430,3 +430,13 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
+bool line_entry_is_ok(LineEntry line_entry) {
+ if (line_entry.ln != -1
+     && line_entry.cl != -1
+     && line_entry.filepath != NULL
+  ) {
+    return true;
+  } else {
+    return false;
+  }
+}

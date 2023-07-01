@@ -26,7 +26,12 @@ void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr);
    Does nothing if there is no breakpoint at `addr`. */
 void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr);
 
-/* Return `true` if there is a breakpoint at the given address. */
+/* Delete the breakpoint at `addr` if there is one. */
+void delete_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+
+/* Return `true` if there is a breakpoint at the given address.
+   For this function it doesn't matter whether the breakpoints
+   is enabled or disabled. */
 bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr addr);
 
 /* Return `true` if there is a breakpoint at `addr` and

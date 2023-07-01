@@ -29,7 +29,8 @@ typedef struct {
 // This launches the debuggee process and immediately stops it.
 int setup_debugger(const char *prog_name, Debugger *store);
 
-// Run a debugger.
+// Run a debugger. Starts at the beginning of
+// the `main` function.
 void run_debugger(Debugger dbg);
 
 // Free memory allocated by the debugger.

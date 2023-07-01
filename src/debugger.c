@@ -79,8 +79,12 @@ bool parse_hex_num(char *restrict str, uint64_t *store) {
   }
 }
 
-x86_addr offset_load_address(Debugger dbg, x86_addr addr) {
-  return (x86_addr) { addr.value - dbg.load_address.value };
+static inline void print_addr(x86_addr addr) {
+  printf("0x%016lx", addr.value);
+}
+
+static inline void print_word(x86_word word) {
+  printf("0x%016lx", word.value);
 }
 
 /* Get the program counter. */
@@ -88,9 +92,33 @@ x86_addr get_pc(pid_t pid) {
   return (x86_addr) { get_register_value(pid, rip).value };
 }
 
+/* Get the program counter and remove any offset which is
+   added to the physical process counter in PIEs. The DWARF
+   debug info doesn't know about this offset. */
+x86_addr get_offset_pc(Debugger dbg) {
+  x86_addr pc = get_pc(dbg.pid);
+  return (x86_addr) { pc.value - dbg.load_address.value };
+}
+
 /* Set the program counter. */
 void set_pc(pid_t pid, x86_addr pc) {
   set_register_value(pid, rip, (x86_word) { pc.value });
+}
+
+void print_current_source(Debugger dbg) {
+  x86_addr pc = get_offset_pc(dbg);
+  LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, pc);
+  if (line_entry_is_ok(line_entry)) {
+    print_source(
+      dbg.files,
+      line_entry.filepath,
+      line_entry.ln,
+      3);
+  } else {
+    printf("<No source info for PC ");
+    print_addr(pc);
+    printf(">\n");
+  }
 }
 
 /* Continue execution of child process. */
@@ -119,14 +147,11 @@ void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
       x86_addr pc = get_pc(dbg.pid);
       set_pc(dbg.pid, (x86_addr) {pc.value - 1});
 
-      printf("Hit breakpoint at address 0x%016lx\n", get_pc(dbg.pid).value);
+      printf("Hit breakpoint at address ");
+      print_addr(get_pc(dbg.pid));
+      printf("\n");
 
-      /* Remove PC offset in position independet executables
-         before querying DWARF */
-      x86_addr offset_pc = offset_load_address(dbg, get_pc(dbg.pid));
-
-      LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, offset_pc);
-      print_source(dbg.files, line_entry.filepath, line_entry.ln, 3);
+      print_current_source(dbg);
       return;
     }
     /* Did we single step? */
@@ -220,11 +245,72 @@ void step_over_breakpoint(Debugger dbg) {
   }
 }
 
+void single_step_instruction(Debugger dbg) {
+  pt_single_step(dbg.pid);
+  wait_for_signal(dbg);
+}
+
+void single_step_instruction_skip_breakpoints(Debugger dbg) {
+  if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
+    step_over_breakpoint(dbg);
+  } else {
+    single_step_instruction(dbg);
+  }
+}
+
+void step_out(Debugger dbg) {
+  /* If we are on a breakpoint right now, step
+     over it first. Otherwise we'll get stuck on it. */
+  step_over_breakpoint(dbg);
+  /* The return address is stored 8 bytes after the
+     start of the stack frame. This is where we want
+     to set a breakpoint. */
+  x86_addr frame_pointer = (x86_addr) { get_register_value(dbg.pid, rbp).value };
+  x86_addr return_address_location = { frame_pointer.value + 8 };
+  x86_addr return_address = { 0 };
+  pt_read_memory(dbg.pid, return_address_location, (x86_word *) &return_address);
+
+  bool remove_internal_breakpoint = false;
+  if (!is_enabled_breakpoint(dbg.breakpoints, return_address)) {
+    enable_breakpoint(dbg.breakpoints, return_address);
+    remove_internal_breakpoint = true;
+  }
+
+  continue_execution(dbg.pid);
+  wait_for_signal(dbg);
+
+  if (remove_internal_breakpoint) {
+    delete_breakpoint(dbg.breakpoints, return_address);
+  }
+}
+
+void single_step(Debugger dbg) {
+  int init_lineno = get_line_entry_from_pc(dbg.dwarf, get_offset_pc(dbg)).ln;
+
+  while (get_line_entry_from_pc(dbg.dwarf, get_offset_pc(dbg)).ln == init_lineno) {
+    single_step_instruction_skip_breakpoints(dbg);
+  }
+}
+
+/* This amount of indentation ensures that the
+   contents of memory reads are indented the
+   same amount as register reads which are
+   preceeded by a register name. */
+#define MEM_READ_INDENT "         "
+
+/* Message displayed right after the new value
+   of a memory location or register written to
+   was displayed. This is useful as confirmation
+   that the write operation was successful. */
+#define WRITE_READ_MSG "(read after write)"
+
 void exec_command_memory_read(pid_t pid, x86_addr addr) {
   x86_word read = { 0 };
   pt_call_result res = pt_read_memory(pid, addr, &read);
   unused(res);
-  printf("         0x%016lx\n", read.value);
+  printf(MEM_READ_INDENT);
+  print_word(read);
+  printf("\n");
 }
 
 void exec_command_memory_write(pid_t pid, x86_addr addr, x86_word word) {
@@ -233,28 +319,38 @@ void exec_command_memory_write(pid_t pid, x86_addr addr, x86_word word) {
   x86_word stored = { 0 };
   pt_call_result res = pt_read_memory(pid, addr, &stored);
   unused(res);
-  printf("         0x%016lx (read after write)\n", stored.value);
+  printf(MEM_READ_INDENT);
+  print_word(stored);
+  printf(" %s\n", WRITE_READ_MSG);
 }
 
 void exec_command_register_read(pid_t pid, x86_reg reg, const char *restrict reg_name) {
   x86_word reg_word = get_register_value(pid, reg);
-  printf("%8s 0x%016lx\n",
-    reg_name, reg_word.value);
+  printf("%8s ", reg_name);
+  print_word(reg_word);
+  printf("\n");
 }
 
-void exec_command_register_write(pid_t pid, x86_reg reg, const char *restrict reg_name, x86_word word) {
+void exec_command_register_write(
+  pid_t pid,
+  x86_reg reg,
+  const char *restrict reg_name,
+  x86_word word)
+{
   set_register_value(pid, reg, word);
   // Print readout of write result:
   x86_word written = get_register_value(pid, reg);
-  printf("%8s 0x%016lx (read after write)\n", reg_name,
-    written.value);
+  printf("%8s ", reg_name);
+  print_word(written);
+  printf(" %s\n", WRITE_READ_MSG);
 }
 
 void exec_command_print(pid_t pid) {
   for (size_t i = 0; i < N_REGISTERS; i++) {
     reg_descriptor desc = reg_descriptors[i];
     x86_word reg_word = get_register_value(pid, desc.r);
-    printf("\t%8s 0x%016lx", desc.name, reg_word.value);
+    printf("\t%8s ", desc.name);
+    print_word(reg_word);
     // Always put two registers on the same line.
     if (i % 2 == 1) { printf("\n"); }
   }
@@ -265,15 +361,29 @@ void exec_command_break(Breakpoints *breakpoints, x86_addr addr) {
   enable_breakpoint(breakpoints, addr);
 }
 
-/*  Execute the instruction at the current breakpoint,
-    continue the tracee and wait until it receives the
-    next signal. */
+/* Execute the instruction at the current breakpoint,
+   continue the tracee and wait until it receives the
+   next signal. */
 void exec_command_continue(Debugger dbg) {
   step_over_breakpoint(dbg);
   if (continue_execution(dbg.pid) == -1) {
     return;
   }
   wait_for_signal(dbg);
+}
+
+void exec_command_single_step_instruction(Debugger dbg) {
+  single_step_instruction_skip_breakpoints(dbg);
+  print_current_source(dbg);
+}
+
+void exec_command_step_out(Debugger dbg) {
+  step_out(dbg);
+}
+
+void exec_command_single_step(Debugger dbg) {
+  single_step(dbg);
+  print_current_source(dbg);
 }
 
 static inline char *get_next_command_token(char *restrict line) {
@@ -391,6 +501,12 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           }
         }
       }
+    } else if (is_command(cmd, "i", "istep")) {
+      exec_command_single_step_instruction(*dbg);
+    } else if (is_command(cmd, "o", "ostep")) {
+      exec_command_step_out(*dbg);
+    } else if (is_command(cmd, "s", "step")) {
+      exec_command_single_step(*dbg);
     } else {
       unknown_cmd_error();
     }
@@ -482,6 +598,12 @@ int setup_debugger(const char *prog_name, Debugger* store) {
   } else if (pid >= 1) {
     /* Parent process */
 
+    /* Wait until the tracee has received the initial
+       SIGTRAP. Don't handle the signal like in `wait_for_signal`. */
+    int wait_status;
+    int options = 0;
+    waitpid(pid, &wait_status, options);
+
     // Now we can finally touch `store` 😄.
     *store = (Debugger) {
       .prog_name=prog_name,
@@ -507,12 +629,6 @@ void free_debugger(Debugger dbg) {
 
 void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
-
-  /* Wait until the tracee has received the initial
-     SIGTRAP. Don't handle the signal like in `wait_for_signal`. */
-  int wait_status;
-  int options = 0;
-  waitpid(dbg.pid, &wait_status, options);
 
   char *line_buf = NULL;
   while ((line_buf = linenoise("spray> ")) != NULL) {

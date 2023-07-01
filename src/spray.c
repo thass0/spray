@@ -17,6 +17,8 @@
 
       `(memory | m) <address> (write | wr) <value>`: write <value> to memory at <address>.
 
+      `(istep | i)`: single step on instruction level. Doesn't trigger breakpoints we step on.
+
     Where <address> and <value> are validated with `strtol(..., 16)`. 
     All valid register names can be found in the `reg_descriptors`
     table in `src/registers.h`.

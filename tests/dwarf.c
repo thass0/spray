@@ -11,7 +11,7 @@ TEST(get_function_from_pc_works) {
   {  /* Happy path 😚. */
     /* The PC value was acquired using `dwarfdump`. It lies
        inside the PC range of the `main` function. */
-    x86_addr pc = { 0x00401122 };
+    x86_addr pc = { 0x00401156 };
     char *fn_name = get_function_from_pc(dbg, pc);
     assert_ptr_not_null(fn_name);
     assert_string_equal(fn_name, "main");
@@ -33,10 +33,10 @@ TEST(get_line_entry_from_pc_works) {
   assert_ptr_not_null(dbg);
 
   {  /* Happy path. */
-    x86_addr pc = { 0x0040112c };
+    x86_addr pc = { 0x00401156 };
     LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
-    assert_int(line_entry.ln, ==, 4);
-    assert_int(line_entry.cl, ==, 13);
+    assert_int(line_entry.ln, ==, 10);
+    assert_int(line_entry.cl, ==, 7);
     assert_ptr_not_null(line_entry.filepath);
     /* Ignore the part of the filepath that is host specific. */
     assert_ptr_not_null(strstr(line_entry.filepath, "tests/assets/debug_me.c"));
