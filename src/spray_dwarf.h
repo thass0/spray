@@ -18,8 +18,10 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error);
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 typedef struct {
-  const int ln;
-  const int cl;
+  const bool is_ok;
+  const unsigned ln;
+  const unsigned cl;
+  const x86_addr addr;
   const char *filepath;
 } LineEntry;
 
@@ -30,10 +32,18 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
    Otherwise returns `false` if it signals an error. */
 bool line_entry_is_ok(LineEntry line_entry);
 
-/* Get the `low_pc` and `high_pc` attributes for the
-   subprogram with the given name. Returns `true` if
-   attribute was found. */
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *low_pc_dest);
 bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *high_pc_dest);
+
+typedef int (*line_callback)(Dwarf_Line line, void *const data, Dwarf_Error *error);
+
+/* Call `callback` on each line in the line table of the
+   DWARF subprogram of the given name. */
+void for_each_line_in_subprog(
+  Dwarf_Debug dbg,
+  const char *fn_name,
+  line_callback callback,
+  void *const init_data
+);
 
 #endif  // _SPRAY_DWARF_H_

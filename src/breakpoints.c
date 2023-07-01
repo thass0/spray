@@ -62,8 +62,12 @@ bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr address) {
   }
 }
 
+#include <stdio.h>
+
 void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
   assert(breakpoints != NULL);
+
+  fprintf(stderr, "Enabled breakpoint at 0x%lx\n", addr.value);
 
   Breakpoint lookup = {
     .addr=addr,

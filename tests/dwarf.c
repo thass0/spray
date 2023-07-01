@@ -53,9 +53,7 @@ TEST(get_line_entry_from_pc_works) {
   {  /* Sad path 😢. */
     x86_addr pc = { 0xdeabbeef };
     LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
-    /* -1 indicates error. */
-    assert_int(line_entry.ln, ==, -1);
-    assert_int(line_entry.cl, ==, -1);
+    assert_false(line_entry.is_ok);
     assert_ptr_equal(line_entry.filepath, NULL);
   }
 

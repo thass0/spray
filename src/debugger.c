@@ -96,8 +96,8 @@ x86_addr real_addr_to_dwarf(Debugger dbg, x86_addr real) {
 /* Add the offset of position independent executables
    to the given address. This turns an address from DWARF
    info a real address. */
-x86_addr dwarf_addr_to_real(Debugger dbg, x86_addr dwarf) {
-  return (x86_addr) { dwarf.value + dbg.load_address.value };
+x86_addr dwarf_addr_to_real(x86_addr load_address, x86_addr dwarf) {
+  return (x86_addr) { dwarf.value + load_address.value };
 }
 
 /* Get the program counter. */
@@ -121,7 +121,7 @@ void set_pc(pid_t pid, x86_addr pc) {
 void print_current_source(Debugger dbg) {
   x86_addr pc = get_dwarf_pc(dbg);
   LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, pc);
-  if (line_entry_is_ok(line_entry)) {
+  if (line_entry.is_ok) {
     print_source(
       dbg.files,
       line_entry.filepath,
@@ -271,26 +271,41 @@ void single_step_instruction_skip_breakpoints(Debugger dbg) {
   }
 }
 
+/* Set a breakpoint on the current return address.
+   Used for source-level stepping. Returns whether or
+   not the breakpoint must be removed again after use. */
+bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr *return_address) {
+  assert(breakpoints != NULL);
+  assert(return_address != NULL);
+
+  /* The return address is stored 8 bytes after the
+     start of the stack frame. This is where we want
+     to set a breakpoint. */
+  x86_addr frame_pointer = (x86_addr) { get_register_value(pid, rbp).value };
+  x86_addr return_address_location = { frame_pointer.value + 8 };
+  pt_read_memory(pid, return_address_location, (x86_word *) return_address);
+
+  bool remove_transient_breakpoint = false;
+  if (!is_enabled_breakpoint(breakpoints, *return_address)) {
+    enable_breakpoint(breakpoints, *return_address);
+    remove_transient_breakpoint = true;
+  }
+
+  return remove_transient_breakpoint;
+}
+
 void step_out(Debugger dbg) {
   /* If we are on a breakpoint right now, step
      over it first. Otherwise we'll get stuck on it. */
   step_over_breakpoint(dbg);
-  /* The return address is stored 8 bytes after the
-     start of the stack frame. This is where we want
-     to set a breakpoint. */
-  x86_addr frame_pointer = (x86_addr) { get_register_value(dbg.pid, rbp).value };
-  x86_addr return_address_location = { frame_pointer.value + 8 };
-  x86_addr return_address = { 0 };
-  pt_read_memory(dbg.pid, return_address_location, (x86_word *) &return_address);
-
-  bool remove_internal_breakpoint = false;
-  if (!is_enabled_breakpoint(dbg.breakpoints, return_address)) {
-    enable_breakpoint(dbg.breakpoints, return_address);
-    remove_internal_breakpoint = true;
-  }
-
   continue_execution(dbg.pid);
   wait_for_signal(dbg);
+
+  x86_addr return_address = { 0 };
+  bool remove_internal_breakpoint = set_return_address_breakpoint(
+    dbg.breakpoints,
+    dbg.pid,
+    &return_address);
 
   if (remove_internal_breakpoint) {
     delete_breakpoint(dbg.breakpoints, return_address);
@@ -298,19 +313,122 @@ void step_out(Debugger dbg) {
 }
 
 void single_step(Debugger dbg) {
-  int init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
+  unsigned init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
 
   while (get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln == init_lineno) {
     single_step_instruction_skip_breakpoints(dbg);
   }
 }
 
+typedef struct {
+  size_t to_del_alloc;
+  size_t to_del_idx;
+  x86_addr *to_del_breakpoints;
+  x86_addr load_address;
+  x86_addr origin_address;  /* Real address. */
+  Breakpoints *breakpoints;
+} CallbackData;
+
+enum { TO_DEL_ALLOC_SIZE };
+
+int set_breakpoint_on_line_callback(Dwarf_Line line, void *const void_data, Dwarf_Error *error) {
+  assert(void_data != NULL);
+  assert(error != NULL);
+
+  CallbackData *data = (CallbackData *) void_data;
+
+  Dwarf_Addr dwarf_line_addr = 0;
+  int res = dwarf_lineaddr(line, &dwarf_line_addr, error);
+  if (res != DW_DLV_OK) {
+    return res;
+  }
+
+  x86_addr real_line_addr = dwarf_addr_to_real(
+    data->load_address,
+    (x86_addr){ dwarf_line_addr });
+
+  if (
+    data->origin_address.value ==  real_line_addr.value &&
+    !is_enabled_breakpoint(data->breakpoints, real_line_addr)
+  ) {
+    enable_breakpoint(data->breakpoints, real_line_addr);
+
+    if (data->to_del_idx >= data->to_del_alloc) {
+      data->to_del_alloc += TO_DEL_ALLOC_SIZE;
+      data->to_del_breakpoints = (x86_addr *)
+        realloc (data->to_del_breakpoints, sizeof(x86_addr) * data->to_del_alloc);
+      assert(data->to_del_breakpoints != NULL);
+    }
+    data->to_del_breakpoints[data->to_del_idx++] = real_line_addr;
+  }
+
+  return DW_DLV_OK;
+}
+
 void step_over(Debugger dbg) {
-  const char *func = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
-  x86_addr func_entry = { 0 };
-  get_at_low_pc(dbg.dwarf, func, &func_entry);
-  x86_addr func_end = { 0 };
-  get_at_high_pc(dbg.dwarf, func, &func_end);
+  /* This functions sets breakpoints all over the current DWARf
+     subprogram so that we step no matter what the line we step
+     over does. */
+
+  /* Computing the current PC address this way ensures that
+     `current_address` belongs to a DWARF line entry. */
+  x86_addr dwarf_current_address = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).addr;
+  x86_addr current_address = dwarf_addr_to_real(dbg.load_address, dwarf_current_address);
+
+  char *fn_name = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  if (fn_name == NULL) {
+    printf("Failed to skip line: can't find current function\n");
+    return;
+  }
+
+  size_t to_del_alloc = TO_DEL_ALLOC_SIZE;
+  size_t to_del_idx = 0;
+  x86_addr *to_del_breakpoints =
+    (x86_addr *) calloc (TO_DEL_ALLOC_SIZE, sizeof(x86_addr));
+  assert(to_del_breakpoints != NULL);
+
+  CallbackData data = {
+    .to_del_alloc=to_del_alloc,
+    .to_del_idx=to_del_idx,
+    .to_del_breakpoints=to_del_breakpoints,
+    .load_address=dbg.load_address,
+    .origin_address=current_address,
+  };
+
+  for_each_line_in_subprog(
+    dbg.dwarf,
+    fn_name,
+    set_breakpoint_on_line_callback,
+    &data
+  );
+
+  free(fn_name);
+
+  x86_addr return_address = { 0 };
+  bool remove_internal_breakpoint = set_return_address_breakpoint(
+    dbg.breakpoints,
+    dbg.pid,
+    &return_address
+  );
+
+  /* Step over previous breakpoint. */
+  step_over_breakpoint(dbg);
+  continue_execution(dbg.pid);
+  wait_for_signal(dbg);
+
+  for (size_t i = 0; i < data.to_del_idx; i++) {
+    delete_breakpoint(
+      dbg.breakpoints,
+      data.to_del_breakpoints[i]);
+  }
+  free(data.to_del_breakpoints);
+
+  if (remove_internal_breakpoint) {
+    delete_breakpoint(
+      dbg.breakpoints,
+      return_address
+    );
+  }
 }
 
 /* This amount of indentation ensures that the
@@ -405,6 +523,10 @@ void exec_command_step_out(Debugger dbg) {
 void exec_command_single_step(Debugger dbg) {
   single_step(dbg);
   print_current_source(dbg);
+}
+
+void exec_command_step_over(Debugger dbg) {
+  step_over(dbg);
 }
 
 static inline char *get_next_command_token(char *restrict line) {
@@ -528,6 +650,8 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       exec_command_step_out(*dbg);
     } else if (is_command(cmd, "s", "step")) {
       exec_command_single_step(*dbg);
+    } else if (is_command(cmd, "k", "skip")) {
+      exec_command_step_over(*dbg);
     } else {
       unknown_cmd_error();
     }

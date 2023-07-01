@@ -323,27 +323,27 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
 
 /* Mutable line entry. Used to find the info. */
 typedef struct {
-  int ln;
-  int cl;
+  bool is_ok;
+  unsigned ln;
+  unsigned cl;
+  x86_addr addr;
   char *filepath;
 } MutLineEntry;
 
-bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  MutLineEntry *line_entry = (MutLineEntry *) search_findings;
-
+bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Line_Context *line_context) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(line_context != NULL);  
   int res;
   Dwarf_Unsigned line_table_version = 0;
   Dwarf_Small line_table_count = 0;  /* 0 and 1 are normal. 2 means
                                       experimental two-level line table. */
-  Dwarf_Line_Context line_context = NULL;
+  Dwarf_Line_Context line_context_buf = NULL;
   Dwarf_Error error = NULL;
 
   res = dwarf_srclines_b(die,
     &line_table_version, &line_table_count,
-    &line_context, &error);
+    &line_context_buf, &error);
 
   if (res != DW_DLV_OK) {
     if (DW_DLV_ERROR) {
@@ -355,62 +355,115 @@ bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
     return false;
   }
 
-  Dwarf_Line *lines = NULL;
-  Dwarf_Signed n_lines = 0;
+  *line_context = line_context_buf;
+  
+  return true;
+}
 
-  res = dwarf_srclines_from_linecontext(line_context,
-    &lines, &n_lines,
+bool sd_get_srclines(
+  Dwarf_Debug dbg,
+  Dwarf_Die die,
+  Dwarf_Line **lines,
+  Dwarf_Signed *n_lines,
+  Dwarf_Line_Context *line_context
+) {
+  assert(lines != NULL);
+  assert(n_lines != NULL);
+  assert(line_context != NULL);
+
+  int res = 0;
+  Dwarf_Error error = NULL;
+
+  Dwarf_Line_Context line_context_buf = NULL;
+  if (!sd_get_line_context(dbg, die, &line_context_buf)) {
+    return false;
+  }
+
+  Dwarf_Line *lines_buf = NULL;
+  Dwarf_Signed n_lines_buf = 0;
+
+  res = dwarf_srclines_from_linecontext(line_context_buf,
+    &lines_buf, &n_lines_buf,
     &error);
 
   if (res != DW_DLV_OK) {
-    dwarf_srclines_dealloc_b(line_context);
+    dwarf_srclines_dealloc_b(line_context_buf);
     if (DW_DLV_ERROR) {
       dwarf_dealloc_error(dbg, error);
     }
     return false;
+  } else {
+    *lines = lines_buf;
+    *n_lines = n_lines_buf;
+    *line_context = line_context_buf;
+    return true;
   }
+}
 
-  for (unsigned i = 0; i < n_lines; i++) {
-    Dwarf_Addr line_addr = 0;
-    res = dwarf_lineaddr(lines[i], &line_addr,
-      &error);
+bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+  const void *const search_for, void *const search_findings
+) {
+  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
+  MutLineEntry *line_entry = (MutLineEntry *) search_findings;
 
-    if (res != DW_DLV_OK) {
-      break;
-    }
+  int res = 0;
+  Dwarf_Error error = NULL;
+  Dwarf_Line *lines = NULL;
+  Dwarf_Signed n_lines = 0;
+  Dwarf_Line_Context line_context = NULL;
 
-    if (line_addr == *pc) {
-      Dwarf_Unsigned lineno;
-      res = dwarf_lineno(lines[i], &lineno,
+  if (sd_get_srclines(dbg, die, &lines, &n_lines, &line_context)) {
+    for (unsigned i = 0; i < n_lines; i++) {
+      Dwarf_Addr line_addr = 0;
+      res = dwarf_lineaddr(lines[i], &line_addr,
         &error);
 
       if (res != DW_DLV_OK) {
         break;
       }
 
-      /* `dwarf_lineoff_b` returns the column number. */
-      Dwarf_Unsigned colno;
-      res = dwarf_lineoff_b(lines[i], &colno,
-        &error);
+      if (line_addr == *pc) {
+        Dwarf_Unsigned lineno;
+        res = dwarf_lineno(lines[i], &lineno,
+          &error);
 
-      if (res != DW_DLV_OK) {
-        break;
+        if (res != DW_DLV_OK) {
+          break;
+        }
+
+        /* `dwarf_lineoff_b` returns the column number. */
+        Dwarf_Unsigned colno;
+        res = dwarf_lineoff_b(lines[i], &colno,
+          &error);
+
+        if (res != DW_DLV_OK) {
+          break;
+        }
+
+        Dwarf_Addr addr;
+        res = dwarf_lineaddr(lines[i], &addr, &error);
+
+        if (res != DW_DLV_OK) {
+          break;
+        }
+
+        /* `dwarf_linesrc` returns the file name.
+           `line_entryr->filepath` is set here on succcess. */
+        res = dwarf_linesrc(lines[i], &line_entry->filepath,
+          &error);
+
+        if (res != DW_DLV_OK) {
+          break;
+        }
+
+        dwarf_srclines_dealloc_b(line_context);
+
+        line_entry->is_ok = true;
+        line_entry->ln = lineno;
+        line_entry->cl = colno;
+        line_entry->addr = (x86_addr) { addr };
+        return true;
       }
-
-      /* `dwarf_linesrc` returns the file name.
-         `line_entryr->filepath` is set here on succcess. */
-      res = dwarf_linesrc(lines[i], &line_entry->filepath,
-        &error);
-
-      if (res != DW_DLV_OK) {
-        break;
-      }
-
-      dwarf_srclines_dealloc_b(line_context);
-
-      line_entry->ln = lineno;
-      line_entry->cl = colno;
-      return true;
     }
   }
 
@@ -422,6 +475,7 @@ bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
 
   /* Reached end of loop without finding
      a line entry with the address. */
+  line_entry->is_ok = false;
   return false;
 }
 
@@ -429,7 +483,7 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   Dwarf_Error error = NULL;
 
   Dwarf_Addr pc_addr = pc.value;
-  LineEntry line_entry = { .ln=-1, .cl=-1, .filepath=NULL };
+  LineEntry line_entry = { .is_ok=false };
 
   /* Because all fields in `LineEntry` are const
      `find_line_entry_in_die` will cast them to
@@ -441,47 +495,22 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
 
   if (res == DW_DLV_ERROR) {
     dwarf_dealloc_error(dbg, error);
-    return (LineEntry) { .ln=-1, .cl=-1, .filepath=NULL };
+    return (LineEntry) { .is_ok=false };
   } else if (res == DW_DLV_NO_ENTRY) {
-    return (LineEntry) { .ln=-1, .cl=-1, .filepath=NULL };
+    return (LineEntry) { .is_ok=false };
   } else {
-    /* No DWARF error during search. Result
-       is `-1` if no line entry was found. */
+    /* No DWARF error during search. The returned
+       line entry might still have `is_set=false`. */
     return line_entry;
   }
 }
 
-bool line_entry_is_ok(LineEntry line_entry) {
- if (line_entry.ln != -1
-     && line_entry.cl != -1
-     && line_entry.filepath != NULL
-  ) {
-    return true;
-  } else {
-    return false;
-  }
-}
+bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(name != NULL);
 
-typedef struct {
-  /* Addresses are unsigned and we should allow them
-     to have any value. Therefore `is_set` signals
-     whether or not they are set. The alternative of
-     using e.g. `-1` as the unset value doesn't work. */
-  bool is_set;
-  x86_addr lowpc;
-  x86_addr highpc;
-} SubprogAttr;
-
-/* Search callback that looks for a DIE describing the
-   subprogram with the name `search_for` and stores the
-   attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
-bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  const char *fn_name = (const char *) search_for;
-  SubprogAttr *attr = (SubprogAttr *) search_findings;
-
-  int res = DW_DLV_OK;
+  int res = 0;
   Dwarf_Error error;
 
   Dwarf_Half die_tag = 0;
@@ -510,24 +539,53 @@ bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
     }
 
     /* Do the names match? */
-    if (strcmp(fn_name_buf, fn_name) == 0) {
-      Dwarf_Addr lowpc, highpc;
-      res = get_high_and_low_pc(die, &error, &lowpc, &highpc);
-
-      if (res != DW_DLV_OK) {
-        if (res == DW_DLV_ERROR) {
-          dwarf_dealloc_error(dbg, error);
-        }
-        return false;
-      }
-
-      attr->lowpc = (x86_addr) { lowpc };
-      attr->highpc = (x86_addr) { highpc };
-      attr->is_set = true;
+    if (strcmp(fn_name_buf, name) == 0) {
       return true;
     } else {
       return false;
     }
+  } else {
+    /* This DIE is not a subprogram. */
+    return false;
+  }
+}
+
+typedef struct {
+  /* Addresses are unsigned and we should allow them
+     to have any value. Therefore `is_set` signals
+     whether or not they are set. The alternative of
+     using e.g. `-1` as the unset value doesn't work. */
+  bool is_set;
+  x86_addr lowpc;
+  x86_addr highpc;
+} SubprogAttr;
+
+/* Search callback that looks for a DIE describing the
+   subprogram with the name `search_for` and stores the
+   attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
+bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+  const void *const search_for, void *const search_findings
+) {
+  const char *fn_name = (const char *) search_for;
+  SubprogAttr *attr = (SubprogAttr *) search_findings;
+
+  if (sd_is_subprog_with_name(dbg, die, fn_name)) {
+    int res = 0;
+    Dwarf_Error error;
+    Dwarf_Addr lowpc, highpc;
+    res = get_high_and_low_pc(die, &error, &lowpc, &highpc);
+
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return false;
+    }
+
+    attr->lowpc = (x86_addr) { lowpc };
+    attr->highpc = (x86_addr) { highpc };
+    attr->is_set = true;
+    return true;
   } else {
     return false;
   }
@@ -554,6 +612,11 @@ SubprogAttr get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
   }
 }
 
+/* Get the `low_pc` and `high_pc` attributes for the
+   subprogram with the given name. Returns `true` if
+   attribute was found.
+   Both `get_at_*_pc` functions are unused and not exposed
+   globally. They may be useful again though. */
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *lowpc_dest) {
   assert(dbg != NULL);
   assert(lowpc_dest != NULL);
@@ -582,5 +645,68 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
     return true;
   } else {
     return false;
+  }
+}
+
+typedef struct {
+  line_callback callback;
+  void *const data;
+} CallbackAndData;
+
+bool run_callback_on_subprog(Dwarf_Debug dbg, Dwarf_Die die,
+  const void *const search_for, void *const search_findings
+) {
+  const char *fn_name = (const char *) search_for;
+  CallbackAndData *cad = (CallbackAndData *) search_findings;
+
+  if (sd_is_subprog_with_name(dbg, die, fn_name)) {
+    Dwarf_Error error = NULL;
+    int res = 0;
+    Dwarf_Line *lines = NULL;
+    Dwarf_Signed n_lines = 0;
+    Dwarf_Line_Context line_context = NULL;
+
+    if (sd_get_srclines(dbg, die, &lines, &n_lines, &line_context)) {
+      for (unsigned i = 0; i < n_lines; i++) {
+        res = cad->callback(lines[i], cad->data, &error);
+        if (res == DW_DLV_ERROR) {
+          dwarf_dealloc_error(dbg, error);
+          error = NULL;
+        }
+        res = DW_DLV_OK;
+      }
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
+void for_each_line_in_subprog(
+  Dwarf_Debug dbg,
+  const char *fn_name,
+  line_callback callback,
+  void *const init_data
+) {
+  assert(dbg != NULL);
+  assert(callback != NULL);
+
+  Dwarf_Error error = NULL;
+  CallbackAndData cad = {
+    callback,
+    init_data,
+  };
+
+  int res = search_dwarf_dbg(
+    dbg, &error,
+    run_callback_on_subprog,
+    fn_name,
+    &cad
+  );
+
+  if (res == DW_DLV_ERROR) {
+    dwarf_dealloc_error(dbg, error);
   }
 }
