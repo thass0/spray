@@ -55,21 +55,19 @@ static const reg_descriptor reg_descriptors[N_REGISTERS] = {
   { gs, 55, "gs" },
 };
 
-x86_word get_register_value(pid_t pid, x86_reg reg);
-void set_register_value(pid_t pid, x86_reg reg, x86_word word);
+SprayResult get_register_value(pid_t pid, x86_reg reg, x86_word *store);
+SprayResult set_register_value(pid_t pid, x86_reg reg, x86_word word);
 
 /* If `dwarf_regnum` refers to a known register, then
- * `true` is returned and `store` is set to the  content
- * of that register. Otherwise this function returns
- * `false` and `store` stays untouched.
- */
+   `true` is returned and `store` is set to the  content
+   of that register. Otherwise this function returns
+   `false` and `store` stays untouched. */
 bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store);
 
 const char *get_name_from_register(x86_reg reg);
 /* If `name` refers to a known register, then
- * `true` is returned and `store` is set to that register.
- * Otherwise this function returns `false` and `store` stays untouched.
- */
+   `true` is returned and `store` is set to that register.
+   Otherwise this function returns `false` and `store` stays untouched. */
 bool get_register_from_name(const char *name, x86_reg *store);
 
 #endif  // _SPARY_REGISTERS_H_

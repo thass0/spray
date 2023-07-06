@@ -8,7 +8,7 @@
 #define BIN_NAME "tests/assets/linux_x86_bin"
 #define SRC_NAME "tests/assets/debug_me.c"
 
-enum magic {
+enum {
   RAND_DATA_BUF_SIZE = 32,
 };
 

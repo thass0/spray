@@ -89,7 +89,7 @@ void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
   if (!enable->is_enabled) {
     // Read and return a word at `bp->addr` in the tracee's memory.
     x86_word data = { 0 };
-    pt_call_result res =
+    SprayResult res =
       pt_read_memory(breakpoints->pid, enable->addr, &data);
     unused(res);
     // Save the original bottom byte.
@@ -117,9 +117,9 @@ void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
     // modified low byte and write it to the address.
 
     x86_word modified_data = { 0 };
-    pt_call_result res
+    SprayResult res
       = pt_read_memory(breakpoints->pid, disable->addr, &modified_data);
-    unused(res);
+    assert(res == SP_OK);
     x86_word restored_data = { ((modified_data.value & ~BTM_BYTE_MASK) | disable->orig_data) };
     pt_write_memory(breakpoints->pid, disable->addr, restored_data);
 

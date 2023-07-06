@@ -9,26 +9,34 @@
 #include <string.h>
 
 /* Both  `x86_reg` and `reg_descriptors` are laid
- * out the same way as `user_regs_struct` in
- * `/usr/include/sys/user.h`. Hence, `x86_reg` can
- * index both of them.
- */
+   out the same way as `user_regs_struct` in
+   `/usr/include/sys/user.h`. Hence, `x86_reg` can
+   index both of them. */
 
-x86_word get_register_value(pid_t pid, x86_reg reg) {
+SprayResult get_register_value(pid_t pid, x86_reg reg, x86_word *store) {
+  assert(store != NULL);
+
   struct user_regs_struct regs;  // Register buffer
-  pt_read_registers(pid, &regs);
-  uint64_t *regs_as_array = (uint64_t*) &regs;
-  return (x86_word) { regs_as_array[reg] };
+  SprayResult res = pt_read_registers(pid, &regs);
+  if (res == SP_ERR) {
+    return SP_ERR;
+  } else {
+    uint64_t *regs_as_array = (uint64_t*) &regs;
+    *store = (x86_word) { .value=regs_as_array[reg] };
+    return SP_OK;
+  }
 }
 
-void set_register_value(pid_t pid, x86_reg reg, x86_word word) {
+SprayResult set_register_value(pid_t pid, x86_reg reg, x86_word word) {
   struct user_regs_struct regs;
-  pt_read_registers(pid, &regs);
-
-  uint64_t *regs_as_array = (uint64_t*) &regs;
-  regs_as_array[reg] = word.value;
-
-  pt_write_registers(pid, &regs);
+  SprayResult res = pt_read_registers(pid, &regs);
+  if (res ==  SP_ERR) {
+    return SP_ERR;
+  } else { 
+    uint64_t *regs_as_array = (uint64_t*) &regs;
+    regs_as_array[reg] = word.value;
+    return pt_write_registers(pid, &regs);
+  }
 }
 
 /* Get the register associated with the given DWARF
@@ -71,7 +79,8 @@ bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store) {
     translate_dwarf_regnum(dwarf_regnum, &associated_reg);
 
   if (regnum_was_translated) {
-    *store = get_register_value(pid, associated_reg);
+    SprayResult res = get_register_value(pid, associated_reg, store);
+    assert(res == SP_OK);
     return true;
   } else {
     return false;

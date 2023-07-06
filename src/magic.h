@@ -20,6 +20,18 @@ enum magic {
   // number has 7 digits. This plus characters for the rest
   // of the path plus a NULL terminator make up this number.
   PROC_MAPS_FILEPATH_LEN = 19,
+  // Size of the buffer to print all the tracee's registers.
+  // All values are zero-padded so the size is always the same.
+  REGISTER_PRINT_BUF_SIZE = 716,
+  // Width of the format string "\t%8s 0x%016lx" given that the string
+  // substituted is no longer that 8 characters. This doesn't
+  // include the string's NULL-byte.
+  REGISTER_PRINT_LEN = 26,
 };
+
+typedef enum {
+  SP_OK,
+  SP_ERR,
+} SprayResult;
 
 #endif  // _SPRAY_MAGIC_H_
