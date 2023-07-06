@@ -134,10 +134,32 @@ void print_current_source(Debugger dbg) {
   }
 }
 
-/* Continue execution of child process. */
-int continue_execution(pid_t pid) {
+/* Forward declare `wait_for_signal` to allow specific
+   signal handlers used by `wait_for_signal` to call
+   wait again. */
+void wait_for_signal(Debugger dbg);
+
+/* Execute the instruction at the breakpoints location
+   and stop the tracee again. */
+void step_over_breakpoint(Debugger dbg) {
+  x86_addr possible_bp_addr = get_pc(dbg.pid);
+
+  if (is_enabled_breakpoint(dbg.breakpoints, possible_bp_addr)) {
+    /* Disable the breakpoint, run the original
+       instruction and stop. */
+    disable_breakpoint(dbg.breakpoints, possible_bp_addr);
+    pt_single_step(dbg.pid);
+    wait_for_signal(dbg);
+    enable_breakpoint(dbg.breakpoints, possible_bp_addr);
+  }
+}
+
+/* Continue execution of child process. If the PC is currently
+   hung up on a breakpoint then that breakpoint is stepped-over. */
+int continue_execution(Debugger dbg) {
+  step_over_breakpoint(dbg);
   errno = 0;
-  pt_continue_execution(pid);
+  pt_continue_execution(dbg.pid);
   /* Is the process still alive? */
   if (errno == ESRCH) {
     printf("The process is dead 😭\n");
@@ -145,11 +167,6 @@ int continue_execution(pid_t pid) {
   }
   return 0;
 }
-
-/* Forward declare `wait_for_signal` to allow specific
-   signal handlers used by `wait_for_signal` to call
-   wait again. */
-void wait_for_signal(Debugger dbg);
 
 void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
   switch (siginfo.si_code) {
@@ -180,7 +197,7 @@ void handle_sigwinch(Debugger dbg) {
   /* Ignore changes in window size by telling the
      tracee to continue in that case and then wait for
      the next interesting signal. */
-  if (continue_execution(dbg.pid) == -1) {
+  if (continue_execution(dbg) == -1) {
     return;
   }
   wait_for_signal(dbg);
@@ -240,21 +257,6 @@ void wait_for_signal(Debugger dbg) {
           sigabbrev_np(WSTOPSIG(wait_status)));
         break;
     }
-  }
-}
-
-/* Execute the instruction at the breakpoints location
-   and stop the tracee again. */
-void step_over_breakpoint(Debugger dbg) {
-  x86_addr possible_bp_addr = get_pc(dbg.pid);
-
-  if (is_enabled_breakpoint(dbg.breakpoints, possible_bp_addr)) {
-    /* Disable the breakpoint, run the original
-       instruction and stop. */
-    disable_breakpoint(dbg.breakpoints, possible_bp_addr);
-    pt_single_step(dbg.pid);
-    wait_for_signal(dbg);
-    enable_breakpoint(dbg.breakpoints, possible_bp_addr);
   }
 }
 
@@ -411,9 +413,7 @@ void step_over(Debugger dbg) {
     &return_address
   );
 
-  /* Step over previous breakpoint. */
-  step_over_breakpoint(dbg);
-  continue_execution(dbg.pid);
+  continue_execution(dbg);
   wait_for_signal(dbg);
 
   for (size_t i = 0; i < data.to_del_idx; i++) {
@@ -504,8 +504,7 @@ void exec_command_break(Breakpoints *breakpoints, x86_addr addr) {
    continue the tracee and wait until it receives the
    next signal. */
 void exec_command_continue(Debugger dbg) {
-  step_over_breakpoint(dbg);
-  if (continue_execution(dbg.pid) == -1) {
+  if (continue_execution(dbg) == -1) {
     return;
   }
   wait_for_signal(dbg);
