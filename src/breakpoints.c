@@ -53,21 +53,18 @@ bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr address) {
   /* The only paramter that is relevant for the lookup
      is the address. */
   Breakpoint lookup = { .addr=address };
-  Breakpoint *breakpoint = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
-  /* Did we find such a breakpoint? */
-  if (breakpoint != NULL) {
+  Breakpoint *check = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
+
+  /* Did we find an enabled breakpoint? */
+  if (check != NULL && check->is_enabled) {
     return true;
   } else {
     return false;
   }
 }
 
-#include <stdio.h>
-
 void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
   assert(breakpoints != NULL);
-
-  fprintf(stderr, "Enabled breakpoint at 0x%lx\n", addr.value);
 
   Breakpoint lookup = {
     .addr=addr,
@@ -137,17 +134,3 @@ void delete_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
   Breakpoint lookup = { .addr=addr };
   hashmap_delete(breakpoints->map, &lookup);
 }
-
-bool is_enabled_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
-  assert(breakpoints != NULL);
-
-  Breakpoint lookup = { .addr=addr };
-  Breakpoint *check = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
-
-  if (check != NULL && check->is_enabled) {
-    return true;
-  } else {
-    return false;
-  }
-}
-

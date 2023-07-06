@@ -34,11 +34,9 @@ TEST(breakpoints_work) {
 
   enable_breakpoint(dbg.breakpoints, bp_addr1);
   assert_true(lookup_breakpoint(dbg.breakpoints, bp_addr1));
-  assert_true(is_enabled_breakpoint(dbg.breakpoints, bp_addr1));
 
   disable_breakpoint(dbg.breakpoints, bp_addr1);
-  assert_true(lookup_breakpoint(dbg.breakpoints, bp_addr1));
-  assert_false(is_enabled_breakpoint(dbg.breakpoints, bp_addr1));
+  assert_false(lookup_breakpoint(dbg.breakpoints, bp_addr1));
 
   free_debugger(dbg);
   

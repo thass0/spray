@@ -29,14 +29,9 @@ void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr);
 /* Delete the breakpoint at `addr` if there is one. */
 void delete_breakpoint(Breakpoints *breakpoints, x86_addr addr);
 
-/* Return `true` if there is a breakpoint at the given address.
-   For this function it doesn't matter whether the breakpoints
-   is enabled or disabled. */
-bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr addr);
-
 /* Return `true` if there is a breakpoint at `addr` and
    this breakpoint is enabled. Otherwise, if the breakpoint
-   doesn't exist or is disable, return `false`. */
-bool is_enabled_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+   doesn't exist or is disabled, return `false`. */
+bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr addr);
 
 #endif // _SPRAY_BREAKPOINTS_H_

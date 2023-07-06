@@ -87,16 +87,18 @@ static inline void print_word(x86_word word) {
   printf("0x%016lx", word.value);
 }
 
+/* NOTE: Breakpoints use *read addresses*. */
+
 /* Remove offset of position independet executables
    from the given address to make it work with DWARF. */
-x86_addr real_addr_to_dwarf(Debugger dbg, x86_addr real) {
+x86_addr real_to_dwarf(Debugger dbg, x86_addr real) {
   return (x86_addr) { real.value - dbg.load_address.value };
 }
 
 /* Add the offset of position independent executables
    to the given address. This turns an address from DWARF
    info a real address. */
-x86_addr dwarf_addr_to_real(x86_addr load_address, x86_addr dwarf) {
+x86_addr dwarf_to_real(x86_addr load_address, x86_addr dwarf) {
   return (x86_addr) { dwarf.value + load_address.value };
 }
 
@@ -110,7 +112,7 @@ x86_addr get_pc(pid_t pid) {
    debug info doesn't know about this offset. */
 x86_addr get_dwarf_pc(Debugger dbg) {
   x86_addr pc = get_pc(dbg.pid);
-  return real_addr_to_dwarf(dbg, pc);
+  return real_to_dwarf(dbg, pc);
 }
 
 /* Set the program counter. */
@@ -141,23 +143,24 @@ void wait_for_signal(Debugger dbg);
 
 /* Execute the instruction at the breakpoints location
    and stop the tracee again. */
-void step_over_breakpoint(Debugger dbg) {
-  x86_addr possible_bp_addr = get_pc(dbg.pid);
+void single_step_breakpoint(Debugger dbg) {
+  x86_addr pc_address = get_pc(dbg.pid);
 
-  if (is_enabled_breakpoint(dbg.breakpoints, possible_bp_addr)) {
+  if (lookup_breakpoint(dbg.breakpoints, pc_address)) {
     /* Disable the breakpoint, run the original
        instruction and stop. */
-    disable_breakpoint(dbg.breakpoints, possible_bp_addr);
+    disable_breakpoint(dbg.breakpoints, pc_address);
     pt_single_step(dbg.pid);
     wait_for_signal(dbg);
-    enable_breakpoint(dbg.breakpoints, possible_bp_addr);
+    enable_breakpoint(dbg.breakpoints, pc_address);
   }
 }
 
 /* Continue execution of child process. If the PC is currently
    hung up on a breakpoint then that breakpoint is stepped-over. */
 int continue_execution(Debugger dbg) {
-  step_over_breakpoint(dbg);
+  single_step_breakpoint(dbg);
+
   errno = 0;
   pt_continue_execution(dbg.pid);
   /* Is the process still alive? */
@@ -165,6 +168,7 @@ int continue_execution(Debugger dbg) {
     printf("The process is dead 😭\n");
     return -1;
   }
+
   return 0;
 }
 
@@ -261,21 +265,19 @@ void wait_for_signal(Debugger dbg) {
 }
 
 void single_step_instruction(Debugger dbg) {
-  pt_single_step(dbg.pid);
-  wait_for_signal(dbg);
-}
-
-void single_step_instruction_skip_breakpoints(Debugger dbg) {
   if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
-    step_over_breakpoint(dbg);
+    single_step_breakpoint(dbg);
   } else {
-    single_step_instruction(dbg);
+    pt_single_step(dbg.pid);
+    wait_for_signal(dbg);
   }
 }
 
 /* Set a breakpoint on the current return address.
    Used for source-level stepping. Returns whether or
-   not the breakpoint must be removed again after use. */
+   not the breakpoint must be removed again after use.
+   If it was to be removed,  the value of `return_address`
+   is set to the address where the breakpoint was created. */
 bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr *return_address) {
   assert(breakpoints != NULL);
   assert(return_address != NULL);
@@ -288,7 +290,7 @@ bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr
   pt_read_memory(pid, return_address_location, (x86_word *) return_address);
 
   bool remove_transient_breakpoint = false;
-  if (!is_enabled_breakpoint(breakpoints, *return_address)) {
+  if (!lookup_breakpoint(breakpoints, *return_address)) {
     enable_breakpoint(breakpoints, *return_address);
     remove_transient_breakpoint = true;
   }
@@ -296,6 +298,7 @@ bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr
   return remove_transient_breakpoint;
 }
 
+/* Step outside of the current function. */
 void step_out(Debugger dbg) {
   x86_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
@@ -311,11 +314,12 @@ void step_out(Debugger dbg) {
   }
 }
 
-void single_step(Debugger dbg) {
+/* Single step instructions until the line number has changed. */
+void single_step_line(Debugger dbg) {
   unsigned init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
 
   while (get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln == init_lineno) {
-    single_step_instruction_skip_breakpoints(dbg);
+    single_step_instruction(dbg);
   }
 }
 
@@ -330,7 +334,7 @@ typedef struct {
 
 enum { TO_DEL_ALLOC_SIZE };
 
-int set_breakpoint_on_line_callback(Dwarf_Line line, void *const void_data, Dwarf_Error *error) {
+int callback__set_dwarf_line_breakpoint(Dwarf_Line line, void *const void_data, Dwarf_Error *error) {
   assert(void_data != NULL);
   assert(error != NULL);
 
@@ -342,13 +346,13 @@ int set_breakpoint_on_line_callback(Dwarf_Line line, void *const void_data, Dwar
     return res;
   }
 
-  x86_addr real_line_addr = dwarf_addr_to_real(
+  x86_addr real_line_addr = dwarf_to_real(
     data->load_address,
     (x86_addr){ dwarf_line_addr });
 
   if (
     data->origin_address.value ==  real_line_addr.value &&
-    !is_enabled_breakpoint(data->breakpoints, real_line_addr)
+    !lookup_breakpoint(data->breakpoints, real_line_addr)
   ) {
     enable_breakpoint(data->breakpoints, real_line_addr);
 
@@ -364,6 +368,7 @@ int set_breakpoint_on_line_callback(Dwarf_Line line, void *const void_data, Dwar
   return DW_DLV_OK;
 }
 
+/* Step over the next line. */
 void step_over(Debugger dbg) {
   /* This functions sets breakpoints all over the current DWARf
      subprogram so that we step no matter what the line we step
@@ -372,7 +377,7 @@ void step_over(Debugger dbg) {
   /* Computing the current PC address this way ensures that
      `current_address` belongs to a DWARF line entry. */
   x86_addr dwarf_current_address = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).addr;
-  x86_addr current_address = dwarf_addr_to_real(dbg.load_address, dwarf_current_address);
+  x86_addr current_address = dwarf_to_real(dbg.load_address, dwarf_current_address);
 
   char *fn_name = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
   if (fn_name == NULL) {
@@ -397,7 +402,7 @@ void step_over(Debugger dbg) {
   for_each_line_in_subprog(
     dbg.dwarf,
     fn_name,
-    set_breakpoint_on_line_callback,
+    callback__set_dwarf_line_breakpoint,
     &data
   );
 
@@ -508,7 +513,7 @@ void exec_command_continue(Debugger dbg) {
 }
 
 void exec_command_single_step_instruction(Debugger dbg) {
-  single_step_instruction_skip_breakpoints(dbg);
+  single_step_instruction(dbg);
   print_current_source(dbg);
 }
 
@@ -517,7 +522,9 @@ void exec_command_step_out(Debugger dbg) {
 }
 
 void exec_command_single_step(Debugger dbg) {
-  single_step(dbg);
+  /* Single step instructions until the line number
+  has changed. */
+  single_step_line(dbg);
   print_current_source(dbg);
 }
 
