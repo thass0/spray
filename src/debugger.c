@@ -297,17 +297,14 @@ bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr
 }
 
 void step_out(Debugger dbg) {
-  /* If we are on a breakpoint right now, step
-     over it first. Otherwise we'll get stuck on it. */
-  step_over_breakpoint(dbg);
-  continue_execution(dbg.pid);
-  wait_for_signal(dbg);
-
   x86_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
     dbg.breakpoints,
     dbg.pid,
     &return_address);
+
+  continue_execution(dbg);
+  wait_for_signal(dbg);
 
   if (remove_internal_breakpoint) {
     delete_breakpoint(dbg.breakpoints, return_address);
