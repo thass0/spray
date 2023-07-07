@@ -938,13 +938,13 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           }
         }
       }
-    } else if (is_command(cmd, "i", "istep")) {
+    } else if (is_command(cmd, "i", "inst")) {
       exec_command_single_step_instruction(*dbg);
-    } else if (is_command(cmd, "o", "ostep")) {
+    } else if (is_command(cmd, "l", "leave")) {
       exec_command_step_out(*dbg);
     } else if (is_command(cmd, "s", "step")) {
       exec_command_single_step(*dbg);
-    } else if (is_command(cmd, "k", "skip")) {
+    } else if (is_command(cmd, "n", "next")) {
       exec_command_step_over(*dbg);
     } else {
       unknown_cmd_error();

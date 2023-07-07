@@ -17,7 +17,13 @@
 
       `(memory | m) <address> (write | wr) <value>`: write <value> to memory at <address>.
 
-      `(istep | i)`: single step on instruction level. Doesn't trigger breakpoints we step on.
+      `(inst | i)`: Single step to the next instruction.
+
+      `(leave | l)`: Step out of the current function.
+
+      `(step | s)`: Single step to the next line. Steps into functions.
+
+      `(next | n)`: Go to the next line. Doesn't step into functions.
 
     Where <address> and <value> are validated with `strtol(..., 16)`. 
     All valid register names can be found in the `reg_descriptors`
