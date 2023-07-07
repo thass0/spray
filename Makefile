@@ -54,8 +54,9 @@ TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
 test: CFLAGS += -I$(TEST_SOURCE_DIR)
-test: $(TEST_BINARY)
+test: $(TEST_BINARY) $(BINARY)
 	./$(TEST_BINARY) $(args)
+	pytest
 
 $(TEST_BINARY): $(TEST_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(TEST_OBJECTS) -o $(TEST_BINARY)

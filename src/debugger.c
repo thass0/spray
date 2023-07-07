@@ -76,7 +76,7 @@ static inline void invalid_error(ErrorCode what) {
 }
 
 static inline void missing_error(ErrorCode what) {
-  printf("😠 Missing %s\n", error_messages[what]);
+  printf("🤦 Missing %s\n", error_messages[what]);
 }
 
 static inline void internal_memory_error(ErrorCode what, x86_addr addr) {
@@ -100,6 +100,10 @@ static inline void empty_command_error(void) {
 
 static inline void unknown_cmd_error(void) {
   printf("🤔 I don't know that\n");
+}
+
+static inline void command_unfinished_error(void) {
+  printf("🤦 Trailing characters in command\n");
 }
 
 static inline void missing_source_error(x86_addr addr) {
@@ -833,6 +837,15 @@ static inline char *get_next_command_token(char *restrict line) {
   return strtok(line, " \t");
 }
 
+static inline bool line_is_parsed(void) {
+  if (strtok(NULL, " \t") == NULL) {
+    return true;
+  } else {
+    command_unfinished_error();
+    return false;
+  }
+}
+
 bool is_command(
   const char *restrict in,
   const char *restrict short_from,
@@ -867,6 +880,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
     if (cmd == NULL) {
       empty_command_error();
     } else if (is_command(cmd, "c", "continue")) {
+      if (!line_is_parsed()) break;
       exec_command_continue(*dbg);
     } else if (is_command(cmd, "b", "break")) {
       // Pass `NULL` to `strtok_r` to continue scanning `line`.
@@ -876,6 +890,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       } else {
         x86_addr addr;
         if (parse_base16(addr_str, &addr.value) == SP_OK) {
+          if (!line_is_parsed()) break;
           exec_command_break(dbg->breakpoints, addr);
         } else {
           invalid_error(BREAK_ADDR);
@@ -888,6 +903,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         missing_error(REGISTER_NAME);
         break;
       } else if (is_command(name, "dump", "print")) {
+        if (!line_is_parsed()) break;
         /* This is an exception: instead of a name the register
          * operation could also be followed by a `dump`/`print` command.
          */
@@ -910,6 +926,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         missing_error(REGISTER_OPERATION);
       } else {
         if (is_command(op_str, "rd", "read")) {
+          if (!line_is_parsed()) break;
           /* Read */
           exec_command_register_read(dbg->pid, reg, name);
         } else if (is_command(op_str, "wr", "write")) {
@@ -920,6 +937,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           } else {
             x86_word word;
             if (parse_base16(value_str, &word.value) == SP_OK) {
+              if (!line_is_parsed()) break;
               exec_command_register_write(dbg->pid, reg, name, word);
             } else {
               invalid_error(REGISTER_WRITE_VALUE);
@@ -949,6 +967,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
       if (op_str == NULL) {
         missing_error(MEMORY_OPERATION);
       } else if (is_command(op_str, "rd", "read")) {
+        if (!line_is_parsed()) break;
         /* Read */
         exec_command_memory_read(dbg->pid, addr);
       } else if (is_command(op_str, "wr", "write")) {
@@ -958,19 +977,26 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         } else {
           x86_word word;
           if (parse_base16(value_str, &word.value) == SP_OK) {
+            if (!line_is_parsed()) break;
             exec_command_memory_write(dbg->pid, addr, word);
           } else {
             invalid_error(MEMORY_WRITE_VALUE);
           }
         }
+      } else {
+        invalid_error(MEMORY_OPERATION);
       }
     } else if (is_command(cmd, "i", "inst")) {
+      if (!line_is_parsed()) break;
       exec_command_single_step_instruction(*dbg);
     } else if (is_command(cmd, "l", "leave")) {
+      if (!line_is_parsed()) break;
       exec_command_step_out(*dbg);
     } else if (is_command(cmd, "s", "step")) {
+      if (!line_is_parsed()) break;
       exec_command_single_step(*dbg);
     } else if (is_command(cmd, "n", "next")) {
+      if (!line_is_parsed()) break;
       exec_command_step_over(*dbg);
     } else {
       unknown_cmd_error();
