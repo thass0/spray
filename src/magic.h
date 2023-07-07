@@ -27,6 +27,11 @@ enum magic {
   // substituted is no longer that 8 characters. This doesn't
   // include the string's NULL-byte.
   REGISTER_PRINT_LEN = 26,
+  // Maximum number of instruction-level steps performed by
+  // `single_step_line` until giving up trying to find another
+  // line. Can be fairly large since the program will likely
+  // end after this limit was reached.
+  SINGLE_STEP_SEARCH_LIMIT=128,
 };
 
 typedef enum {

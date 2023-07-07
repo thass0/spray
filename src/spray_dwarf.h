@@ -18,19 +18,15 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error);
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 typedef struct {
-  const bool is_ok;
-  const unsigned ln;
-  const unsigned cl;
-  const x86_addr addr;
-  const char *filepath;
+  bool is_ok;
+  unsigned ln;
+  unsigned cl;
+  x86_addr addr;
+  char *filepath;
 } LineEntry;
 
 /* Returns `ln=-1` if there is no line entry for the PC. */
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
-
-/* Returns `true` if the line entry can be used.
-   Otherwise returns `false` if it signals an error. */
-bool line_entry_is_ok(LineEntry line_entry);
 
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *low_pc_dest);
 bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *high_pc_dest);

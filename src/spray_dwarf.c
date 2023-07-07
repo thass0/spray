@@ -321,15 +321,6 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
-/* Mutable line entry. Used to find the info. */
-typedef struct {
-  bool is_ok;
-  unsigned ln;
-  unsigned cl;
-  x86_addr addr;
-  char *filepath;
-} MutLineEntry;
-
 bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Line_Context *line_context) {
   assert(dbg != NULL);
   assert(die != NULL);
@@ -404,7 +395,7 @@ bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  MutLineEntry *line_entry = (MutLineEntry *) search_findings;
+  LineEntry *line_entry = (LineEntry *) search_findings;
 
   int res = 0;
   Dwarf_Error error = NULL;

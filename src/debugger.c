@@ -90,6 +90,10 @@ static inline void internal_register_error(ErrorCode what, x86_reg reg) {
     error_messages[what], get_name_from_register(reg));
 }
 
+static inline void internal_error(const char *what) {
+  printf("💢 %s\n", what);
+}
+
 static inline void empty_command_error(void) {
   printf("🤨 Empty command\n");
 }
@@ -179,6 +183,7 @@ typedef enum {
   EXEC_CONT_DEAD,
   EXEC_INVALID_WAIT_STATUS,
   EXEC_FUNCTION_NOT_FOUND,
+  EXEC_LINE_NOT_FOUND,
 } ExecErrCode;
 
 typedef struct {
@@ -256,6 +261,12 @@ static inline ExecResult exec_function_not_found(void) {
     .code.err=EXEC_FUNCTION_NOT_FOUND,
   };
 }
+static inline ExecResult exec_line_not_found(void) {
+  return (ExecResult) {
+    .type=SP_ERR,
+    .code.err=EXEC_LINE_NOT_FOUND,
+  };
+}
 
 static inline bool is_exec_err(ExecResult *exec_result) {
   if (exec_result  == NULL) {
@@ -323,7 +334,10 @@ void print_exec_err(ExecResult *exec_res) {
         exec_res->data.wait_status);
       break;
     case EXEC_FUNCTION_NOT_FOUND:
-      printf("💢 Failed to find current function\n");
+      internal_error("Failed to find current function");
+      break;
+    case EXEC_LINE_NOT_FOUND:
+      internal_error("Failed to find another line");
       break;
   }
 }
@@ -508,10 +522,22 @@ ExecResult step_out(Debugger dbg) {
 ExecResult single_step_line(Debugger dbg) {
   unsigned init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
 
-  while (get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln == init_lineno) {
+  unsigned n_instruction_steps = 0;
+  LineEntry next_line = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  /* Single step instructions until we find a valid line
+     with a different line number than before. */
+  while (!next_line.is_ok || next_line.ln == init_lineno) {
     ExecResult exec_res = single_step_instruction(dbg);
     if (is_exec_err(&exec_res)) {
       return exec_res;
+    }
+
+    next_line = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+    n_instruction_steps ++;
+
+    /* Did we reach the maximum number of steps? */
+    if (n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
+      return exec_line_not_found();
     }
   }
 
