@@ -7,6 +7,8 @@
 #include <string.h>
 #include <assert.h>
 
+typedef bool (*SearchCallback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const);
+
 Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {  
   assert(filepath != NULL);
   assert(error != NULL);
@@ -52,9 +54,9 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
    value `DW_DLV_OK` doesn't mean that the search was successful in that
    we found something. It only means that there wasn't a error with DWARF. */
 
-int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error,
+int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error,
   int is_info, int in_level,
-  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const),
+  SearchCallback search_callback,
   const void *const search_for, void *const search_findings
 ) {  
   int res = DW_DLV_OK;
@@ -74,7 +76,7 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
       return DW_DLV_ERROR;
     } else if (res == DW_DLV_OK) {
       /* We found a child: recurse! */
-      res = search_dwarf_die(dbg, child_die, error,
+      res = sd_search_dwarf_die(dbg, child_die, error,
         is_info, in_level + 1,
         search_callback, search_for, search_findings);
   
@@ -118,8 +120,8 @@ int search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error
    in that order. It checks if `search_for` is found in the DIE and stores
    the findins in `search_findings`.
    `search_callback` returns `true` if `search_for` has been found. */
-int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
-  bool (*search_callback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const),
+int sd_search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
+  SearchCallback search_callback,
   const void *const search_for, void *const search_findings
 ) {
   Dwarf_Half version_stamp = 0;  /* Store version number (2 - 5). */
@@ -174,7 +176,7 @@ int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
       return DW_DLV_NO_ENTRY;
     }
 
-    res = search_dwarf_die(dbg, cu_die, error, is_info, 0,
+    res = sd_search_dwarf_die(dbg, cu_die, error, is_info, 0,
       search_callback, search_for, search_findings);
 
     dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
@@ -186,7 +188,7 @@ int search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
   }
 }
 
-int get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
+int sd_get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
   Dwarf_Addr *lowpc, Dwarf_Addr *highpc
 ) {
   int res = 0;
@@ -226,7 +228,7 @@ int get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
 
 /* Switches `pc_in_die` to `true` if it finds that `pc` lies
    between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE. */
-int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool *pc_in_die) {
+int sd_check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool *pc_in_die) {
   int res = DW_DLV_OK;
   Dwarf_Half die_tag = 0;
   res = dwarf_tag(die,
@@ -238,7 +240,7 @@ int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool
 
   if (die_tag == DW_TAG_subprogram) {
     Dwarf_Addr lowpc, highpc;
-    res = get_high_and_low_pc(die, error, &lowpc, &highpc);
+    res = sd_get_high_and_low_pc(die, error, &lowpc, &highpc);
     if (res != DW_DLV_OK) {
       return res;
     } else if (lowpc <= pc && pc <= highpc) {
@@ -255,7 +257,7 @@ int check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool
    function name corresponding to the PC.
    Allocated memory for the function name of it returns
    `true`. This memory must be released by the caller. */
-bool find_name_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
@@ -265,7 +267,7 @@ bool find_name_in_die(Dwarf_Debug dbg, Dwarf_Die die,
   Dwarf_Error error = NULL;
   bool found_pc = false;
 
-  res = check_pc_in_die(die, &error, *pc, &found_pc);
+  res = sd_check_pc_in_die(die, &error, *pc, &found_pc);
 
   if (res != DW_DLV_OK) {
     if (res == DW_DLV_ERROR) {
@@ -304,8 +306,8 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   Dwarf_Addr pc_addr = pc.value;
   char *fn_name = NULL;  // <- Store the function name here.
   
-  int res = search_dwarf_dbg(dbg, &error,
-    find_name_in_die,
+  int res = sd_search_dwarf_dbg(dbg, &error,
+    callback__find_subprog_name_by_pc,
     &pc_addr,
     &fn_name);
 
@@ -321,9 +323,11 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
-bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Line_Context *line_context) {
+/* NOTE: Acquiring a `Dwarf_Line_Context` is only possilbe
+   if the given DIE is the compilation unit DIE. */
+bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die cu_die, Dwarf_Line_Context *line_context) {
   assert(dbg != NULL);
-  assert(die != NULL);
+  assert(cu_die != NULL);
   assert(line_context != NULL);  
   int res;
   Dwarf_Unsigned line_table_version = 0;
@@ -332,7 +336,7 @@ bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Line_Context *lin
   Dwarf_Line_Context line_context_buf = NULL;
   Dwarf_Error error = NULL;
 
-  res = dwarf_srclines_b(die,
+  res = dwarf_srclines_b(cu_die,
     &line_table_version, &line_table_count,
     &line_context_buf, &error);
 
@@ -353,7 +357,7 @@ bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Line_Context *lin
 
 bool sd_get_srclines(
   Dwarf_Debug dbg,
-  Dwarf_Die die,
+  Dwarf_Die cu_die,
   Dwarf_Line **lines,
   Dwarf_Signed *n_lines,
   Dwarf_Line_Context *line_context
@@ -366,7 +370,7 @@ bool sd_get_srclines(
   Dwarf_Error error = NULL;
 
   Dwarf_Line_Context line_context_buf = NULL;
-  if (!sd_get_line_context(dbg, die, &line_context_buf)) {
+  if (!sd_get_line_context(dbg, cu_die, &line_context_buf)) {
     return false;
   }
 
@@ -391,7 +395,7 @@ bool sd_get_srclines(
   }
 }
 
-bool find_line_entry_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+bool callback__find_line_entry_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
@@ -479,8 +483,8 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   /* Because all fields in `LineEntry` are const
      `find_line_entry_in_die` will cast them to
      be mutable and modify them. */
-  int res = search_dwarf_dbg(dbg, &error,
-    find_line_entry_in_die,
+  int res = sd_search_dwarf_dbg(dbg, &error,
+    callback__find_line_entry_by_pc,
     &pc_addr,
     &line_entry);
 
@@ -564,7 +568,7 @@ bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
     int res = 0;
     Dwarf_Error error;
     Dwarf_Addr lowpc, highpc;
-    res = get_high_and_low_pc(die, &error, &lowpc, &highpc);
+    res = sd_get_high_and_low_pc(die, &error, &lowpc, &highpc);
 
     if (res != DW_DLV_OK) {
       if (res == DW_DLV_ERROR) {
@@ -582,14 +586,14 @@ bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
   }
 }
 
-SubprogAttr get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
+SubprogAttr sd_get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
   assert(dbg != NULL);
   assert(fn_name != NULL);
 
   Dwarf_Error error = NULL;
   SubprogAttr attr = { .is_set=false };
 
-  int res = search_dwarf_dbg(dbg, &error,  
+  int res = sd_search_dwarf_dbg(dbg, &error,  
     find_subprog_attributes_in_die,
     fn_name, &attr);
 
@@ -616,7 +620,7 @@ bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *lowpc_dest) {
     return false;
   }
 
-  SubprogAttr attr = get_subprog_attr(dbg, fn_name);
+  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
   if (attr.is_set) {
     lowpc_dest->value = attr.lowpc.value;
     return true;
@@ -630,7 +634,7 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
   assert(fn_name != NULL);
   assert(highpc_dest != NULL);
 
-  SubprogAttr attr = get_subprog_attr(dbg, fn_name);
+  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
   if (attr.is_set) {
     highpc_dest->value = attr.highpc.value;
     return true;
@@ -644,7 +648,7 @@ typedef struct {
   void *const data;
 } CallbackAndData;
 
-bool run_callback_on_subprog(Dwarf_Debug dbg, Dwarf_Die die,
+bool callback__run_callback_on_subprog(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   const char *fn_name = (const char *) search_for;
@@ -690,9 +694,9 @@ void for_each_line_in_subprog(
     init_data,
   };
 
-  int res = search_dwarf_dbg(
+  int res = sd_search_dwarf_dbg(
     dbg, &error,
-    run_callback_on_subprog,
+    callback__run_callback_on_subprog,
     fn_name,
     &cad
   );
