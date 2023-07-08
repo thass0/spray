@@ -15,7 +15,8 @@ TEST(storing_files_works) {
   assert_ptr_equal(NULL, hashmap_get(source_files, &lookup));
 
   freopen("/dev/null", "w", stdout);
-  print_source(source_files, FILE_PATH, 2, 2);
+  SprayResult res = print_source(source_files, FILE_PATH, 2, 2);
+  assert_int(res, ==, SP_OK);
   
   /* Internally `print_source` will use this call to `hashmap_get`
      to determine if it should read the file again. If this call

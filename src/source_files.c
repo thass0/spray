@@ -98,7 +98,7 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
   }
 }
 
-int print_source(
+SprayResult print_source(
   SourceFiles *source_files,
   const char *source_filepath,
   unsigned lineno,
@@ -109,7 +109,7 @@ int print_source(
 
   const SourceLines *lines = get_source_lines(source_files, source_filepath);
   if (lines == NULL) {
-    return -1;
+    return SP_ERR;
   }
 
   /* Calculate context window into file. */
@@ -145,6 +145,6 @@ int print_source(
     fputs(lines->lines[cur_lineno - 1], stdout);
   }
 
-  return 0;
+  return SP_OK;
 }
 

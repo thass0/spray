@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
@@ -79,6 +80,15 @@ static inline void missing_error(ErrorCode what) {
   printf("🤦 Missing %s\n", error_messages[what]);
 }
 
+static inline void internal_error(const char *format, ...) {
+  va_list argp;
+  va_start(argp, format);
+  printf("💢 ");
+  vprintf(format, argp);
+  printf("\n");
+  va_end(argp);
+}
+
 static inline void internal_memory_error(ErrorCode what, x86_addr addr) {
   printf("💢 Failed to %s (address ", error_messages[what]);
   print_addr(addr);
@@ -88,10 +98,6 @@ static inline void internal_memory_error(ErrorCode what, x86_addr addr) {
 static inline void internal_register_error(ErrorCode what, x86_reg reg) {
   printf("💢 Failed to %s (register '%s')\n",
     error_messages[what], get_name_from_register(reg));
-}
-
-static inline void internal_error(const char *what) {
-  printf("💢 %s\n", what);
 }
 
 static inline void empty_command_error(void) {
@@ -165,11 +171,15 @@ void print_current_source(Debugger dbg) {
   x86_addr pc = get_dwarf_pc(dbg);
   LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, pc);
   if (line_entry.is_ok) {
-    print_source(
+    SprayResult res = print_source(
       dbg.files,
       line_entry.filepath,
       line_entry.ln,
       3);
+    if (res == SP_ERR) {
+      internal_error("Failed to read source file %s; "
+        "can't print source", line_entry.filepath);
+    }
   } else {
     missing_source_error(pc);
   }
@@ -1053,6 +1063,11 @@ void init_load_address(Debugger *dbg) {
 int setup_debugger(const char *prog_name, Debugger* store) {
   assert(store != NULL);
 
+  if (access(prog_name, F_OK) != 0) {
+    fprintf(stderr, "File %s doesn't exist\n", prog_name);
+    return -1;
+  }
+
   // Parse the ELF header.
   ElfFile elf_buf;  /* Must buffer currently because `parse_elf`
                        might change `elf_buf` even on error.
@@ -1060,7 +1075,7 @@ int setup_debugger(const char *prog_name, Debugger* store) {
                        `store` if it's successful. */
   elf_parse_result res = parse_elf(prog_name, &elf_buf);
   if (res != ELF_PARSE_OK) {
-    fprintf(stderr, "ELF parse failed: %s",
+    fprintf(stderr, "ELF parse failed: %s\n",
       elf_parse_result_name(res));
     return -1;
   }
@@ -1069,7 +1084,7 @@ int setup_debugger(const char *prog_name, Debugger* store) {
   Dwarf_Error error = NULL;
   Dwarf_Debug dwarf = dwarf_init(prog_name, &error);
   if (dwarf == NULL) {
-    fprintf(stderr, "DWARF initialization failed: %s",
+    fprintf(stderr, "DWARF initialization failed: %s\n",
       dwarf_errmsg(error));
     dwarf_dealloc_error(NULL, error);
     return -1;

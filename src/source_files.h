@@ -7,6 +7,8 @@
 #define _SPRAY_SOURCE_FILES_H_
 
 #include <stdio.h>
+
+#include "magic.h"
 #include "hashmap.h"
 
 typedef struct {
@@ -22,7 +24,7 @@ SourceFiles *init_source_files(void);
 
 void free_source_files(SourceFiles *source_files);
 
-int print_source(
+SprayResult print_source(
   SourceFiles *source_files,
   const char *source_filepath,
   unsigned lineno,

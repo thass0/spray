@@ -222,10 +222,10 @@ elf_parse_result parse_elf(const char *filepath, ElfFile *elf_store) {
 
 const char *elf_parse_result_name(elf_parse_result res) {
   static const char *elf_parse_result_names[] = {
-    "ELF parse ok",
-    "ELF parse error",
-    "ELF parse invalid",
-    "ELF parse dislike",
+    [ELF_PARSE_OK]="parsed file successfully",
+    [ELF_PARSE_IO_ERR]="file I/O error",
+    [ELF_PARSE_INVALID]="invalid file contents",
+    [ELF_PARSE_DISLIKE]="unsupported file contents",
   };
 
   return elf_parse_result_names[res];
