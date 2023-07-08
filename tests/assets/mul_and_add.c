@@ -16,7 +16,7 @@ int mul(int a, int b) {
 int main(void) {
   int sum = add(5, 6);
   int product = mul(sum, 3);
-  printf("Sum: %d; Product: %d", sum, product);
+  printf("Sum: %d; Product: %d\n", sum, product);
   return 0;
 }
 

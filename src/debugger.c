@@ -40,6 +40,7 @@ static inline void print_word(x86_word word) {
 
 typedef enum {
   BREAK_ADDR,
+  DELETE_ADDR,
   REGISTER_NAME,
   REGISTER_OPERATION,
   REGISTER_WRITE_VALUE,
@@ -57,6 +58,7 @@ typedef enum {
 
 static const char* error_messages[] = {
   [BREAK_ADDR]="address for break",
+  [DELETE_ADDR]="address to delete",
   [REGISTER_NAME]="register name for register operation",
   [REGISTER_OPERATION]="register operation",
   [REGISTER_WRITE_VALUE]="value for register write",
@@ -101,7 +103,7 @@ static inline void internal_register_error(ErrorCode what, x86_reg reg) {
 }
 
 static inline void empty_command_error(void) {
-  printf("🤨 Empty command\n");
+  printf("🤔 Empty command\n");
 }
 
 static inline void unknown_cmd_error(void) {
@@ -348,7 +350,7 @@ void print_exec_err(ExecResult *exec_res) {
   assert(exec_res != NULL);
   switch (exec_res->code.err) {
     case EXEC_CONT_DEAD:
-      printf("😭 The process is dead\n");
+      printf("💀 The process is dead\n");
       break;
     case EXEC_INVALID_WAIT_STATUS:
       printf("Internal error: received invalid wait status %d",
@@ -801,6 +803,11 @@ void exec_command_break(Breakpoints *breakpoints, x86_addr addr) {
   enable_breakpoint(breakpoints, addr);
 }
 
+void exec_command_delete(Breakpoints *breakpoints, x86_addr addr) {
+  assert(breakpoints != NULL);
+  disable_breakpoint(breakpoints, addr);
+}
+
 /* Execute the instruction at the current breakpoint,
    continue the tracee and wait until it receives the
    next signal. */
@@ -910,6 +917,19 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
           exec_command_break(dbg->breakpoints, addr);
         } else {
           invalid_error(BREAK_ADDR);
+        }
+      }
+    } else if (is_command(cmd, "d", "delete")) {
+      char *addr_str = get_next_command_token(NULL);
+      if (addr_str == NULL) {
+        missing_error(DELETE_ADDR);
+      } else {
+        x86_addr addr;
+        if (parse_base16(addr_str, &addr.value) == SP_OK) {
+          if (!line_is_parsed()) break;
+          exec_command_delete(dbg->breakpoints, addr);
+        } else {
+          invalid_error(DELETE_ADDR);
         }
       }
     } else if (is_command(cmd, "r", "register")) {

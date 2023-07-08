@@ -7,6 +7,8 @@
 
       `(break | b) <address>`: set a breakpoint at <address>.
 
+      `(delete | d) <address>`: delete a breakpoint at <address>.
+
       `(register | r) <name> (read | rd)`: read the value in register <name>.
 
       `(register | r) <name> (write | wr) <value>`: write <value> to register <name>.
