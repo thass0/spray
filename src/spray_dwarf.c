@@ -355,149 +355,158 @@ bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die cu_die, Dwarf_Line_Context *
   return true;
 }
 
-bool sd_get_srclines(
-  Dwarf_Debug dbg,
-  Dwarf_Die cu_die,
-  Dwarf_Line **lines,
-  Dwarf_Signed *n_lines,
-  Dwarf_Line_Context *line_context
-) {
-  assert(lines != NULL);
-  assert(n_lines != NULL);
-  assert(line_context != NULL);
+typedef struct {
+  bool is_set;
+  LineEntry *lines;
+  unsigned n_lines;
+  Dwarf_Line_Context line_context;
+} LineTable;
 
-  int res = 0;
+void sd_free_line_table(LineTable *line_table) {
+  assert(line_table != NULL);
+  free(line_table->lines);
+  dwarf_srclines_dealloc_b(line_table->line_context);
+  *line_table = (LineTable) { 0 };
+}
+
+int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_Error *error) {
+  assert(line != NULL);
+  assert(error != NULL);
+
+  int res = DW_DLV_OK;
+
+  Dwarf_Unsigned lineno;
+  res = dwarf_lineno(line, &lineno,
+    error);
+
+  if (res != DW_DLV_OK) { return res; }
+
+  /* `dwarf_lineoff_b` returns the column number. */
+  Dwarf_Unsigned colno;
+  res = dwarf_lineoff_b(line, &colno,
+    error);
+
+  if (res != DW_DLV_OK) { return res; }
+
+  Dwarf_Addr addr;
+  res = dwarf_lineaddr(line, &addr, error);
+
+  if (res != DW_DLV_OK) { return res; }
+
+  /* `dwarf_linesrc` returns the file name. */
+  char *filepath = NULL;
+  res = dwarf_linesrc(line, &filepath,
+    error);
+
+  if (res != DW_DLV_OK) { return res; }
+
+  Dwarf_Bool new_statement = false;
+  res = dwarf_linebeginstatement(line, &new_statement, error);
+
+  if (res != DW_DLV_OK) { return res; }
+
+  line_entry->is_ok = true;
+  line_entry->new_statement = new_statement == 0 ? false : true;
+  line_entry->ln = lineno;
+  line_entry->cl = colno;
+  line_entry->addr = (x86_addr) { addr };
+  line_entry->filepath = filepath;
+
+  return DW_DLV_OK;
+}
+
+bool callback__get_srclines(
+  Dwarf_Debug dbg, Dwarf_Die cu_die,
+  const void *const search_for, void *const search_findings
+) {
+  unused(search_for);
+  LineTable *line_table = (LineTable *) search_findings;
+
+  int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
 
-  Dwarf_Line_Context line_context_buf = NULL;
-  if (!sd_get_line_context(dbg, cu_die, &line_context_buf)) {
+  Dwarf_Line_Context line_context = NULL;
+  if (!sd_get_line_context(dbg, cu_die, &line_context)) {
     return false;
   }
 
-  Dwarf_Line *lines_buf = NULL;
-  Dwarf_Signed n_lines_buf = 0;
+  Dwarf_Line *lines = NULL;
+  Dwarf_Signed n_lines = 0;
 
-  res = dwarf_srclines_from_linecontext(line_context_buf,
-    &lines_buf, &n_lines_buf,
+  res = dwarf_srclines_from_linecontext(line_context,
+    &lines, &n_lines,
     &error);
 
   if (res != DW_DLV_OK) {
-    dwarf_srclines_dealloc_b(line_context_buf);
-    if (DW_DLV_ERROR) {
+    dwarf_srclines_dealloc_b(line_context);
+    if (res == DW_DLV_ERROR) {
       dwarf_dealloc_error(dbg, error);
     }
     return false;
   } else {
-    *lines = lines_buf;
-    *n_lines = n_lines_buf;
-    *line_context = line_context_buf;
+    LineEntry *line_entries = (LineEntry *) calloc (n_lines, sizeof(LineEntry));
+    for (unsigned i = 0; i < n_lines; i++) {
+      res = sd_line_entry_from_dwarf_line(lines[i],
+                                          &line_entries[i],
+                                          &error);
+      if (res != DW_DLV_OK) {
+        if (res == DW_DLV_ERROR) {
+          dwarf_dealloc_error(dbg, error);
+        }
+        free(line_entries);
+        return false;
+      }
+
+      /* Must be the case if `res != DW_DLV_OK` */
+      assert(line_entries[i].is_ok);
+    }
+
+    line_table->lines        = line_entries;
+    line_table->n_lines      = n_lines;
+    line_table->line_context = line_context;
+    line_table->is_set       = true;
     return true;
   }
 }
 
-bool callback__find_line_entry_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  LineEntry *line_entry = (LineEntry *) search_findings;
-
-  int res = 0;
+LineTable sd_get_line_table(Dwarf_Debug dbg) {
   Dwarf_Error error = NULL;
-  Dwarf_Line *lines = NULL;
-  Dwarf_Signed n_lines = 0;
-  Dwarf_Line_Context line_context = NULL;
 
-  if (sd_get_srclines(dbg, die, &lines, &n_lines, &line_context)) {
-    for (unsigned i = 0; i < n_lines; i++) {
-      Dwarf_Addr line_addr = 0;
-      res = dwarf_lineaddr(lines[i], &line_addr,
-        &error);
+  LineTable line_table = { 0 };
 
-      if (res != DW_DLV_OK) {
-        break;
-      }
+  int res = sd_search_dwarf_dbg(dbg, &error,
+    callback__get_srclines,
+    NULL, &line_table);
 
-      if (line_addr == *pc) {
-        Dwarf_Unsigned lineno;
-        res = dwarf_lineno(lines[i], &lineno,
-          &error);
-
-        if (res != DW_DLV_OK) {
-          break;
-        }
-
-        /* `dwarf_lineoff_b` returns the column number. */
-        Dwarf_Unsigned colno;
-        res = dwarf_lineoff_b(lines[i], &colno,
-          &error);
-
-        if (res != DW_DLV_OK) {
-          break;
-        }
-
-        Dwarf_Addr addr;
-        res = dwarf_lineaddr(lines[i], &addr, &error);
-
-        if (res != DW_DLV_OK) {
-          break;
-        }
-
-        /* `dwarf_linesrc` returns the file name.
-           `line_entryr->filepath` is set here on succcess. */
-        res = dwarf_linesrc(lines[i], &line_entry->filepath,
-          &error);
-
-        if (res != DW_DLV_OK) {
-          break;
-        }
-
-        dwarf_srclines_dealloc_b(line_context);
-
-        line_entry->is_ok = true;
-        line_entry->ln = lineno;
-        line_entry->cl = colno;
-        line_entry->addr = (x86_addr) { addr };
-        return true;
-      }
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
     }
+    return (LineTable) { .is_set=false };
+  } else {
+    return line_table;
   }
-
-  dwarf_srclines_dealloc_b(line_context);
-
-  if (res == DW_DLV_ERROR) {
-    dwarf_dealloc_error(dbg, error);
-  }
-
-  /* Reached end of loop without finding
-     a line entry with the address. */
-  line_entry->is_ok = false;
-  return false;
 }
 
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
-  Dwarf_Error error = NULL;
-
+  assert(dbg != NULL);
   Dwarf_Addr pc_addr = pc.value;
-  LineEntry line_entry = { .is_ok=false };
 
-  /* Because all fields in `LineEntry` are const
-     `find_line_entry_in_die` will cast them to
-     be mutable and modify them. */
-  int res = sd_search_dwarf_dbg(dbg, &error,
-    callback__find_line_entry_by_pc,
-    &pc_addr,
-    &line_entry);
-
-  if (res == DW_DLV_ERROR) {
-    dwarf_dealloc_error(dbg, error);
+  LineTable line_table = sd_get_line_table(dbg);
+  if (!line_table.is_set) {
     return (LineEntry) { .is_ok=false };
-  } else if (res == DW_DLV_NO_ENTRY) {
-    return (LineEntry) { .is_ok=false };
-  } else {
-    /* No DWARF error during search. The returned
-       line entry might still have `is_set=false`. */
-    return line_entry;
   }
+
+  for (unsigned i = 0; i < line_table.n_lines; i++) {
+    if (line_table.lines[i].addr.value == pc_addr) {
+      LineEntry ret = line_table.lines[i];
+      sd_free_line_table(&line_table);
+      return ret;
+    }
+  }
+
+  sd_free_line_table(&line_table);
+  return (LineEntry) { .is_ok=false };
 }
 
 bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
@@ -558,7 +567,7 @@ typedef struct {
 /* Search callback that looks for a DIE describing the
    subprogram with the name `search_for` and stores the
    attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
-bool find_subprog_attributes_in_die(Dwarf_Debug dbg, Dwarf_Die die,
+bool callback_find_subprog_attr_by_subprog_name(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   const char *fn_name = (const char *) search_for;
@@ -594,7 +603,7 @@ SubprogAttr sd_get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
   SubprogAttr attr = { .is_set=false };
 
   int res = sd_search_dwarf_dbg(dbg, &error,  
-    find_subprog_attributes_in_die,
+    callback_find_subprog_attr_by_subprog_name,
     fn_name, &attr);
 
   if (res != DW_DLV_OK) {
@@ -643,65 +652,48 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
   }
 }
 
-typedef struct {
-  line_callback callback;
-  void *const data;
-} CallbackAndData;
-
-bool callback__run_callback_on_subprog(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  const char *fn_name = (const char *) search_for;
-  CallbackAndData *cad = (CallbackAndData *) search_findings;
-
-  if (sd_is_subprog_with_name(dbg, die, fn_name)) {
-    Dwarf_Error error = NULL;
-    int res = 0;
-    Dwarf_Line *lines = NULL;
-    Dwarf_Signed n_lines = 0;
-    Dwarf_Line_Context line_context = NULL;
-
-    if (sd_get_srclines(dbg, die, &lines, &n_lines, &line_context)) {
-      for (unsigned i = 0; i < n_lines; i++) {
-        res = cad->callback(lines[i], cad->data, &error);
-        if (res == DW_DLV_ERROR) {
-          dwarf_dealloc_error(dbg, error);
-          error = NULL;
-        }
-        res = DW_DLV_OK;
-      }
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    return false;
-  }
-}
-
-void for_each_line_in_subprog(
+SprayResult for_each_line_in_subprog(
   Dwarf_Debug dbg,
   const char *fn_name,
-  line_callback callback,
+  LineCallback callback,
   void *const init_data
 ) {
   assert(dbg != NULL);
   assert(callback != NULL);
 
-  Dwarf_Error error = NULL;
-  CallbackAndData cad = {
-    callback,
-    init_data,
-  };
-
-  int res = sd_search_dwarf_dbg(
-    dbg, &error,
-    callback__run_callback_on_subprog,
-    fn_name,
-    &cad
-  );
-
-  if (res == DW_DLV_ERROR) {
-    dwarf_dealloc_error(dbg, error);
+  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
+  if (!attr.is_set) {
+    return SP_ERR;
   }
+
+  LineTable line_table = sd_get_line_table(dbg);
+  if (!line_table.is_set) {
+    return SP_ERR;
+  }
+
+  unsigned i = 0;
+  /* Skip all lines until the start of the function. */
+  while (
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value < attr.lowpc.value
+  ) i++;
+
+  /* Run the callback on the lines inside the function. */
+  for (;
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value <= attr.highpc.value;
+    i++
+  ) {
+    if (line_table.lines[i].new_statement) {
+      SprayResult res = callback(&line_table.lines[i], init_data);
+      if (res == SP_ERR) {
+        sd_free_line_table(&line_table);
+        return SP_ERR;
+      }
+    }
+  }
+
+  sd_free_line_table(&line_table);
+
+  return SP_OK;
 }

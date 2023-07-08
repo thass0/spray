@@ -197,7 +197,8 @@ typedef enum {
   EXEC_CONT_DEAD,
   EXEC_INVALID_WAIT_STATUS,
   EXEC_FUNCTION_NOT_FOUND,
-  EXEC_LINE_NOT_FOUND,
+  EXEC_PC_LINE_NOT_FOUND,
+  EXEC_STEP,
 } ExecErrCode;
 
 typedef struct {
@@ -275,10 +276,16 @@ static inline ExecResult exec_function_not_found(void) {
     .code.err=EXEC_FUNCTION_NOT_FOUND,
   };
 }
-static inline ExecResult exec_line_not_found(void) {
+static inline ExecResult exec_pc_line_not_found(void) {
   return (ExecResult) {
     .type=SP_ERR,
-    .code.err=EXEC_LINE_NOT_FOUND,
+    .code.err=EXEC_PC_LINE_NOT_FOUND,
+  };
+}
+static  inline ExecResult exec_step_target_not_found(void) {
+    return (ExecResult) {
+    .type=SP_ERR,
+    .code.err=EXEC_STEP,
   };
 }
 
@@ -350,8 +357,11 @@ void print_exec_err(ExecResult *exec_res) {
     case EXEC_FUNCTION_NOT_FOUND:
       internal_error("Failed to find current function");
       break;
-    case EXEC_LINE_NOT_FOUND:
-      internal_error("Failed to find another line");
+    case EXEC_PC_LINE_NOT_FOUND:
+      internal_error("Failed to find current line");
+      break;
+    case EXEC_STEP:
+      internal_error("Failed to find another line to step to");
       break;
   }
 }
@@ -551,7 +561,7 @@ ExecResult single_step_line(Debugger dbg) {
 
     /* Did we reach the maximum number of steps? */
     if (n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
-      return exec_line_not_found();
+      return exec_step_target_not_found();
     }
   }
 
@@ -563,30 +573,23 @@ typedef struct {
   size_t to_del_idx;
   x86_addr *to_del_breakpoints;
   x86_addr load_address;
-  x86_addr origin_address;  /* Real address. */
+  unsigned orig_lineno;
   Breakpoints *breakpoints;
 } CallbackData;
 
-enum { TO_DEL_ALLOC_SIZE };
+enum { TO_DEL_ALLOC_SIZE=8 };
 
-int callback__set_dwarf_line_breakpoint(Dwarf_Line line, void *const void_data, Dwarf_Error *error) {
+SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line, void *const void_data) {
+  assert(line != NULL);
   assert(void_data != NULL);
-  assert(error != NULL);
 
   CallbackData *data = (CallbackData *) void_data;
 
-  Dwarf_Addr dwarf_line_addr = 0;
-  int res = dwarf_lineaddr(line, &dwarf_line_addr, error);
-  if (res != DW_DLV_OK) {
-    return res;
-  }
-
-  x86_addr real_line_addr = dwarf_to_real(
-    data->load_address,
-    (x86_addr){ dwarf_line_addr });
+  x86_addr real_line_addr = dwarf_to_real(data->load_address,
+                                          line->addr);
 
   if (
-    data->origin_address.value ==  real_line_addr.value &&
+    data->orig_lineno != line->ln &&
     !lookup_breakpoint(data->breakpoints, real_line_addr)
   ) {
     enable_breakpoint(data->breakpoints, real_line_addr);
@@ -600,7 +603,7 @@ int callback__set_dwarf_line_breakpoint(Dwarf_Line line, void *const void_data, 
     data->to_del_breakpoints[data->to_del_idx++] = real_line_addr;
   }
 
-  return DW_DLV_OK;
+  return SP_OK;
 }
 
 /* Step to the next line. Don't step into functions. */
@@ -609,10 +612,12 @@ ExecResult step_over(Debugger dbg) {
      subprogram so that we step no matter what the line we step
      over does. */
 
-  /* Computing the current PC address this way ensures that
-     `current_address` belongs to a DWARF line entry. */
-  x86_addr dwarf_current_address = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).addr;
-  x86_addr current_address = dwarf_to_real(dbg.load_address, dwarf_current_address);
+  LineEntry current_line_entry = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  if (!current_line_entry.is_ok) {
+    return exec_pc_line_not_found();
+  }
+
+  unsigned current_lineno = current_line_entry.ln;
 
   char *fn_name = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
   if (fn_name == NULL) {
@@ -626,11 +631,12 @@ ExecResult step_over(Debugger dbg) {
   assert(to_del_breakpoints != NULL);
 
   CallbackData data = {
-    .to_del_alloc=to_del_alloc,
-    .to_del_idx=to_del_idx,
-    .to_del_breakpoints=to_del_breakpoints,
-    .load_address=dbg.load_address,
-    .origin_address=current_address,
+    to_del_alloc,
+    to_del_idx,
+    to_del_breakpoints,
+    dbg.load_address,
+    current_lineno,
+    dbg.breakpoints,
   };
 
   for_each_line_in_subprog(

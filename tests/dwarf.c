@@ -88,10 +88,41 @@ TEST(get_low_and_high_pc_works) {
   return MUNIT_OK;
 }
 
+SprayResult callback__store_line(LineEntry *line, void *const void_data) {
+  assert(line != NULL);
+  assert(void_data != NULL);
+
+  static int i = 0;
+  unsigned *lines = (unsigned *) void_data;
+  assert(i < 5);
+  lines[i++] = line->ln;
+
+  return SP_OK;
+}
+
+TEST(iterating_lines_works)  {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+
+  unsigned lines[5];
+  for_each_line_in_subprog(dbg,
+                           "main",
+                           callback__store_line,
+                           &lines);
+  dwarf_finish(dbg);
+
+  unsigned expect[5] = {8, 9, 10, 11, 12};
+  assert_memory_equal(sizeof(unsigned[5]), lines, expect);
+  
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
   REG_TEST(get_function_from_pc_works),  
   REG_TEST(get_line_entry_from_pc_works),
   REG_TEST(get_low_and_high_pc_works),
+  REG_TEST(iterating_lines_works),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };
 

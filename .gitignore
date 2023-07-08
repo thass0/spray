@@ -5,3 +5,4 @@ libdwarf/
 compile_commands.json
 src/hashmap.*
 **/__pycache__/
+**/*bin

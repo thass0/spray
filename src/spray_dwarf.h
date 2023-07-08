@@ -19,26 +19,28 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 typedef struct {
   bool is_ok;
+  bool new_statement;
   unsigned ln;
   unsigned cl;
   x86_addr addr;
   char *filepath;
 } LineEntry;
 
-/* Returns `ln=-1` if there is no line entry for the PC. */
+/* Returns a line entry with `is_ok = false` if
+   there is no line entry for the PC. */
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *low_pc_dest);
 bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *high_pc_dest);
 
-typedef int (*line_callback)(Dwarf_Line line, void *const data, Dwarf_Error *error);
+typedef SprayResult (*LineCallback)(LineEntry *line, void *const data);
 
-/* Call `callback` on each line in the line table of the
-   DWARF subprogram of the given name. */
-void for_each_line_in_subprog(
+/* Call `callback` for each new statement line entry
+   in the subprogram with the given name. */
+SprayResult for_each_line_in_subprog(
   Dwarf_Debug dbg,
   const char *fn_name,
-  line_callback callback,
+  LineCallback callback,
   void *const init_data
 );
 

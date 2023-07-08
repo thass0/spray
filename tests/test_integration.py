@@ -1,10 +1,12 @@
 from subprocess import Popen, PIPE
+from typing import Optional
 import re
 import string
 import random
 
 COMMAND = 'build/spray'
 DEBUGEE = 'tests/assets/linux_x86_bin'
+NESTED_FUN = 'tests/assets/nested_functions_bin'
 
 
 def random_string() -> str:
@@ -27,15 +29,15 @@ class CmdOutput(str):
             return False
 
 
-def run_cmd(commands: str) -> CmdOutput:
-    p = Popen([COMMAND, DEBUGEE], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+def run_cmd(commands: str, debugee: Optional[str] = DEBUGEE) -> CmdOutput:
+    p = Popen([COMMAND, debugee], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     output = p.communicate(commands.encode('UTF-8'))
     return CmdOutput(output[0].decode('UTF-8'))
 
 
 class TestStepCommands:
     def test_single_step(self):
-        assert_lit('b 0x0040116b\nc\ns', '💢 Failed to find another line')
+        assert_lit('b 0x0040116b\nc\ns', '💢 Failed to find another line to step to')
 
         stdout = run_cmd('b 0x0040115d\nc\ns\ns\ns\ns\ns\ns')
         assert stdout.ends_with("""\
@@ -64,6 +66,23 @@ class TestStepCommands:
     def test_instruction_step(self):
         assert_lit('b 0x00401156\nc\ni\ni\ni\ni\ni',
                    '<No source info for PC 0x0000000000401111>\n')
+
+    def test_next(self):
+        stdout = run_cmd('b 0x0040113d\nc\nn', NESTED_FUN)
+        assert """\
+    int add(int a, int b) {
+      int c = a + b;
+ ->   return c;
+    }""" in stdout
+
+        stdout = run_cmd('b 0x004011af\nc\nn\nn', NESTED_FUN)
+        assert """\
+    int main(void) {
+      int sum = add(5, 6);
+      int product = mul(sum, 3);
+ ->   printf("Sum: %d; Product: %d", sum, product);
+      return 0;
+    }""" in stdout
 
 
 class TestRegisterCommands:

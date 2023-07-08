@@ -15,7 +15,7 @@ DEPS = $(OBJECTS:%.o=%.d)
 
 README = README.md
 
-.PHONY = all clean run test
+.PHONY = all clean run test debugees
 
 # === SPRAY ===
 
@@ -54,7 +54,7 @@ TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
 test: CFLAGS += -I$(TEST_SOURCE_DIR)
-test: $(TEST_BINARY) $(BINARY)
+test: $(TEST_BINARY) $(BINARY) | debugees
 	./$(TEST_BINARY) $(args)
 	pytest
 
@@ -68,6 +68,9 @@ $(TEST_BUILD_DIR)/%.o: $(TEST_SOURCE_DIR)/%.c | $(TEST_BUILD_DIR)
 
 $(TEST_BUILD_DIR):
 	mkdir $(TEST_BUILD_DIR)
+
+debugees:
+	$(MAKE) -C tests/assets all
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(TEST_BUILD_DIR)
