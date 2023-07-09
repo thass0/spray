@@ -397,6 +397,15 @@ typedef struct {
   Dwarf_Line_Context line_context;
 } LineTable;
 
+bool dwarf_bool_to_bool(Dwarf_Bool dwarf_bool) {
+  /* The `libdwarf` docs say that `Dwarf_Bool` is
+     "A TRUE(non-zero)/FALSE(zero) data item."
+     This conversion ensures that libdwarf's
+     `TRUE` value is convertet to stdbool's
+     `true` correctly. */
+  return dwarf_bool == 0 ? false : true;
+}
+
 void sd_free_line_table(LineTable *line_table) {
   assert(line_table != NULL);
   free(line_table->lines);
@@ -440,8 +449,25 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_
 
   if (res != DW_DLV_OK) { return res; }
 
+  Dwarf_Bool prologue_end = false;
+  Dwarf_Bool epilogue_begin = false;
+  Dwarf_Unsigned isa = 0;
+  Dwarf_Unsigned descriminator = 0;
+  res = dwarf_prologue_end_etc(line,
+                               &prologue_end,
+                               &epilogue_begin,
+                               &isa,
+                               &descriminator,
+                               error);
+  unused(epilogue_begin);
+  unused(isa);
+  unused(descriminator);
+
+  if (res != DW_DLV_OK) { return res; }
+
   line_entry->is_ok = true;
-  line_entry->new_statement = new_statement == 0 ? false : true;
+  line_entry->new_statement = dwarf_bool_to_bool(new_statement);
+  line_entry->prologue_end = dwarf_bool_to_bool(prologue_end);
   line_entry->ln = lineno;
   line_entry->cl = colno;
   line_entry->addr = (x86_addr) { addr };
@@ -687,6 +713,35 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
   }
 }
 
+/* Set `index_dest` to the line that
+   contains the address of `PC`. */
+SprayResult get_line_table_index_of_pc(const LineTable line_table,
+                                      x86_addr pc,
+                                      unsigned *index_dest
+) {
+  assert(index_dest != NULL);
+
+  unsigned i = 0;
+  /* Skip all lines until the start of the function. */
+  while (
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value < pc.value
+  ) i++;
+
+  if (
+    line_table.lines[i].addr.value >= pc.value &&
+    (
+      i + 1 >= line_table.n_lines ||
+      pc.value < line_table.lines[i + 1].addr.value
+    )
+   ) {
+    *index_dest = i;
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
 SprayResult for_each_line_in_subprog(
   Dwarf_Debug dbg,
   const char *fn_name,
@@ -707,11 +762,13 @@ SprayResult for_each_line_in_subprog(
   }
 
   unsigned i = 0;
-  /* Skip all lines until the start of the function. */
-  while (
-    i < line_table.n_lines &&
-    line_table.lines[i].addr.value < attr.lowpc.value
-  ) i++;
+  SprayResult res = get_line_table_index_of_pc(line_table,
+                                               attr.lowpc,
+                                               &i);
+  if (res == SP_ERR) {
+    sd_free_line_table(&line_table);
+    return SP_ERR;
+  }
 
   /* Run the callback on the lines inside the function. */
   for (;
@@ -730,5 +787,55 @@ SprayResult for_each_line_in_subprog(
 
   sd_free_line_table(&line_table);
 
+  return SP_OK;
+}
+
+SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_addr *start_dest) {
+  assert(dbg != NULL);
+  assert(fn_name != NULL);
+  assert(start_dest != NULL);
+
+  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
+  if (!attr.is_set) {
+    return SP_ERR;
+  }
+
+  LineTable line_table = sd_get_line_table(dbg);
+  if (!line_table.is_set) {
+    return SP_ERR;
+  }
+
+  unsigned first_line = 0;
+  SprayResult res = get_line_table_index_of_pc(line_table,
+                                               attr.lowpc,
+                                               &first_line);
+  if (res == SP_ERR) {
+    sd_free_line_table(&line_table);
+    return SP_ERR;
+  }
+
+  /* Either find the prologue end line or pick the first
+     line after the line of the low PC as the start. */
+  for (
+    unsigned i = first_line;
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value <= attr.highpc.value;
+    i++
+  ) {
+    if (line_table.lines[i].prologue_end) {
+      *start_dest = line_table.lines[i].addr;
+      sd_free_line_table(&line_table);
+      return SP_OK;
+    }
+  }
+
+  /* None of the line entries had `prologue_end` set. */
+
+  if (first_line + 1 < line_table.n_lines) {
+    *start_dest = line_table.lines[first_line + 1].addr;
+  } else {
+    *start_dest = line_table.lines[first_line].addr;
+  }
+  
   return SP_OK;
 }

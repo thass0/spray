@@ -20,6 +20,7 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
 typedef struct {
   bool is_ok;
   bool new_statement;
+  bool prologue_end;
   unsigned ln;
   unsigned cl;
   x86_addr addr;
@@ -43,6 +44,9 @@ SprayResult for_each_line_in_subprog(
   LineCallback callback,
   void *const init_data
 );
+
+/* Get the address of the first line in the given function. */
+SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_addr *start_dest);
 
 #ifdef UNIT_TESTS
 /* Expose some of the internal interfaces. */

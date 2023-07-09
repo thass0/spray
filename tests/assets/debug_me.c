@@ -1,4 +1,5 @@
-int weird_sum(int a, int b) {
+int weird_sum(int a,
+              int b) {
   int c = a + 1;
   int d = b + 2;
   int e = c + d;

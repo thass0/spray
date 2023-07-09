@@ -43,12 +43,12 @@ class TestStepCommands:
     }
 """)
         assert_ends_with('b 0x0040115d\nc\ns\ns', """\
-    int weird_sum(int a, int b) {
+    int weird_sum(int a,
+                  int b) {
  ->   int c = a + 1;
       int d = b + 2;
       int e = c + d;
       return e;
-    }
 """)
 
     def test_leave(self):
@@ -69,19 +69,19 @@ class TestStepCommands:
  ->   return c;
     }""", NESTED_FUNCTIONS)
 
-        assert_lit('b 0x004011af\nc\nn\nn', """\
-    int main(void) {
+        assert_lit('n\nn\nn', """\
+Hit breakpoint at address 0x00000000004011e8
       int sum = add(5, 6);
       int product = mul(sum, 3);
- ->   printf("Sum: %d; Product: %d\\n", sum, product);
-      return 0;
+      printf("Sum: %d; Product: %d\\n", sum, product);
+ ->   return 0;
     }""", NESTED_FUNCTIONS)
 
 
 class TestRegisterCommands:
     def test_register_read(self):
-        assert_lit('r rip rd', '     rip 0x00007ffff7fe53b0')
-        assert_lit('register rip read', '     rip 0x00007ffff7fe53b0')
+        assert_lit('r rip rd', '     rip 0x000000000040114f')
+        assert_lit('register rip read', '     rip 0x000000000040114f')
 
     def test_register_command_errors(self):
         assert_lit('r rax', 'Missing register operation')

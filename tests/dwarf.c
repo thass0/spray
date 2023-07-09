@@ -1,3 +1,4 @@
+#include "libdwarf.h"
 #define MUNIT_ENABLE_ASSERT_ALIASES
 #include "munit.h"
 
@@ -45,7 +46,7 @@ TEST(get_line_entry_from_pc_works) {
   {  /* Happy path. */
     x86_addr pc = { 0x00401156 };
     LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
-    assert_int(line_entry.ln, ==, 10);
+    assert_int(line_entry.ln, ==, 11);
     assert_int(line_entry.cl, ==, 7);
     assert_ptr_not_null(line_entry.filepath);
     /* Ignore the part of the filepath that is host specific. */
@@ -113,7 +114,7 @@ TEST(iterating_lines_works)  {
                            &lines);
   dwarf_finish(dbg);
 
-  unsigned expect[5] = {8, 9, 10, 11, 12};
+  unsigned expect[5] = {9, 10, 11, 12, 13};
   assert_memory_equal(sizeof(unsigned[5]), lines, expect);
   
   return MUNIT_OK;
@@ -161,12 +162,40 @@ TEST(search_returns_the_correct_result) {
   return MUNIT_OK;
 }
 
+TEST(get_function_start_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+  
+  x86_addr main_start = { 0 };
+  SprayResult res = get_function_start_addr(dbg, "main", &main_start);
+  assert_int(res, ==, SP_OK);
+  LineEntry line_entry = get_line_entry_from_pc(dbg, main_start);
+  assert_true(line_entry.is_ok);
+  /* 10 is the line number of the first line after the function declaration. */
+  assert_int(line_entry.ln, ==, 10);
+  
+  /* `weird_sum` has a multi-line function declaration. */
+  x86_addr func_start = { 0 };
+  res = get_function_start_addr(dbg, "weird_sum", &func_start);
+  assert_int(res, ==, SP_OK);
+  line_entry = get_line_entry_from_pc(dbg, func_start);
+  assert_true(line_entry.is_ok);
+  /* 10 is the line number of the first line after the function declaration. */
+  assert_int(line_entry.ln, ==, 3);
+  
+  dwarf_finish(dbg);
+  
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
   REG_TEST(get_function_from_pc_works),  
   REG_TEST(get_line_entry_from_pc_works),
   REG_TEST(get_low_and_high_pc_works),
   REG_TEST(iterating_lines_works),
   REG_TEST(search_returns_the_correct_result),
+  REG_TEST(get_function_start_works),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };
 

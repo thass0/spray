@@ -1167,6 +1167,26 @@ void free_debugger(Debugger dbg) {
 void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
 
+  x86_addr start_main = { 0 };
+  SprayResult found_start = get_function_start_addr(dbg.dwarf, "main", &start_main);
+  if (found_start == SP_OK) {
+    enable_breakpoint(dbg.breakpoints, start_main);
+    ExecResult exec_res = continue_execution(dbg);
+    if (exec_res.type == SP_ERR) {
+      print_exec_res(dbg, exec_res);
+      free_debugger(dbg);
+      return;
+    }
+    ExecResult wait_res = wait_for_signal(dbg);
+    if (wait_res.type == SP_ERR) {
+      print_exec_res(dbg, wait_res);
+      free_debugger(dbg);
+      return;
+    }
+  }
+
+  print_current_source(dbg);
+
   char *line_buf = NULL;
   while ((line_buf = linenoise("spray> ")) != NULL) {
     handle_debug_command(&dbg, line_buf);
