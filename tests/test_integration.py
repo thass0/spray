@@ -38,44 +38,55 @@ class TestStepCommands:
                    '💢 Failed to find another line to step to')
 
         assert_ends_with('b 0x0040115d\nc\ns\ns\ns\ns\ns\ns', """\
-->   int c = weird_sum(a, b);
-      return 0;
-    }
+   12 ->   int c = weird_sum(a, b);
+   13      return 0;
+   14    }
 """)
         assert_ends_with('b 0x0040115d\nc\ns\ns', """\
-    int weird_sum(int a,
-                  int b) {
- ->   int c = a + 1;
-      int d = b + 2;
-      int e = c + d;
-      return e;
+    1    int weird_sum(int a,
+    2                  int b) {
+    3 ->   int c = a + 1;
+    4      int d = b + 2;
+    5      int e = c + d;
+    6      return e;
 """)
 
     def test_leave(self):
         assert_ends_with('b 0x00401120\nc\nl', """\
- ->   int c = weird_sum(a, b);
-      return 0;
-    }
+   12 ->   int c = weird_sum(a, b);
+   13      return 0;
+   14    }
 """)
 
     def test_instruction_step(self):
-        assert_lit('b 0x00401156\nc\ni\ni\ni\ni\ni',
-                   '<No source info for PC 0x0000000000401111>\n')
+        assert_ends_with('b 0x00401156\nc\ni\ni\ni\ni\ni', """\
+    1    int weird_sum(int a,
+    2                  int b) {
+    3 ->   int c = a + 1;
+    4      int d = b + 2;
+    5      int e = c + d;
+    6      return e;
+""")
 
     def test_next(self):
-        assert_lit('b 0x0040113d\nc\nn', """\
-    int add(int a, int b) {
-      int c = a + b;
- ->   return c;
-    }""", NESTED_FUNCTIONS)
+        assert_ends_with('b 0x0040113d\nc\nn', """\
+    2
+    3    int add(int a, int b) {
+    4      int c = a + b;
+    5 ->   return c;
+    6    }
+    7
+    8    int mul(int a, int b) {
+""", NESTED_FUNCTIONS)
 
         assert_lit('n\nn\nn', """\
-Hit breakpoint at address 0x00000000004011e8
-      int sum = add(5, 6);
-      int product = mul(sum, 3);
-      printf("Sum: %d; Product: %d\\n", sum, product);
- ->   return 0;
-    }""", NESTED_FUNCTIONS)
+   17      int sum = add(5, 6);
+   18      int product = mul(sum, 3);
+   19      printf("Sum: %d; Product: %d\\n", sum, product);
+   20 ->   return 0;
+   21    }
+   22
+""", NESTED_FUNCTIONS)
 
 
 class TestRegisterCommands:

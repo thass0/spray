@@ -327,9 +327,13 @@ void print_exec_ok(Debugger dbg, ExecResult *exec_res) {
           "fault, reason %d\n", code);
       } else if (signo == SIGTRAP) {
         if (code == SI_KERNEL || code == TRAP_BRKPT) {
-          printf("Hit breakpoint at address ");
-          print_addr(get_pc(dbg.pid));
-          printf("\n");
+          if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
+            /* Only print 'Hit breakpoint' message if the breakpoint that
+               causes this SIGTRAP is permanent, i.e. set by the user. */
+            printf("Hit breakpoint at address ");
+            print_addr(get_pc(dbg.pid));
+            printf("\n");
+          }
           print_current_source(dbg);
         } else {
           printf("Child was stopped by signal SIGTRAP\n");
@@ -549,7 +553,7 @@ ExecResult single_step_line(Debugger dbg) {
   unsigned init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
 
   unsigned n_instruction_steps = 0;
-  LineEntry next_line = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  LineEntry next_line = get_line_entry_from_pc_exact(dbg.dwarf, get_dwarf_pc(dbg));
   /* Single step instructions until we find a valid line
      with a different line number than before. */
   while (!next_line.is_ok || next_line.ln == init_lineno) {
@@ -558,7 +562,7 @@ ExecResult single_step_line(Debugger dbg) {
       return exec_res;
     }
 
-    next_line = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+    next_line = get_line_entry_from_pc_exact(dbg.dwarf, get_dwarf_pc(dbg));
     n_instruction_steps ++;
 
     /* Did we reach the maximum number of steps? */

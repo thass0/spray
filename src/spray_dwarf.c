@@ -549,6 +549,36 @@ LineTable sd_get_line_table(Dwarf_Debug dbg) {
   }
 }
 
+/* Set `index_dest` to the line that
+   contains the address of `PC`. */
+SprayResult get_line_table_index_of_pc(const LineTable line_table,
+                                      x86_addr pc,
+                                      unsigned *index_dest
+) {
+  assert(index_dest != NULL);
+
+  unsigned i = 0;
+  /* Skip all lines until the start of the function. */
+  while (
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value < pc.value
+  ) i++;
+
+  if (
+    i < line_table.n_lines &&
+    line_table.lines[i].addr.value >= pc.value &&
+    (
+      i + 1 >= line_table.n_lines ||
+      pc.value < line_table.lines[i + 1].addr.value
+    )
+   ) {
+    *index_dest = i;
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
   Dwarf_Addr pc_addr = pc.value;
@@ -566,8 +596,27 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     }
   }
 
-  sd_free_line_table(&line_table);
-  return (LineEntry) { .is_ok=false };
+  unsigned pc_line_idx = 0;
+  SprayResult res = get_line_table_index_of_pc(line_table, pc, &pc_line_idx);
+
+  if (res == SP_ERR) {
+    sd_free_line_table(&line_table);
+    return (LineEntry) { .is_ok=false };
+  } else {
+    LineEntry ret =  line_table.lines[pc_line_idx];
+    sd_free_line_table(&line_table);
+    return ret;
+  }
+}
+
+LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc) {
+  assert(dbg != NULL);
+  LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
+  if (line_entry.is_ok && line_entry.addr.value == pc.value) {
+    return line_entry;    
+  } else {
+    return (LineEntry) { .is_ok=false };
+  }
 }
 
 bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
@@ -710,35 +759,6 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
     return true;
   } else {
     return false;
-  }
-}
-
-/* Set `index_dest` to the line that
-   contains the address of `PC`. */
-SprayResult get_line_table_index_of_pc(const LineTable line_table,
-                                      x86_addr pc,
-                                      unsigned *index_dest
-) {
-  assert(index_dest != NULL);
-
-  unsigned i = 0;
-  /* Skip all lines until the start of the function. */
-  while (
-    i < line_table.n_lines &&
-    line_table.lines[i].addr.value < pc.value
-  ) i++;
-
-  if (
-    line_table.lines[i].addr.value >= pc.value &&
-    (
-      i + 1 >= line_table.n_lines ||
-      pc.value < line_table.lines[i + 1].addr.value
-    )
-   ) {
-    *index_dest = i;
-    return SP_OK;
-  } else {
-    return SP_ERR;
   }
 }
 

@@ -129,20 +129,23 @@ SprayResult print_source(
 
   /* NOTE: Line numbers are one-indexed; we must
      subtract one to access arrays. */
+  const char *cur_line = NULL;
   for (
     unsigned cur_lineno = start_lineno;
     cur_lineno < end_lineno;
     cur_lineno++
   ) {
+    printf(" %4d", cur_lineno);
+    cur_line = lines->lines[cur_lineno - 1];
     if (cur_lineno == lineno) {
       /* Highlight current line. */
       fputs(" -> ", stdout);
-    } else {
+    } else if (strlen(cur_line) > 1) {
       fputs("    ", stdout);
     }
 
     /* The string read by `getline(3)` ends in a newline. */
-    fputs(lines->lines[cur_lineno - 1], stdout);
+    fputs(cur_line, stdout);
   }
 
   return SP_OK;

@@ -27,9 +27,14 @@ typedef struct {
   char *filepath;
 } LineEntry;
 
-/* Returns a line entry with `is_ok = false` if
-   there is no line entry for the PC. */
+/* Returns the line entry for th PC if the
+   line entry contains the address of PC. A
+   line entry with `is_ok = false` is returned on error. */
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
+/* Returns the line entry for th PC only if
+   the line entry has exactly the same address
+   as PC. */
+LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc);
 
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *low_pc_dest);
 bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *high_pc_dest);
