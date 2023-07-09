@@ -44,4 +44,20 @@ SprayResult for_each_line_in_subprog(
   void *const init_data
 );
 
+#ifdef UNIT_TESTS
+/* Expose some of the internal interfaces. */
+
+typedef bool (*SearchCallback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const);
+
+int sd_search_dwarf_dbg(
+  Dwarf_Debug dbg, Dwarf_Error *const error,
+  SearchCallback search_callback,
+  const void *const search_for, void *const search_findings
+);
+
+bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name);
+
+const char *what_dwarf_result(int dwarf_res);
+#endif  // UNIT_TESTS
+
 #endif  // _SPRAY_DWARF_H_

@@ -1,6 +1,7 @@
 #define MUNIT_ENABLE_ASSERT_ALIASES
 #include "munit.h"
 
+#define UNIT_TESTS
 #include "../src/spray_dwarf.h"
 
 #include <limits.h>
@@ -118,11 +119,54 @@ TEST(iterating_lines_works)  {
   return MUNIT_OK;
 }
 
+bool callback__test_search(Dwarf_Debug dbg,
+                           Dwarf_Die die,
+                           const void *const search_for,
+                           void *const search_findings
+) {  
+  unused(search_findings);
+  assert(dbg != NULL);
+  assert(die != NULL);
+
+  const char *const fn_name = (char *) search_for;
+  if (sd_is_subprog_with_name(dbg, die, fn_name)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+TEST(search_returns_the_correct_result) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+  int res = DW_DLV_OK;
+
+  res = sd_search_dwarf_dbg(dbg,
+                            &error,
+                            callback__test_search,
+                            "this_function_name_doesnt_exist",
+                            NULL);
+  assert_int(res, ==, DW_DLV_NO_ENTRY);
+
+  res = sd_search_dwarf_dbg(dbg,
+                            &error,
+                            callback__test_search,
+                            "main",  // <- This does exist.
+                            NULL);
+  assert_int(res, ==, DW_DLV_OK);
+
+  dwarf_finish(dbg);
+
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
   REG_TEST(get_function_from_pc_works),  
   REG_TEST(get_line_entry_from_pc_works),
   REG_TEST(get_low_and_high_pc_works),
   REG_TEST(iterating_lines_works),
+  REG_TEST(search_returns_the_correct_result),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };
 

@@ -7,7 +7,24 @@
 #include <string.h>
 #include <assert.h>
 
+#ifndef UNIT_TESTS
+/* This type is defined in `spray_dwarf.h` if `UNIT_TESTS` is defined. */
 typedef bool (*SearchCallback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const);
+#endif  // UNIT_TESTS
+
+/* Only used for debugging (and tests). */
+const char *what_dwarf_result(int dwarf_res) {
+  switch (dwarf_res) {
+    case DW_DLV_OK:
+      return "DW_DLV_OK";
+    case DW_DLV_ERROR:
+      return "DW_DLV_ERROR";
+    case DW_DLV_NO_ENTRY:
+      return "DW_DLV_NO_ENTRY";
+    default:
+      return "<not a libdwarf result>";
+  }
+}
 
 Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {  
   assert(filepath != NULL);
@@ -63,6 +80,7 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
   Dwarf_Die cur_die = in_die;
   Dwarf_Die child_die = NULL;
 
+  /* Search self. */
   bool in_die_found = search_callback(dbg, in_die, search_for, search_findings);
   if (in_die_found) {
     return DW_DLV_OK;
@@ -71,6 +89,7 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
   while (1) {
     Dwarf_Die sib_die = NULL;
 
+    /* Search children. */
     res = dwarf_child(cur_die, &child_die, error);
     if (res == DW_DLV_ERROR) {
       return DW_DLV_ERROR;
@@ -85,11 +104,12 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
 
       if (res == DW_DLV_ERROR) {
         return DW_DLV_ERROR;
+      } else if (res == DW_DLV_OK) {
+        return DW_DLV_OK;
       }
     }
 
-    /* `DW_DLV_OK` or `DW_DLV_NO_ENTRY`. */
-
+    /* Search siblings. */
     res = dwarf_siblingof_b(dbg, cur_die,
       is_info, &sib_die,
       error);
@@ -102,7 +122,7 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
 
     if (res == DW_DLV_NO_ENTRY) {
       /* Level is empty now. */
-      return DW_DLV_OK;
+      return DW_DLV_NO_ENTRY;
     } else if (res == DW_DLV_ERROR){
       return DW_DLV_ERROR;
     } else if (res == DW_DLV_OK) {
@@ -120,7 +140,8 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
    in that order. It checks if `search_for` is found in the DIE and stores
    the findins in `search_findings`.
    `search_callback` returns `true` if `search_for` has been found. */
-int sd_search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
+int sd_search_dwarf_dbg(
+  Dwarf_Debug dbg, Dwarf_Error *const error,
   SearchCallback search_callback,
   const void *const search_for, void *const search_findings
 ) {
@@ -135,6 +156,7 @@ int sd_search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
   Dwarf_Half header_cu_type = 0;  /* Some DW_UT value. */
   Dwarf_Bool is_info = true;  /* False only if reading through DWARF4 .debug_types. */
   int res = 0;
+  bool search_finished = false;
 
   while (1) {
     Dwarf_Die cu_die = NULL;  /* Compilation unit DIE. */
@@ -161,7 +183,20 @@ int sd_search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
       }
 
       /* Done, everything has been checked. */
-      return DW_DLV_OK;
+      if (search_finished) {
+        return DW_DLV_OK;
+      } else {
+        return DW_DLV_NO_ENTRY;
+      }
+    }
+
+    if (search_finished) {
+      /* If the search has finished, i.e. we found what
+         we were looking for, we must continue to walk
+         all of the CU headers to reset `dwarf_next_cu_header_d`
+         to start at the first CU header again. This function
+         won't otherwise work again with the same `Dwarf_Debug` instance. */
+      continue;
     }
 
     /* Get the CU DIE. */
@@ -184,6 +219,8 @@ int sd_search_dwarf_dbg(Dwarf_Debug dbg, Dwarf_Error *const error,
 
     if (res == DW_DLV_ERROR) {
       return DW_DLV_ERROR;
+    } else if (res == DW_DLV_OK) {
+      search_finished = true;
     }
   }
 }
@@ -311,14 +348,12 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     &pc_addr,
     &fn_name);
 
-  if (res == DW_DLV_ERROR) {
-    dwarf_dealloc_error(dbg, error);
-    return NULL;
-  } else if (res == DW_DLV_NO_ENTRY) {
+  if (res != DW_DLV_OK) {
+   if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    } 
     return NULL;
   } else {
-    /* Search completed without error. `fn_name`
-       might still be NULL if it wasn't found. */
     return fn_name;
   }
 }
