@@ -1,7 +1,7 @@
 #include "breakpoints.h"
 
 #include "magic.h"
-#include "hashmap.h"
+#include "../dependencies/hashmap.c/hashmap.h"
 
 #include <assert.h>
 #include <string.h>
@@ -33,7 +33,7 @@ uint64_t breakpoint_hash(const void *entry, uint64_t seed0, uint64_t seed1) {
 }
 
 Breakpoints *init_breakpoints(pid_t pid) {
-  struct hashmap *map= hashmap_new(sizeof(Breakpoint), 0, 0, 0,
+  struct hashmap *map = hashmap_new(sizeof(Breakpoint), 0, 0, 0,
     breakpoint_hash, breakpoint_compare, NULL, NULL);
   Breakpoints *breakpoints = (Breakpoints *) calloc (1, sizeof(Breakpoints));
   breakpoints->map = map;

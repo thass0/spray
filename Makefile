@@ -1,15 +1,14 @@
 CC = clang
-CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -Ilibdwarf/src/lib/libdwarf
-# Disable warnins causes by hashmap.
-# CFLAGS += -Wno-zero-length-array -Wno-language-extension-token -Wno-missing-field-initializers -Wno-gnu-statement-expression-from-macro-expansion
+CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -I$(DEP)/linenoise
 CPPFLAGS = -MMD
 LDFLAGS = -ldwarf
 
 BUILD_DIR = build
 SOURCE_DIR = src
+DEP = dependencies
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
-SOURCES += $(wildcard $(SOURCE_DIR)/*.cc)
 OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
+OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -32,6 +31,13 @@ $(BINARY): $(OBJECTS)
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/hashmap.o: $(DEP)/hashmap.c/hashmap.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/linenoise.o: $(DEP)/linenoise/linenoise.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)

@@ -5,7 +5,7 @@
 #ifndef _SPRAY_SPRAY_DWARF_H_
 #define _SPRAY_SPRAY_DWARF_H_
 
-#include "libdwarf.h"
+#include <libdwarf-0//libdwarf.h>
 #include "ptrace.h"
 
 #include <stdbool.h>

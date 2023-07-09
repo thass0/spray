@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #include "magic.h"
-#include "hashmap.h"
+#include "../dependencies/hashmap.c/hashmap.h"
 
 typedef struct {
   char **lines;

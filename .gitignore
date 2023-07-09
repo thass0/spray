@@ -1,8 +1,7 @@
 **/a.out
 build/
-libdwarf/
+dependencies/*
 .cache
 compile_commands.json
-src/hashmap.*
 **/__pycache__/
 **/*bin
