@@ -4,8 +4,10 @@
 
 #include <dwarf.h>
 #include <stdlib.h>
+#include <libgen.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 #ifndef UNIT_TESTS
 /* This type is defined in `spray_dwarf.h` if `UNIT_TESTS` is defined. */
@@ -267,25 +269,35 @@ int sd_get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
    between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE. */
 int sd_check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool *pc_in_die) {
   int res = DW_DLV_OK;
-  Dwarf_Half die_tag = 0;
-  res = dwarf_tag(die,
-    &die_tag, error);
 
+  Dwarf_Addr lowpc, highpc;
+  res = sd_get_high_and_low_pc(die, error, &lowpc, &highpc);
   if (res != DW_DLV_OK) {
     return res;
-  }
-
-  if (die_tag == DW_TAG_subprogram) {
-    Dwarf_Addr lowpc, highpc;
-    res = sd_get_high_and_low_pc(die, error, &lowpc, &highpc);
-    if (res != DW_DLV_OK) {
-      return res;
-    } else if (lowpc <= pc && pc <= highpc) {
-      *pc_in_die = true;
-    }
+  } else if (lowpc <= pc && pc <= highpc) {
+    *pc_in_die = true;
   }
 
   return DW_DLV_OK;
+}
+
+bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
+  assert(dbg != NULL);
+  assert(dbg != NULL);
+
+  Dwarf_Error error = NULL;
+  int res = DW_DLV_OK;
+
+  Dwarf_Half die_tag = 0;
+  res = dwarf_tag(die, &die_tag, &error);
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  return die_tag == tagnum;
 }
 
 /* Search callback which receives a `Dwarf_Addr*`
@@ -300,44 +312,49 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
   Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
   char **fn_name = (char **) search_findings;
 
-  int res = DW_DLV_OK;
-  Dwarf_Error error = NULL;
-  bool found_pc = false;
+  if (sd_has_tag(dbg, die, DW_TAG_subprogram)) {
+    int res = DW_DLV_OK;
+    Dwarf_Error error = NULL;
+    bool found_pc = false;
 
-  res = sd_check_pc_in_die(die, &error, *pc, &found_pc);
+    res = sd_check_pc_in_die(die, &error, *pc, &found_pc);
 
-  if (res != DW_DLV_OK) {
-    if (res == DW_DLV_ERROR) {
-      dwarf_dealloc_error(dbg, error);
-    }
-    return false;
-  }
-
-  if (!found_pc) {
-    return false;
-  } else {
-    /* Found PC in this DIE. */
-    Dwarf_Half attrnum = DW_AT_name;
-    char *attr_buf;
-
-    res = dwarf_die_text(die, attrnum,
-      &attr_buf, &error);
-
-    if (res == DW_DLV_OK) {
-      size_t len = strlen(attr_buf);
-      *fn_name = (char *) realloc (*fn_name, len + 1);
-      strcpy(*fn_name, attr_buf);
-      return true;
-    } else {
+    if (res != DW_DLV_OK) {
       if (res == DW_DLV_ERROR) {
         dwarf_dealloc_error(dbg, error);
       }
       return false;
     }
+
+    if (!found_pc) {
+      return false;
+    } else {
+      /* Found PC in this DIE. */
+      Dwarf_Half attrnum = DW_AT_name;
+      char *attr_buf;
+
+      res = dwarf_die_text(die, attrnum,
+        &attr_buf, &error);
+
+      if (res == DW_DLV_OK) {
+        size_t len = strlen(attr_buf);
+        *fn_name = (char *) realloc (*fn_name, len + 1);
+        strcpy(*fn_name, attr_buf);
+        return true;
+      } else {
+        if (res == DW_DLV_ERROR) {
+          dwarf_dealloc_error(dbg, error);
+        }
+        return false;
+      }
+    }
+  } else {
+    return false;
   }
 }
 
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+  assert(dbg != NULL);
   Dwarf_Error error = NULL;
 
   Dwarf_Addr pc_addr = pc.value;
@@ -476,15 +493,258 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_
   return DW_DLV_OK;
 }
 
+bool sd_has_at(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half attrnum) {
+  assert(dbg != NULL);
+  assert(dbg != NULL);
+
+  Dwarf_Error error = NULL;
+  int res = DW_DLV_OK;
+
+  Dwarf_Bool has_at = false;
+  res = dwarf_hasattr(die, attrnum, &has_at, &error);
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  return dwarf_bool_to_bool(has_at);
+}
+
+char *sd_get_filepath(Dwarf_Debug dbg, Dwarf_Die die) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+
+  Dwarf_Error error = NULL;
+  int res = DW_DLV_OK;
+
+  if (
+    sd_has_at(dbg, die, DW_AT_name) && 
+    sd_has_at(dbg, die, DW_AT_comp_dir)
+  ) {
+    char *file_name = NULL;
+    char *dir_name = NULL;
+    /* Get file and dir name for CU DIE. */
+    res = dwarf_diename(die, &file_name, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return NULL;
+    }
+
+    res = dwarf_die_text(die, DW_AT_comp_dir, &dir_name, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return NULL;
+    }
+
+    char *filepath = (char *) calloc (strlen(dir_name) + strlen(file_name) + 2,
+                                     sizeof(char));
+    strcpy(filepath, dir_name);
+    strcat(filepath, "/");
+    strcat(filepath, file_name);
+    return filepath;
+  } else if (sd_has_at(dbg, die, DW_AT_decl_file)) {
+    /* Get file and dir name for normal DIE. */
+    char *decl_file = NULL;
+    res = dwarf_die_text(die, DW_AT_decl_file, &decl_file, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return NULL;
+    }
+    /* Must copy because `basename` and `dirname` might modify. */
+    return strdup(decl_file);
+  } else {
+    return NULL;
+  }
+}
+
+bool callback__find_filepath_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
+  const void *const search_for, void *const search_findings
+) {
+  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
+  char **filepath = (char **) search_findings;
+
+  int res = DW_DLV_OK;
+  Dwarf_Error error = NULL;
+  bool found_pc = false;
+
+  res = sd_check_pc_in_die(die, &error, *pc, &found_pc);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  if (!found_pc) {
+    return false;
+  } else {
+    /* Found PC in this DIE. */
+    *filepath = sd_get_filepath(dbg, die);
+    return true;
+  }
+}
+
+char *get_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+  assert(dbg != NULL);
+  Dwarf_Error error = NULL;  
+
+  Dwarf_Addr pc_addr = pc.value;
+  char *filepath = NULL;
+
+  int res = sd_search_dwarf_dbg(dbg, &error,
+    callback__find_filepath_by_pc,
+    &pc_addr,
+    &filepath);
+
+  if (res != DW_DLV_OK) {
+   if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    } 
+    return NULL;
+  } else {
+    return filepath;
+  }
+}
+
+bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(filepath != NULL);  
+
+  char *die_filepath = sd_get_filepath(dbg, die);
+  if (die_filepath == NULL) {
+    return false;
+  }
+  char *file_name = basename(die_filepath);
+  char *dir_name = dirname(die_filepath);
+
+  char *full_filepath = realpath(filepath, NULL);
+  if (full_filepath == NULL && errno == ENOENT) {
+    /* The given filename doesn't exist in the current directory.
+       Likely, this is the case because the user only gave a filename
+       from the source directory, not the proper relative filepath.
+       We work around this by only comparing file names. */
+    char *filepath_cpy = strdup(filepath);
+    char *expect_file_name = basename(filepath_cpy);
+
+    bool equal_names = strcmp(expect_file_name, file_name) == 0;
+
+    free(filepath_cpy);
+    free(die_filepath);
+
+    return equal_names;
+  } else {
+    char *expect_file_name = basename(full_filepath);
+    char *expect_dir_name = dirname(full_filepath);
+
+    bool equal_names = strcmp(file_name, expect_file_name) == 0;
+    bool equal_dirs = strcmp(dir_name, expect_dir_name) == 0;
+
+    free(full_filepath);
+    free(die_filepath);
+
+    return equal_names && equal_dirs;
+  }
+}
+
+typedef struct {
+  size_t nalloc;
+  size_t idx;
+  char **filepaths;
+} Filepaths;
+
+enum { FILEPATHS_ALLOC=8 };
+
+bool callback__get_filepaths(
+  Dwarf_Debug dbg, Dwarf_Die cu_die,
+  const void *const search_for, void *const search_findings
+) {  
+  assert(search_findings != NULL);
+  unused(search_for);
+
+
+  if (sd_has_tag(dbg, cu_die, DW_TAG_compile_unit)) {
+    Filepaths *filepaths = (Filepaths *) search_findings;
+
+    char *this_filepath = sd_get_filepath(dbg, cu_die);  
+    /* Important: if `this_filepath` is `NULL` and is still
+       stored in the array, then all subsequent strings will
+       be leaked later on. */
+    if (this_filepath != NULL) {
+      if (filepaths->idx >= filepaths->nalloc) {
+        filepaths->nalloc += FILEPATHS_ALLOC;
+        filepaths->filepaths = (char **) realloc (filepaths->filepaths,
+                                                  sizeof(char  *) * filepaths->nalloc);
+        assert(filepaths->filepaths != NULL);
+      }
+      filepaths->filepaths[filepaths->idx] = this_filepath;
+      filepaths->idx ++;
+    }
+  }
+
+  /* Never signal success so as to walk all CU DIEs. */
+  return false;
+}
+
+/* Return a NULL-terminated array of all filepaths. */
+char **sd_get_filepaths(Dwarf_Debug dbg) {
+  assert(dbg != NULL);  
+
+  Dwarf_Error error = NULL;
+
+  Filepaths filepaths = {
+    .nalloc = 0,
+    .idx = 0,
+    .filepaths = NULL,
+  };
+
+  int res = sd_search_dwarf_dbg(dbg, &error,
+    callback__get_filepaths,
+    NULL, &filepaths);
+
+  if (res == DW_DLV_ERROR) {
+    dwarf_dealloc_error(dbg, error);
+    return NULL;
+  } else {  /* We expect DW_DLV_NO_ENTRY here. */
+    char **filepaths_arr = (char **) realloc (filepaths.filepaths,
+                                              (filepaths.idx + 1) * sizeof(char *));
+    assert(filepaths_arr != NULL);
+    filepaths_arr[filepaths.idx] = NULL;
+    return filepaths_arr;
+  }
+}
+
 bool callback__get_srclines(
   Dwarf_Debug dbg, Dwarf_Die cu_die,
   const void *const search_for, void *const search_findings
 ) {
-  unused(search_for);
-  LineTable *line_table = (LineTable *) search_findings;
+  assert(search_for != NULL);
+  assert(search_findings != NULL);
 
+  const char *filepath = (const char *) search_for;
+  LineTable *line_table = (LineTable *) search_findings;
+  
   int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
+
+  /* Is this DIE a CU DIE? */
+  if (!sd_has_tag(dbg, cu_die, DW_TAG_compile_unit)) {
+    return false;
+  }
+
+  /* Is this CU DIE from the correct file? */
+  if (!sd_is_die_from_file(dbg, cu_die, filepath)) {
+    return false;
+  }
 
   Dwarf_Line_Context line_context = NULL;
   if (!sd_get_line_context(dbg, cu_die, &line_context)) {
@@ -530,14 +790,17 @@ bool callback__get_srclines(
   }
 }
 
-LineTable sd_get_line_table(Dwarf_Debug dbg) {
+LineTable sd_get_line_table(Dwarf_Debug dbg, const char *filepath) {
+  assert(dbg != NULL);
+  assert(filepath != NULL);
+
   Dwarf_Error error = NULL;
 
   LineTable line_table = { 0 };
 
   int res = sd_search_dwarf_dbg(dbg, &error,
     callback__get_srclines,
-    NULL, &line_table);
+    filepath, &line_table);
 
   if (res != DW_DLV_OK) {
     if (res == DW_DLV_ERROR) {
@@ -558,7 +821,6 @@ SprayResult get_line_table_index_of_pc(const LineTable line_table,
   assert(index_dest != NULL);
 
   unsigned i = 0;
-  /* Skip all lines until the start of the function. */
   while (
     i < line_table.n_lines &&
     line_table.lines[i].addr.value < pc.value
@@ -579,11 +841,42 @@ SprayResult get_line_table_index_of_pc(const LineTable line_table,
   }
 }
 
+/* Set `index_dest` to the line with the line number `lineno`. */
+SprayResult get_line_table_index_of_line(const LineTable line_table,
+                                         unsigned lineno,
+                                         unsigned *index_dest
+) {
+  assert(index_dest != NULL);
+
+  unsigned i = 0;
+  while (
+    i < line_table.n_lines &&
+    line_table.lines[i].ln < lineno
+  ) i++;
+
+  if (
+    i < line_table.n_lines &&
+    line_table.lines[i].ln >= lineno
+  ) {
+    *index_dest = i;
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
+
   Dwarf_Addr pc_addr = pc.value;
 
-  LineTable line_table = sd_get_line_table(dbg);
+  char *filepath = get_filepath_from_pc(dbg, pc);  
+  if (filepath == NULL) {
+    return (LineEntry) { .is_ok=false };
+  }
+
+  LineTable line_table = sd_get_line_table(dbg, filepath);
+  free(filepath);
   if (!line_table.is_set) {
     return (LineEntry) { .is_ok=false };
   }
@@ -611,11 +904,33 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
 
 LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
+
   LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
   if (line_entry.is_ok && line_entry.addr.value == pc.value) {
     return line_entry;    
   } else {
     return (LineEntry) { .is_ok=false };
+  }
+}
+
+LineEntry get_line_entry_at(Dwarf_Debug dbg, const char *filepath, unsigned lineno) {
+  assert(dbg != NULL);
+  assert(filepath != NULL);
+
+  LineTable line_table = sd_get_line_table(dbg, filepath);
+  if (!line_table.is_set) {
+    return (LineEntry) { .is_ok=false };
+  }
+
+  unsigned line_idx = 0;
+  SprayResult res = get_line_table_index_of_line(line_table, lineno, &line_idx);
+  if (res == SP_ERR) {
+    sd_free_line_table(&line_table);
+    return (LineEntry) { .is_ok=false };
+  } else {
+    LineEntry ret =  line_table.lines[line_idx];
+    sd_free_line_table(&line_table);
+    return ret;    
   }
 }
 
@@ -677,7 +992,7 @@ typedef struct {
 /* Search callback that looks for a DIE describing the
    subprogram with the name `search_for` and stores the
    attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
-bool callback_find_subprog_attr_by_subprog_name(Dwarf_Debug dbg, Dwarf_Die die,
+bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg, Dwarf_Die die,
   const void *const search_for, void *const search_findings
 ) {
   const char *fn_name = (const char *) search_for;
@@ -713,7 +1028,7 @@ SubprogAttr sd_get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
   SubprogAttr attr = { .is_set=false };
 
   int res = sd_search_dwarf_dbg(dbg, &error,  
-    callback_find_subprog_attr_by_subprog_name,
+    callback__find_subprog_attr_by_subprog_name,
     fn_name, &attr);
 
   if (res != DW_DLV_OK) {
@@ -765,18 +1080,22 @@ bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest)
 SprayResult for_each_line_in_subprog(
   Dwarf_Debug dbg,
   const char *fn_name,
+  const char *filepath,
   LineCallback callback,
   void *const init_data
 ) {
   assert(dbg != NULL);
+  assert(fn_name != NULL);
+  assert(filepath != NULL);
   assert(callback != NULL);
+  assert(init_data != NULL);
 
   SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
   if (!attr.is_set) {
     return SP_ERR;
   }
 
-  LineTable line_table = sd_get_line_table(dbg);
+  LineTable line_table = sd_get_line_table(dbg, filepath);
   if (!line_table.is_set) {
     return SP_ERR;
   }
@@ -820,42 +1139,53 @@ SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_ad
     return SP_ERR;
   }
 
-  LineTable line_table = sd_get_line_table(dbg);
-  if (!line_table.is_set) {
-    return SP_ERR;
-  }
+  char **filepaths = sd_get_filepaths(dbg);
+  for (size_t j = 0; filepaths[j] != NULL; j++) {
+    LineTable line_table = sd_get_line_table(dbg, filepaths[j]);
+    free(filepaths[j]);
 
-  unsigned first_line = 0;
-  SprayResult res = get_line_table_index_of_pc(line_table,
-                                               attr.lowpc,
-                                               &first_line);
-  if (res == SP_ERR) {
-    sd_free_line_table(&line_table);
-    return SP_ERR;
-  }
+    if (!line_table.is_set) {
+      continue;
+    } else { 
+      unsigned first_line = 0;
+      SprayResult res = get_line_table_index_of_pc(line_table,
+                                                   attr.lowpc,
+                                                   &first_line);
+      if (res == SP_ERR) {
+        sd_free_line_table(&line_table);
+        continue;
+      } else {  /* We've found the correct function. */
+        for (size_t k = j + 1; filepaths[k] != NULL; k++) {
+          free(filepaths[k]);
+        }
+        free(filepaths);
 
-  /* Either find the prologue end line or pick the first
-     line after the line of the low PC as the start. */
-  for (
-    unsigned i = first_line;
-    i < line_table.n_lines &&
-    line_table.lines[i].addr.value <= attr.highpc.value;
-    i++
-  ) {
-    if (line_table.lines[i].prologue_end) {
-      *start_dest = line_table.lines[i].addr;
-      sd_free_line_table(&line_table);
-      return SP_OK;
+        /* Either find the prologue end line or pick the first
+           line after the line of the low PC as the start. */
+        for (
+          unsigned i = first_line;
+          i < line_table.n_lines &&
+          line_table.lines[i].addr.value <= attr.highpc.value;
+          i++
+        ) {
+          if (line_table.lines[i].prologue_end) {
+            *start_dest = line_table.lines[i].addr;
+            sd_free_line_table(&line_table);
+            return SP_OK;
+          }
+        }
+
+        /* None of the line entries had `prologue_end` set. */
+
+        if (first_line + 1 < line_table.n_lines) {
+          *start_dest = line_table.lines[first_line + 1].addr;
+        } else {
+          *start_dest = line_table.lines[first_line].addr;
+        }
+        return SP_OK;
+      }
     }
   }
 
-  /* None of the line entries had `prologue_end` set. */
-
-  if (first_line + 1 < line_table.n_lines) {
-    *start_dest = line_table.lines[first_line + 1].addr;
-  } else {
-    *start_dest = line_table.lines[first_line].addr;
-  }
-  
-  return SP_OK;
+  return SP_ERR;
 }

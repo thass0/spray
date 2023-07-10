@@ -14,8 +14,12 @@
 Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error);
 
 /* Get the name of the function which the given PC is part of.
-   The string that's returned must be free'd be the caller. */
+   The string that's returned must be free'd by the caller. */
 char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc);
+
+/* Get the filepath of the file while the given PC is part of.
+   The strings that's returned must be free' by the caller. */
+char *get_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc);
 
 typedef struct {
   bool is_ok;
@@ -35,6 +39,8 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
    the line entry has exactly the same address
    as PC. */
 LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc);
+/* The the line entry of the given position. */
+LineEntry get_line_entry_at(Dwarf_Debug dbg, const char *filepath, unsigned lineno);
 
 bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *low_pc_dest);
 bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *high_pc_dest);
@@ -46,6 +52,7 @@ typedef SprayResult (*LineCallback)(LineEntry *line, void *const data);
 SprayResult for_each_line_in_subprog(
   Dwarf_Debug dbg,
   const char *fn_name,
+  const char *filepath,
   LineCallback callback,
   void *const init_data
 );

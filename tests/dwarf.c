@@ -6,6 +6,7 @@
 #include "../src/spray_dwarf.h"
 
 #include <limits.h>
+#include <stdlib.h>
 
 #define BIN_NAME "tests/assets/linux_x86_bin"
 #define SRC_NAME "tests/assets/debug_me.c"
@@ -46,6 +47,7 @@ TEST(get_line_entry_from_pc_works) {
   {  /* Happy path. */
     x86_addr pc = { 0x00401156 };
     LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
+    assert_true(line_entry.is_ok);
     assert_int(line_entry.ln, ==, 11);
     assert_int(line_entry.cl, ==, 7);
     assert_ptr_not_null(line_entry.filepath);
@@ -108,11 +110,15 @@ TEST(iterating_lines_works)  {
   assert_ptr_not_null(dbg);
 
   unsigned lines[5];
+
+  char *filepath = realpath(SRC_NAME, NULL);
   for_each_line_in_subprog(dbg,
                            "main",
+                           filepath,
                            callback__store_line,
                            &lines);
   dwarf_finish(dbg);
+  free(filepath);
 
   unsigned expect[5] = {9, 10, 11, 12, 13};
   assert_memory_equal(sizeof(unsigned[5]), lines, expect);
@@ -189,6 +195,44 @@ TEST(get_function_start_works) {
   return MUNIT_OK;
 }
 
+TEST(get_filepath_from_pc_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+
+  {
+    x86_addr pc = { 0x00401156 };
+    char *filepath = get_filepath_from_pc(dbg, pc);
+    assert_ptr_not_null(filepath);
+    char *expect_filepath = realpath(SRC_NAME, NULL);
+    assert_string_equal(filepath, expect_filepath);
+    free(filepath);
+    free(expect_filepath);
+  }
+  {  /* Sad path. */
+    x86_addr pc = { 0xdeadbeef };
+    char *no_filepath = get_filepath_from_pc(dbg, pc);
+    assert_ptr_equal(no_filepath, NULL);
+  }
+
+  dwarf_finish(dbg);
+  return MUNIT_OK;
+}
+
+TEST(get_line_entry_at_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  assert_ptr_not_null(dbg);
+
+  LineEntry line = get_line_entry_at(dbg, SRC_NAME, 4);
+  assert_true(line.is_ok);
+  assert_int(line.ln, ==, 4);
+
+  dwarf_finish(dbg);
+
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
   REG_TEST(get_function_from_pc_works),  
   REG_TEST(get_line_entry_from_pc_works),
@@ -196,6 +240,8 @@ MunitTest dwarf_tests[] = {
   REG_TEST(iterating_lines_works),
   REG_TEST(search_returns_the_correct_result),
   REG_TEST(get_function_start_works),
+  REG_TEST(get_filepath_from_pc_works),
+  REG_TEST(get_line_entry_at_works),
   { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
 };
 

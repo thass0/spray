@@ -5,9 +5,9 @@
 
       - `(continue | c)`: continue execution until next breakpoint is hit. 
 
-      - `(break | b) <address>`: set a breakpoint at `<address>`.
+      - `(break | b) (<function> | <address> | <file>:<line>)`: set a breakpoint.
 
-      - `(delete | d) <address>`: delete a breakpoint at `<address>`.
+      - `(delete | d) (<function> | <address> | <file>:<line>)`: delete a breakpoint.
 
       - `(register | r) <name> (read | rd)`: read the value in register `<name>`.
 
@@ -30,6 +30,12 @@
     Where `<address>` and `<value>` are validated with `strtol(..., 16)`. 
     All valid register names can be found in the `reg_descriptors`
     table in `src/registers.h`.
+
+    Also note that if the location provided to `break` or `delete` is
+    both a valid function name and a valid hexadecimal address (e.g. `add`
+    can be read as the function `add` or the number `0xadd`), this location
+    is always interpreted as a function name. Use the prefix `0x` to specify
+    addresses explicitly.
 
 */
 

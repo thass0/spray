@@ -7,6 +7,7 @@ import random
 COMMAND = 'build/spray'
 SIMPLE = 'tests/assets/linux_x86_bin'
 NESTED_FUNCTIONS = 'tests/assets/nested_functions_bin'
+MULTI_FILE = 'tests/assets/multi_file_bin'
 
 
 def random_string() -> str:
@@ -23,6 +24,8 @@ def assert_ends_with(cmd: str, end: str, debugee: Optional[str] = SIMPLE):
     stdout = run_cmd(cmd, debugee)
     pattern = f'{re.escape(end)}$'
     match = re.search(pattern, stdout, re.MULTILINE)
+    if not match:
+        print(stdout)
     assert match
 
 
@@ -136,3 +139,100 @@ class TestBreakpointCommands:
     def test_breakpoint_set_and_delete(self):
         assert_lit('b 0x00401146\nd 0x00401146\nc', 'Child exited with code 0',
                    NESTED_FUNCTIONS)
+
+    def test_breakpoint_on_function(self):
+        assert_ends_with('b weird_sum\nc', """\
+Hit breakpoint at address 0x000000000040111a
+    1    int weird_sum(int a,
+    2                  int b) {
+    3 ->   int c = a + 1;
+    4      int d = b + 2;
+    5      int e = c + d;
+    6      return e;
+""")
+        # This checks that the function `add` has
+        # precedence over the address `(0x)add`.
+        assert_ends_with('b add\nc', """\
+Hit breakpoint at address 0x000000000040113a
+    1    #include <stdio.h>
+    2
+    3    int add(int a, int b) {
+    4 ->   int c = a + b;
+    5      return c;
+    6    }
+    7
+""", NESTED_FUNCTIONS)
+
+    def test_breakpoint_on_file_line(self):
+        assert_ends_with('break tests/assets/file1.c:4\nc', """\
+    1    #include "file2.h"
+    2
+    3    int file1_compute_something(int n) {
+    4 ->   int i = 0;
+    5      int acc = 0;
+    6      while (i < n) {
+    7        acc += i * i;
+""", MULTI_FILE)
+
+        # Only providing the filename works too,
+        # even if the file doesn't exist in the
+        # current directory.
+        assert_ends_with('break file1.c:4\nc', """\
+    1    #include "file2.h"
+    2
+    3    int file1_compute_something(int n) {
+    4 ->   int i = 0;
+    5      int acc = 0;
+    6      while (i < n) {
+    7        acc += i * i;
+""", MULTI_FILE)
+
+        # Breakpoints in different files that the
+        # entrypoint work, too.
+        assert_ends_with('break file2.c:7\nc', """\
+Hit breakpoint at address 0x00000000004011b0
+    4      if (n < 2) {
+    5        return n;
+    6      } else {
+    7 ->     return   file2_compute_something(n - 1)
+    8               + file2_compute_something(n - 2);
+    9      }
+   10    }
+""", MULTI_FILE)
+
+        # Breaking on an empty line falls through
+        # to the next line with code on it.
+        assert_ends_with('break file2.c:1\nc', """\
+Hit breakpoint at address 0x0000000000401190
+    1    #include "file2.h"
+    2
+    3 -> int file2_compute_something(int n) {
+    4      if (n < 2) {
+    5        return n;
+    6      } else {
+""", MULTI_FILE)
+
+    def test_breakpoints_delete(self):
+        assert_ends_with('break file2.c:4\nc\ndelete file2.c:4\nc', """\
+Hit breakpoint at address 0x000000000040119b
+    1    #include "file2.h"
+    2
+    3    int file2_compute_something(int n) {
+    4 ->   if (n < 2) {
+    5        return n;
+    6      } else {
+    7        return   file2_compute_something(n - 1)
+Child exited with code 0
+""", MULTI_FILE)
+
+        assert_ends_with('break add\nc\ndelete add\nc', """\
+Hit breakpoint at address 0x000000000040113a
+    1    #include <stdio.h>
+    2
+    3    int add(int a, int b) {
+    4 ->   int c = a + b;
+    5      return c;
+    6    }
+    7
+Child exited with code 0
+""", NESTED_FUNCTIONS)

@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <regex.h>
+#include <limits.h>
 #include <sys/wait.h>
 #include <sys/personality.h>
 
@@ -39,8 +41,8 @@ static inline void print_word(x86_word word) {
  * spelled the same. */
 
 typedef enum {
-  BREAK_ADDR,
-  DELETE_ADDR,
+  BREAK_LOC,
+  DELETE_LOC,
   REGISTER_NAME,
   REGISTER_OPERATION,
   REGISTER_WRITE_VALUE,
@@ -57,8 +59,8 @@ typedef enum {
 } ErrorCode;
 
 static const char* error_messages[] = {
-  [BREAK_ADDR]="address for break",
-  [DELETE_ADDR]="address to delete",
+  [BREAK_LOC]="location for break",
+  [DELETE_LOC]="location for delete",
   [REGISTER_NAME]="register name for register operation",
   [REGISTER_OPERATION]="register operation",
   [REGISTER_WRITE_VALUE]="value for register write",
@@ -199,6 +201,7 @@ typedef enum {
   EXEC_CONT_DEAD,
   EXEC_INVALID_WAIT_STATUS,
   EXEC_FUNCTION_NOT_FOUND,
+  EXEC_FILEPATH_NOT_FOUND,
   EXEC_PC_LINE_NOT_FOUND,
   EXEC_STEP,
 } ExecErrCode;
@@ -276,6 +279,12 @@ static inline ExecResult exec_function_not_found(void) {
   return (ExecResult) {
     .type=SP_ERR,
     .code.err=EXEC_FUNCTION_NOT_FOUND,
+  };
+}
+static inline ExecResult exec_filepath_not_found(void) {
+  return (ExecResult) {
+    .type=SP_ERR,
+    .code.err=EXEC_FILEPATH_NOT_FOUND,
   };
 }
 static inline ExecResult exec_pc_line_not_found(void) {
@@ -362,6 +371,9 @@ void print_exec_err(ExecResult *exec_res) {
       break;
     case EXEC_FUNCTION_NOT_FOUND:
       internal_error("Failed to find current function");
+      break;
+    case EXEC_FILEPATH_NOT_FOUND:
+      internal_error("Failed to find path to current file");
       break;
     case EXEC_PC_LINE_NOT_FOUND:
       internal_error("Failed to find current line");
@@ -625,9 +637,15 @@ ExecResult step_over(Debugger dbg) {
 
   unsigned current_lineno = current_line_entry.ln;
 
-  char *fn_name = get_function_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
+  x86_addr pc = get_dwarf_pc(dbg);
+  char *fn_name = get_function_from_pc(dbg.dwarf, pc);
   if (fn_name == NULL) {
     return exec_function_not_found();
+  }
+  char *filepath = get_filepath_from_pc(dbg.dwarf, pc);
+  if (filepath == NULL) {
+    free(fn_name);
+    return exec_filepath_not_found();
   }
 
   size_t to_del_alloc = TO_DEL_ALLOC_SIZE;
@@ -648,11 +666,13 @@ ExecResult step_over(Debugger dbg) {
   for_each_line_in_subprog(
     dbg.dwarf,
     fn_name,
+    filepath,
     callback__set_dwarf_line_breakpoint,
     &data
   );
 
   free(fn_name);
+  free(filepath);
 
   x86_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
@@ -860,12 +880,19 @@ void exec_command_step_over(Debugger dbg) {
 // Command Parsing
 // ===============
 
-static inline char *get_next_command_token(char *restrict line) {
-  return strtok(line, " \t");
+static inline const char *get_next_token(char **tokens, size_t *i) {
+  assert(i != NULL);
+  const char *ret = tokens[*i];
+  if (ret  == NULL) {
+    return NULL;
+  } else {
+    *i += 1;
+    return ret;
+  }
 }
 
-static inline bool line_is_parsed(void) {
-  if (strtok(NULL, " \t") == NULL) {
+static inline bool line_is_parsed(char **tokens, size_t i) {
+  if (tokens[i] == NULL) {
     return true;
   } else {
     command_unfinished_error();
@@ -882,8 +909,8 @@ bool is_command(
     || (strcmp(in, long_form) == 0);
 }
 
-SprayResult parse_base16(char *restrict str, uint64_t *store) {
-  char *str_end = str;
+SprayResult parse_base16(const char *restrict str, uint64_t *store) {
+  char *str_end;
   uint64_t value = strtol(str, &str_end, 16);
   if (str[0] != '\0' && *str_end == '\0') {
     *store = value;
@@ -893,57 +920,191 @@ SprayResult parse_base16(char *restrict str, uint64_t *store) {
   }
 }
 
-void handle_debug_command(Debugger* dbg, const char *line_buf) {
-  assert(dbg != NULL);
+SprayResult check_function_name(const char *func_name) {
+  /* Regular expression for identifiers from the 2011 ISO C
+     standard grammar (https://www.quut.com/c/ANSI-C-grammar-l-2011.html):
+       L   [a-zA-Z_]
+       A   [a-zA-Z_0-9]
+       {L}{A}*
+  */
+  regex_t ident_regex;
+  int comp_res = regcomp(&ident_regex,
+                         "^[a-zA-Z_][a-zA-Z_0-9]*$",
+                         REG_NOSUB | REG_EXTENDED);
+  /* The regex doesn't change so compilation shouldn't fail. */
+  assert(comp_res == 0);
+  int match = regexec(&ident_regex,
+                      func_name,
+                      0,     // We are not interested
+                      NULL,  // in any subexpressions.
+                      0);
+  regfree(&ident_regex);
+  if (match == 0) {
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
+SprayResult check_file_line(const char *file_line) {
+  regex_t file_line_regex;
+  int comp_res = regcomp(&file_line_regex,
+                         "^[^:]+:[0-9]+$",
+                         REG_EXTENDED);
+  assert(comp_res == 0);
+  
+  int match = regexec(&file_line_regex, file_line, 0, NULL, 0);
+  regfree(&file_line_regex);
+  if (match == 0) {
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
+SprayResult parse_lineno(const char *line_str, unsigned *line_dest) {
+  char *str_end = 0;
+  long line_buf = strtol(line_str, &str_end, 10);
+  if (
+    line_str[0] != '\0' && *str_end == '\0' &&
+    line_buf <= UINT_MAX
+  ) {
+    *line_dest = line_buf;
+    return SP_OK;
+  } else {
+    return SP_ERR;
+  }
+}
+
+SprayResult parse_break_location(Debugger dbg,
+                                 const char *location,
+                                 x86_addr *dest
+) {
+  if (check_function_name(location) == SP_OK ){
+    SprayResult res = get_function_start_addr(dbg.dwarf,
+                                              location,
+                                              dest);
+    return res;
+  } else if (parse_base16(location, &dest->value) == SP_OK) {
+    return SP_OK;
+  } else if (check_file_line(location) == SP_OK) {
+    char *location_cpy = strdup(location);
+    const char *filepath = strtok(location_cpy, ":");
+    assert(filepath != NULL);  // OK since `location` was validated.
+
+    unsigned lineno = 0;
+    SprayResult res = parse_lineno(strtok(NULL, ":"), &lineno);
+    if (res == SP_ERR) {
+      free(location_cpy);
+      return SP_ERR;
+    }
+
+    LineEntry line = get_line_entry_at(dbg.dwarf, filepath, lineno);
+    free(location_cpy);
+    if (line.is_ok) {
+      *dest = line.addr;
+      return SP_OK;
+    } else {
+      return SP_ERR;
+    }
+  } else {
+    return SP_ERR;
+  }
+}
+
+char **get_command_tokens(const char *line) {
+  enum { TOKENS_ALLOC=8 };
+  size_t n_alloc = TOKENS_ALLOC;
+  char **tokens = (char **) calloc (n_alloc, sizeof(char *));
+  assert(tokens != NULL);
+
+  char *line_buf = strdup(line);
   assert(line_buf != NULL);
 
+  const char *token = strtok(line_buf, " \t");
+  size_t i = 0;
+
+  while (token != NULL) {
+    if (i >= n_alloc) {
+      n_alloc += TOKENS_ALLOC;
+      tokens = (char **) realloc (tokens,
+                                        n_alloc * sizeof(char*));
+      assert(tokens != NULL);
+    }
+    char *token_cpy = strdup(token);
+    tokens[i] = token_cpy;
+    token = strtok(NULL, " \t");
+    i ++;
+  }
+
+  if (i >= n_alloc) {
+    n_alloc += 1;
+    tokens = (char **) realloc (tokens,
+                                      n_alloc * sizeof(char*));
+    assert(tokens != NULL);
+  }
+
+  tokens[i] = NULL;
+  free(line_buf);
+
+  return tokens;
+}
+
+void handle_debug_command(Debugger* dbg, const char *line) {
+  assert(dbg != NULL);
+  assert(line != NULL);
+
   // Copy line_buf to allow modifying it.
-  char *line = strdup(line_buf);
-  assert(line != NULL);  // Only `NULL` if allocation failed.
+  // char *line = strdup(line_buf);
+  // assert(line != NULL);  // Only `NULL` if allocation failed.
   
-  const char *cmd = get_next_command_token(line);
+  char **tokens = get_command_tokens(line);
+  size_t i = 0;
+  const char *cmd = get_next_token(tokens, &i);
 
   do {
     if (cmd == NULL) {
       empty_command_error();
     } else if (is_command(cmd, "c", "continue")) {
-      if (!line_is_parsed()) break;
+      if (!line_is_parsed(tokens, i)) break;
       exec_command_continue(*dbg);
     } else if (is_command(cmd, "b", "break")) {
       // Pass `NULL` to `strtok_r` to continue scanning `line`.
-      char *addr_str = get_next_command_token(NULL);
-      if (addr_str == NULL) {
-        missing_error(BREAK_ADDR);
+      const char *loc_str = get_next_token(tokens, &i);
+      if (loc_str == NULL) {
+        missing_error(BREAK_LOC);
       } else {
-        x86_addr addr;
-        if (parse_base16(addr_str, &addr.value) == SP_OK) {
-          if (!line_is_parsed()) break;
+        x86_addr addr = { 0 };
+        if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
+          if (!line_is_parsed(tokens, i))
+            break;
           exec_command_break(dbg->breakpoints, addr);
         } else {
-          invalid_error(BREAK_ADDR);
+          invalid_error(BREAK_LOC);
         }
       }
     } else if (is_command(cmd, "d", "delete")) {
-      char *addr_str = get_next_command_token(NULL);
-      if (addr_str == NULL) {
-        missing_error(DELETE_ADDR);
+      const char *loc_str = get_next_token(tokens, &i);
+      if (loc_str == NULL) {
+        missing_error(DELETE_LOC);
       } else {
-        x86_addr addr;
-        if (parse_base16(addr_str, &addr.value) == SP_OK) {
-          if (!line_is_parsed()) break;
+        x86_addr addr = { 0 };
+        if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
+          if (!line_is_parsed(tokens, i))
+            break;
           exec_command_delete(dbg->breakpoints, addr);
         } else {
-          invalid_error(DELETE_ADDR);
+          invalid_error(DELETE_LOC);
         }
       }
     } else if (is_command(cmd, "r", "register")) {
-      const char *name = get_next_command_token(NULL);
+      const char *name = get_next_token(tokens, &i);
       x86_reg reg;
       if (name == NULL) {
         missing_error(REGISTER_NAME);
         break;
       } else if (is_command(name, "dump", "print")) {
-        if (!line_is_parsed()) break;
+        if (!line_is_parsed(tokens, i)) break;
         /* This is an exception: instead of a name the register
          * operation could also be followed by a `dump`/`print` command.
          */
@@ -961,23 +1122,23 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
 
-      const char *op_str = get_next_command_token(NULL);
+      const char *op_str = get_next_token(tokens, &i);
       if (op_str == NULL) {
         missing_error(REGISTER_OPERATION);
       } else {
         if (is_command(op_str, "rd", "read")) {
-          if (!line_is_parsed()) break;
+          if (!line_is_parsed(tokens, i)) break;
           /* Read */
           exec_command_register_read(dbg->pid, reg, name);
         } else if (is_command(op_str, "wr", "write")) {
           /* Write */
-          char *value_str = get_next_command_token(NULL);
+          const char *value_str = get_next_token(tokens, &i);
           if (value_str == NULL) {
             missing_error(REGISTER_WRITE_VALUE);
           } else {
             x86_word word;
             if (parse_base16(value_str, &word.value) == SP_OK) {
-              if (!line_is_parsed()) break;
+              if (!line_is_parsed(tokens, i)) break;
               exec_command_register_write(dbg->pid, reg, name, word);
             } else {
               invalid_error(REGISTER_WRITE_VALUE);
@@ -988,7 +1149,7 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
     } else if (is_command(cmd, "m", "memory")) {
-      char *addr_str = get_next_command_token(NULL);
+      const char *addr_str = get_next_token(tokens, &i);
       x86_addr addr;
       if (addr_str == NULL) {
         missing_error(MEMORY_ADDR);
@@ -1003,21 +1164,21 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         }
       }
 
-      const char *op_str = get_next_command_token(NULL);
+      const char *op_str = get_next_token(tokens, &i);
       if (op_str == NULL) {
         missing_error(MEMORY_OPERATION);
       } else if (is_command(op_str, "rd", "read")) {
-        if (!line_is_parsed()) break;
+        if (!line_is_parsed(tokens, i)) break;
         /* Read */
         exec_command_memory_read(dbg->pid, addr);
       } else if (is_command(op_str, "wr", "write")) {
-        char *value_str = get_next_command_token(NULL);
+        const char *value_str = get_next_token(tokens, &i);
         if (value_str == NULL) {
           missing_error(MEMORY_WRITE_VALUE);
         } else {
           x86_word word;
           if (parse_base16(value_str, &word.value) == SP_OK) {
-            if (!line_is_parsed()) break;
+            if (!line_is_parsed(tokens, i)) break;
             exec_command_memory_write(dbg->pid, addr, word);
           } else {
             invalid_error(MEMORY_WRITE_VALUE);
@@ -1027,16 +1188,16 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
         invalid_error(MEMORY_OPERATION);
       }
     } else if (is_command(cmd, "i", "inst")) {
-      if (!line_is_parsed()) break;
+      if (!line_is_parsed(tokens, i)) break;
       exec_command_single_step_instruction(*dbg);
     } else if (is_command(cmd, "l", "leave")) {
-      if (!line_is_parsed()) break;
+      if (!line_is_parsed(tokens, i)) break;
       exec_command_step_out(*dbg);
     } else if (is_command(cmd, "s", "step")) {
-      if (!line_is_parsed()) break;
+      if (!line_is_parsed(tokens, i)) break;
       exec_command_single_step(*dbg);
     } else if (is_command(cmd, "n", "next")) {
-      if (!line_is_parsed()) break;
+      if (!line_is_parsed(tokens, i)) break;
       exec_command_step_over(*dbg);
     } else {
       unknown_cmd_error();
@@ -1045,7 +1206,10 @@ void handle_debug_command(Debugger* dbg, const char *line_buf) {
    * loop is only used to make `break` available
    * for  skipping subsequent steps on error. */
 
-  free(line);
+  for (size_t i = 0; tokens[i] != NULL; i++) {
+    free(tokens[i]);
+  }
+  free(tokens);
 }
 
 
