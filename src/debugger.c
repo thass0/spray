@@ -105,7 +105,7 @@ static inline void internal_register_error(ErrorCode what, x86_reg reg) {
 }
 
 static inline void empty_command_error(void) {
-  printf("🤔 Empty command\n");
+  printf("🤔 No command to repeat\n");
 }
 
 static inline void unknown_cmd_error(void) {
@@ -880,7 +880,7 @@ void exec_command_step_over(Debugger dbg) {
 // Command Parsing
 // ===============
 
-static inline const char *get_next_token(char **tokens, size_t *i) {
+static inline const char *get_next_token(char *const *tokens, size_t *i) {
   assert(i != NULL);
   const char *ret = tokens[*i];
   if (ret  == NULL) {
@@ -891,7 +891,7 @@ static inline const char *get_next_token(char **tokens, size_t *i) {
   }
 }
 
-static inline bool line_is_parsed(char **tokens, size_t i) {
+static inline bool line_is_parsed(char *const *tokens, size_t i) {
   if (tokens[i] == NULL) {
     return true;
   } else {
@@ -905,8 +905,12 @@ bool is_command(
   const char *restrict short_from,
   const char *restrict long_form
 ) {
-  return (strcmp(in, short_from) == 0)
-    || (strcmp(in, long_form) == 0);
+  if (in != NULL) {
+    return (strcmp(in, short_from) == 0)
+      || (strcmp(in, long_form) == 0);
+  } else {
+    return false;
+  }
 }
 
 SprayResult parse_base16(const char *restrict str, uint64_t *store) {
@@ -1050,22 +1054,24 @@ char **get_command_tokens(const char *line) {
   return tokens;
 }
 
-void handle_debug_command(Debugger* dbg, const char *line) {
-  assert(dbg != NULL);
-  assert(line != NULL);
+void free_command_tokens(char **tokens) {
+  if (tokens != NULL) {
+    for (size_t i = 0; tokens[i] != NULL; i++) {
+      free(tokens[i]);
+    }
+    free(tokens);
+  }
+}
 
-  // Copy line_buf to allow modifying it.
-  // char *line = strdup(line_buf);
-  // assert(line != NULL);  // Only `NULL` if allocation failed.
-  
-  char **tokens = get_command_tokens(line);
+void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
+  assert(dbg != NULL);
+  assert(tokens != NULL);
+
   size_t i = 0;
   const char *cmd = get_next_token(tokens, &i);
 
   do {
-    if (cmd == NULL) {
-      empty_command_error();
-    } else if (is_command(cmd, "c", "continue")) {
+    if (is_command(cmd, "c", "continue")) {
       if (!line_is_parsed(tokens, i)) break;
       exec_command_continue(*dbg);
     } else if (is_command(cmd, "b", "break")) {
@@ -1205,11 +1211,34 @@ void handle_debug_command(Debugger* dbg, const char *line) {
   } while (0); /* Only run this block once. The
    * loop is only used to make `break` available
    * for  skipping subsequent steps on error. */
+}
 
-  for (size_t i = 0; tokens[i] != NULL; i++) {
-    free(tokens[i]);
+void handle_debug_command(Debugger *dbg, const char *line) {
+  assert(dbg != NULL);
+  assert(line != NULL);
+
+  char **tokens = get_command_tokens(line);
+  size_t i = 0;
+  const char *first_token = get_next_token(tokens, &i);
+
+  /* Is the command empty? */
+  if (first_token == NULL) {
+    free_command_tokens(tokens);
+    char *last_command = NULL;
+    SprayResult res = read_command(dbg->history, &last_command);
+    if (res == SP_OK) {
+      tokens = get_command_tokens(last_command);
+      free(last_command);
+    } else {
+      empty_command_error();
+      return;
+    }
+  } else {
+    save_command(dbg->history, line);
   }
-  free(tokens);
+
+  handle_debug_command_tokens(dbg, tokens);
+  free_command_tokens(tokens);
 }
 
 
@@ -1319,6 +1348,7 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
       .load_address.value=0,
       .dwarf=dwarf,
       .files=init_source_files(),
+      .history=init_history(),
     };
     init_load_address(store);
   }

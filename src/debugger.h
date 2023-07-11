@@ -12,6 +12,7 @@
 #include "spray_elf.h"
 #include "spray_dwarf.h"
 #include "source_files.h"
+#include "history.h"
 
 typedef struct {
   const char *prog_name;     /* Tracee program name. */
@@ -21,6 +22,7 @@ typedef struct {
   x86_addr load_address;     /* Load address. Set for PIEs, 0 otherwise. */
   Dwarf_Debug dwarf;         /* Libdwarf debug information. */
   SourceFiles *files;        /* Cache of program source files read. */
+  History history;           /* Command history of recent commands. */
 } Debugger;
 
 // Setup a debugger. This forks the child process.
