@@ -1,6 +1,8 @@
 /*
     # 🐛🐛🐛 Spray: a x86_64 linux debugger 🐛🐛🐛
 
+    ## Commands
+
     Available commands are:
 
       - `(continue | c)`: continue execution until next breakpoint is hit. 
@@ -37,31 +39,54 @@
     is always interpreted as a function name. Use the prefix `0x` to specify
     addresses explicitly.
 
+    ## Running the debugger
+
+    Ensure that the binary you want to debug has debug information enabled,
+    i.e. was compiled with the `-g` flag.
+
+    The first argument you pass to `spray` is the name of the binary that
+    should be debugged (the debugee). All subsequent arguments are the
+    arguments passed to the debugee.
+
+    For example
+
+    ```sh
+    spray tests/assets/print_args_bin Hello World
+    ```
+
+    will debug the binary `print_args_bin` and pass this binary the
+    additional arguments `Hello` and `World`.
+
 */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 
 #include "debugger.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
   if (argc < 2) {
     fprintf(stderr, "Usage: spray PROGRAM_NAME\n");
     return -1;
   }
 
-  const char *prog_name = argv[1];
+  char *prog_name = strdup(argv[1]);
+  char **prog_argv = argv + 1;
 
   Debugger debugger;
 
-  if (setup_debugger(prog_name, &debugger) == -1) {
+  if (setup_debugger(prog_name, prog_argv, &debugger) == -1) {
+    free(prog_name);
     return -1;
   }
 
   run_debugger(debugger);
+
+  free(prog_name);
 
   return 0;
 }

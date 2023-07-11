@@ -6,6 +6,7 @@
 #include "../src/debugger.h"
 
 #define FILE_PATH "tests/assets/debug_me.c"
+#define BIN_NAME "tests/assets/linux_x86_bin"
 
 TEST(storing_files_works) {
   SourceFiles *source_files = init_source_files();
@@ -29,7 +30,8 @@ TEST(storing_files_works) {
 
 TEST(breakpoints_work) {
   Debugger dbg;
-  assert_int(setup_debugger("tests/assets/linux_x86_bin", &dbg), ==, 0);
+  char *prog_argv[] = { BIN_NAME, NULL };
+  assert_int(setup_debugger(prog_argv[0], prog_argv, &dbg), ==, 0);
 
   x86_addr bp_addr1 = { 0x00401122 };
 

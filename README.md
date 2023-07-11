@@ -1,6 +1,8 @@
 
 # 🐛🐛🐛 Spray: a x86_64 linux debugger 🐛🐛🐛
 
+## Commands
+
 Available commands are:
 
 - `(continue | c)`: continue execution until next breakpoint is hit. 
@@ -36,5 +38,23 @@ both a valid function name and a valid hexadecimal address (e.g. `add`
 can be read as the function `add` or the number `0xadd`), this location
 is always interpreted as a function name. Use the prefix `0x` to specify
 addresses explicitly.
+
+## Running the debugger
+
+Ensure that the binary you want to debug has debug information enabled,
+i.e. was compiled with the `-g` flag.
+
+The first argument you pass to `spray` is the name of the binary that
+should be debugged (the debugee). All subsequent arguments are the
+arguments passed to the debugee.
+
+For example
+
+```sh
+spray tests/assets/print_args_bin Hello World
+```
+
+will debug the binary `print_args_bin` and pass this binary the
+additional arguments `Hello` and `World`.
 
 

@@ -1254,7 +1254,7 @@ void init_load_address(Debugger *dbg) {
   }
 }
 
-int setup_debugger(const char *prog_name, Debugger* store) {
+int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
   assert(store != NULL);
 
   if (access(prog_name, F_OK) != 0) {
@@ -1299,7 +1299,7 @@ int setup_debugger(const char *prog_name, Debugger* store) {
     // Replace the current process with the
     // given program to debug. Only pass its
     // name to it.
-    execl(prog_name, prog_name, NULL);
+    execv(prog_name, prog_argv);
   } else if (pid >= 1) {
     /* Parent process */
 

@@ -27,7 +27,7 @@ typedef struct {
 // `store` is only modified on success. The values
 // it initially has are never read.
 // This launches the debuggee process and immediately stops it.
-int setup_debugger(const char *prog_name, Debugger *store);
+int setup_debugger(const char *prog_name, char *prog_argv[], Debugger *store);
 
 // Run a debugger. Starts at the beginning of
 // the `main` function.

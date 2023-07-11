@@ -8,6 +8,7 @@ COMMAND = 'build/spray'
 SIMPLE = 'tests/assets/linux_x86_bin'
 NESTED_FUNCTIONS = 'tests/assets/nested_functions_bin'
 MULTI_FILE = 'tests/assets/multi_file_bin'
+PRINT_ARGS = 'tests/assets/print_args_bin'
 
 
 def random_string() -> str:
@@ -15,24 +16,30 @@ def random_string() -> str:
     return ''.join(random.choice(letters) for i in range(8))
 
 
-def assert_lit(cmd: str, out: str, debugee: Optional[str] = SIMPLE):
-    stdout = run_cmd(cmd, debugee)
+def run_cmd(commands: str, debugee: str, args: list[str]) -> str:
+    p = Popen([COMMAND, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE)
+    output = p.communicate(commands.encode('UTF-8'))
+    return output[0].decode('UTF-8')
+
+
+def assert_lit(cmd: str,
+               out: str,
+               debugee: Optional[str] = SIMPLE,
+               args: Optional[list[str]] = [""]):
+    stdout = run_cmd(cmd, debugee, args)
     assert out in stdout
 
 
-def assert_ends_with(cmd: str, end: str, debugee: Optional[str] = SIMPLE):
-    stdout = run_cmd(cmd, debugee)
+def assert_ends_with(cmd: str,
+                     end: str,
+                     debugee: Optional[str] = SIMPLE,
+                     args: Optional[list[str]] = [""]):
+    stdout = run_cmd(cmd, debugee, args)
     pattern = f'{re.escape(end)}$'
     match = re.search(pattern, stdout, re.MULTILINE)
     if not match:
         print(stdout)
     assert match
-
-
-def run_cmd(commands: str, debugee: Optional[str] = SIMPLE) -> str:
-    p = Popen([COMMAND, debugee], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-    output = p.communicate(commands.encode('UTF-8'))
-    return output[0].decode('UTF-8')
 
 
 class TestStepCommands:
@@ -236,3 +243,10 @@ Hit breakpoint at address 0x000000000040113a
     7
 Child exited with code 0
 """, NESTED_FUNCTIONS)
+
+
+class TestArumentPassing:
+    def test_arguments_are_passed(self):
+        assert_lit('c', """\
+Command line arguments: tests/assets/print_args_bin Hello World
+""", PRINT_ARGS, ["Hello", "World"])
