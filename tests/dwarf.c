@@ -152,7 +152,7 @@ TEST(search_returns_the_correct_result) {
   res = sd_search_dwarf_dbg(dbg,
                             &error,
                             callback__test_search,
-                            "this_function_name_doesnt_exist",
+                            "this_function_name_does_not_exist",
                             NULL);
   assert_int(res, ==, DW_DLV_NO_ENTRY);
 

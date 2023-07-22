@@ -54,7 +54,7 @@ TEST(accept_valid_executable) {
 }
 
 TEST(reject_invalid_executables) {
-  // The following are a buch of executables which
+  // The following are a bunch of executables which
   // were compiled for unsupported targets (32-bit, ARM etc.)
   // All of them should be rejects.
 

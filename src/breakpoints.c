@@ -50,7 +50,7 @@ void free_breakpoints(Breakpoints *breakpoints) {
 bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr address) {
   assert(breakpoints != NULL);
 
-  /* The only paramter that is relevant for the lookup
+  /* The only parameter that is relevant for the lookup
      is the address. */
   Breakpoint lookup = { .addr=address };
   Breakpoint *check = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
@@ -112,7 +112,7 @@ void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
   Breakpoint *disable = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
 
   if (disable != NULL && disable->is_enabled) {
-    // `ptrace` only operatores on whole words, so we need
+    // `ptrace` only operates on whole words, so we need
     // to read what's currently there first, then replace the
     // modified low byte and write it to the address.
 

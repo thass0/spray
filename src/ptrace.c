@@ -38,7 +38,7 @@ SprayResult pt_write_memory(pid_t pid, x86_addr addr, x86_word word) {
 SprayResult pt_read_registers(pid_t pid, struct user_regs_struct *regs) {  
   assert(regs != NULL);
   // `addr` is ignored here. `PTRACE_GETREGS` stores all
-  // of the tracees general purpose registers in `regs`.
+  // of the tracee's general purpose registers in `regs`.
   if (ptrace(PTRACE_GETREGS, pid, NULL, regs) == PTRACE_ERROR) {
     return SP_ERR;
   } else {

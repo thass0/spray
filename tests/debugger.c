@@ -71,10 +71,10 @@ TEST(function_name_check_works) {
   res = check_function_name("785019blah_function");  // Starts with numbers.
   assert_int(res, ==, SP_ERR);
 
-  res = check_function_name("check-function-name");  // Kebap case.
+  res = check_function_name("check-function-name");  // Kebab case.
   assert_int(res, ==, SP_ERR);
 
-  res = check_function_name("check>fu!ction>name");  // Other symbols.
+  res = check_function_name("check>function!>name");  // Other symbols.
   assert_int(res, ==, SP_ERR);
 
   return MUNIT_OK;

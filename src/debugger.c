@@ -194,7 +194,7 @@ typedef enum {
   EXEC_SIG_KILLED,
   EXEC_SIG_CONT,
   EXEC_SIG_STOPPED,
-  EXEC_NONE,  /* No additionaly information. */
+  EXEC_NONE,  /* No additionally information. */
 } ExecOkCode;
 
 typedef enum {
@@ -222,7 +222,7 @@ typedef struct {
   } data;
 } ExecResult;
 
-/* The follwoing function construct `ExecResult`s
+/* The following function construct `ExecResult`s
    which are valid for the given codes. Don't
    construct `ExecResult`s by hand. */
 
@@ -1276,7 +1276,7 @@ void init_load_address(Debugger *dbg) {
 
     free(addr);
 
-    // Now upate the debugger instance on success.
+    // Now update the debugger instance on success.
     dbg->load_address = load_address;
   } else {
     dbg->load_address = (x86_addr) { 0 };

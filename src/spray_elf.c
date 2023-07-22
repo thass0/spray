@@ -195,8 +195,8 @@ SprayResult file_size(int fd, size_t *dest) {
   }
 }
 
-/* Cast pointers into the memory mapped ELF file
-   to specifict structures. Using these functions
+/* Cast pointers pointing into the memory mapped ELF
+   file to specific structures. Using these functions
    is much more readable than plain casts. */
 
 static inline Elf64_Ehdr *ehdr_at(byte *bytes, size_t off) {

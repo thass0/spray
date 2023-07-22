@@ -33,8 +33,8 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   assert(error != NULL);
 
   /* Standard group number. Group numbers are relevant only if
-     DWARF debug information is split accross multiple objects. */
-  unsigned groupnumber = DW_GROUPNUMBER_ANY;
+     DWARF debug information is split across multiple objects. */
+  unsigned group_number = DW_GROUPNUMBER_ANY;
 
   /* `true_path*` is used to store the path of alternate
      DWARF-containing objects if debug info is split.
@@ -55,7 +55,7 @@ Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
 
   int res = dwarf_init_path(filepath,  /* Only external paramter. */
     true_pathbuf, true_pathlen,
-    groupnumber,
+    group_number,
     error_handler, error_argument,  /* Both `NULL` => unused. */
     &dbg, error
   );
@@ -302,7 +302,7 @@ bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
 
 /* Search callback which receives a `Dwarf_Addr*`
    representing a PC value as search data and finds
-   a `char **` whose internal value representens the
+   a `char **` whose internal value represents the
    function name corresponding to the PC.
    Allocated memory for the function name of it returns
    `true`. This memory must be released by the caller. */
@@ -375,7 +375,7 @@ char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
-/* NOTE: Acquiring a `Dwarf_Line_Context` is only possilbe
+/* NOTE: Acquiring a `Dwarf_Line_Context` is only possible
    if the given DIE is the compilation unit DIE. */
 bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die cu_die, Dwarf_Line_Context *line_context) {
   assert(dbg != NULL);
@@ -418,7 +418,7 @@ bool dwarf_bool_to_bool(Dwarf_Bool dwarf_bool) {
   /* The `libdwarf` docs say that `Dwarf_Bool` is
      "A TRUE(non-zero)/FALSE(zero) data item."
      This conversion ensures that libdwarf's
-     `TRUE` value is convertet to stdbool's
+     `TRUE` value is converted to stdbool's
      `true` correctly. */
   return dwarf_bool == 0 ? false : true;
 }
@@ -469,16 +469,16 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_
   Dwarf_Bool prologue_end = false;
   Dwarf_Bool epilogue_begin = false;
   Dwarf_Unsigned isa = 0;
-  Dwarf_Unsigned descriminator = 0;
+  Dwarf_Unsigned discriminator = 0;
   res = dwarf_prologue_end_etc(line,
                                &prologue_end,
                                &epilogue_begin,
                                &isa,
-                               &descriminator,
+                               &discriminator,
                                error);
   unused(epilogue_begin);
   unused(isa);
-  unused(descriminator);
+  unused(discriminator);
 
   if (res != DW_DLV_OK) { return res; }
 
