@@ -1,6 +1,6 @@
 #include <libdwarf-0/libdwarf.h>
 
-#include "test.h"
+#include "test_utils.h"
 
 #define UNIT_TESTS
 #include "../src/spray_dwarf.h"
@@ -8,16 +8,13 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#define BIN_NAME "tests/assets/linux_x86_bin"
-#define SRC_NAME "tests/assets/debug_me.c"
-
 enum {
   RAND_DATA_BUF_SIZE = 32,
 };
 
 TEST(get_function_from_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
   {  /* Happy path 😚. */
@@ -41,7 +38,7 @@ TEST(get_function_from_pc_works) {
 
 TEST(get_line_entry_from_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
   {  /* Happy path. */
@@ -52,7 +49,7 @@ TEST(get_line_entry_from_pc_works) {
     assert_int(line_entry.cl, ==, 7);
     assert_ptr_not_null(line_entry.filepath);
     /* Ignore the part of the filepath that is host specific. */
-    assert_ptr_not_null(strstr(line_entry.filepath, SRC_NAME));
+    assert_ptr_not_null(strstr(line_entry.filepath, SIMPLE_SRC));
   }
   {  /* Sad path 😢. */
     x86_addr pc = { 0xdeabbeef };
@@ -67,7 +64,7 @@ TEST(get_line_entry_from_pc_works) {
 
 TEST(get_low_and_high_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
   {  /* Happy */
@@ -106,12 +103,12 @@ SprayResult callback__store_line(LineEntry *line, void *const void_data) {
 
 TEST(iterating_lines_works)  {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
   unsigned lines[5];
 
-  char *filepath = realpath(SRC_NAME, NULL);
+  char *filepath = realpath(SIMPLE_SRC, NULL);
   for_each_line_in_subprog(dbg,
                            "main",
                            filepath,
@@ -145,7 +142,7 @@ bool callback__test_search(Dwarf_Debug dbg,
 
 TEST(search_returns_the_correct_result) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
   int res = DW_DLV_OK;
 
@@ -170,7 +167,7 @@ TEST(search_returns_the_correct_result) {
 
 TEST(get_function_start_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
   
   x86_addr main_start = { 0 };
@@ -197,14 +194,14 @@ TEST(get_function_start_works) {
 
 TEST(get_filepath_from_pc_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
   {
     x86_addr pc = { 0x00401156 };
     char *filepath = get_filepath_from_pc(dbg, pc);
     assert_ptr_not_null(filepath);
-    char *expect_filepath = realpath(SRC_NAME, NULL);
+    char *expect_filepath = realpath(SIMPLE_SRC, NULL);
     assert_string_equal(filepath, expect_filepath);
     free(filepath);
     free(expect_filepath);
@@ -221,10 +218,10 @@ TEST(get_filepath_from_pc_works) {
 
 TEST(get_line_entry_at_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(BIN_NAME, &error);
+  Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
 
-  LineEntry line = get_line_entry_at(dbg, SRC_NAME, 4);
+  LineEntry line = get_line_entry_at(dbg, SIMPLE_SRC, 4);
   assert_true(line.is_ok);
   assert_int(line.ln, ==, 4);
 

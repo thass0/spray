@@ -1,4 +1,4 @@
-#include "test.h"
+#include "test_utils.h"
 
 extern MunitTest parse_elf_tests[];
 extern MunitTest dwarf_tests[];

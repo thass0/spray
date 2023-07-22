@@ -3,23 +3,23 @@ CFLAGS = -g
 
 .PHONY = all clean
 
-DEBUG_ME = debug_me.c
-NESTED = mul_and_add.c
-MULTI_FILE = file1.c file2.c
+SIMPLE = simple.c
+NESTED = nested_functions.c
+MULTI_FILE = multi-file/file1.c multi-file/file2.c
 PRINT_ARGS = print_args.c
-TARGETS = linux_x86_bin linux_32_bin nested_functions_bin multi_file_bin print_args_bin
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin
 
 all: $(TARGETS)
 
-linux_x86_bin: $(DEBUG_ME)
+64bit-linux-simple.bin: $(SIMPLE)
 	$(CC) $(CFLAGS) $< -o $@
-linux_32_bin: $(DEBUG_ME)
+32bit-linux-simple.bin: $(SIMPLE)
 	$(CC) $(CFLAGS) -m32 $< -o $@
-nested_functions_bin: $(NESTED)
+nested-functions.bin: $(NESTED)
 	$(CC) $(CFLAGS) $< -o $@
-multi_file_bin: $(MULTI_FILE)
+multi-file.bin: $(MULTI_FILE)
 	$(CC) $(CFLAGS) $(MULTI_FILE) -o $@
-print_args_bin: $(PRINT_ARGS)
+print-args.bin: $(PRINT_ARGS)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:

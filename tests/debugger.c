@@ -1,20 +1,18 @@
-#include "test.h"
+#include "test_utils.h"
+
 #include "../src/source_files.h"
 #include "../src/breakpoints.h"
 #include "../src/debugger.h"
-
-#define FILE_PATH "tests/assets/debug_me.c"
-#define BIN_NAME "tests/assets/linux_x86_bin"
 
 TEST(storing_files_works) {
   SourceFiles *source_files = init_source_files();
   assert_ptr_not_null(source_files);
 
-  SourceLines lookup = { .filepath=FILE_PATH };
+  SourceLines lookup = { .filepath=SIMPLE_SRC };
   assert_ptr_equal(NULL, hashmap_get(source_files, &lookup));
 
   freopen("/dev/null", "w", stdout);
-  SprayResult res = print_source(source_files, FILE_PATH, 2, 2);
+  SprayResult res = print_source(source_files, SIMPLE_SRC, 2, 2);
   assert_int(res, ==, SP_OK);
   
   /* Internally `print_source` will use this call to `hashmap_get`
@@ -28,7 +26,7 @@ TEST(storing_files_works) {
 
 TEST(breakpoints_work) {
   Debugger dbg;
-  char *prog_argv[] = { BIN_NAME, NULL };
+  char *prog_argv[] = { SIMPLE_64BIT_BIN, NULL };
   assert_int(setup_debugger(prog_argv[0], prog_argv, &dbg), ==, 0);
 
   x86_addr bp_addr1 = { 0x00401122 };

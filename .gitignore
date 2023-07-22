@@ -4,6 +4,6 @@ dependencies/*
 .cache
 compile_commands.json
 **/__pycache__/
-**/*bin
+**/*.bin
 .cspell.json
 .project-words.txt

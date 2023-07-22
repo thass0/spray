@@ -4,11 +4,11 @@ import re
 import string
 import random
 
-COMMAND = 'build/spray'
-SIMPLE = 'tests/assets/linux_x86_bin'
-NESTED_FUNCTIONS = 'tests/assets/nested_functions_bin'
-MULTI_FILE = 'tests/assets/multi_file_bin'
-PRINT_ARGS = 'tests/assets/print_args_bin'
+DEBUGGER = 'build/spray'
+SIMPLE_64BIT_BIN = 'tests/assets/64bit-linux-simple.bin'
+NESTED_FUNCTIONS_BIN = 'tests/assets/nested-functions.bin'
+MULTI_FILE_BIN = 'tests/assets/multi-file.bin'
+PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
 
 
 def random_string() -> str:
@@ -17,14 +17,14 @@ def random_string() -> str:
 
 
 def run_cmd(commands: str, debugee: str, args: list[str]) -> str:
-    p = Popen([COMMAND, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE)
+    p = Popen([DEBUGGER, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE)
     output = p.communicate(commands.encode('UTF-8'))
     return output[0].decode('UTF-8')
 
 
 def assert_lit(cmd: str,
                out: str,
-               debugee: Optional[str] = SIMPLE,
+               debugee: Optional[str] = SIMPLE_64BIT_BIN,
                args: Optional[list[str]] = [""]):
     stdout = run_cmd(cmd, debugee, args)
     assert out in stdout
@@ -32,7 +32,7 @@ def assert_lit(cmd: str,
 
 def assert_ends_with(cmd: str,
                      end: str,
-                     debugee: Optional[str] = SIMPLE,
+                     debugee: Optional[str] = SIMPLE_64BIT_BIN,
                      args: Optional[list[str]] = [""]):
     stdout = run_cmd(cmd, debugee, args)
     pattern = f'{re.escape(end)}$'
@@ -87,7 +87,7 @@ class TestStepCommands:
     6    }
     7
     8    int mul(int a, int b) {
-""", NESTED_FUNCTIONS)
+""", NESTED_FUNCTIONS_BIN)
 
         assert_lit('n\nn\nn', """\
    17      int sum = add(5, 6);
@@ -96,7 +96,7 @@ class TestStepCommands:
    20 ->   return 0;
    21    }
    22
-""", NESTED_FUNCTIONS)
+""", NESTED_FUNCTIONS_BIN)
 
 
 class TestRegisterCommands:
@@ -145,7 +145,7 @@ class TestMemoryCommands:
 class TestBreakpointCommands:
     def test_breakpoint_set_and_delete(self):
         assert_lit('b 0x00401146\nd 0x00401146\nc', 'Child exited with code 0',
-                   NESTED_FUNCTIONS)
+                   NESTED_FUNCTIONS_BIN)
 
     def test_breakpoint_on_function(self):
         assert_ends_with('b weird_sum\nc', """\
@@ -168,7 +168,7 @@ Hit breakpoint at address 0x000000000040113a
     5      return c;
     6    }
     7
-""", NESTED_FUNCTIONS)
+""", NESTED_FUNCTIONS_BIN)
 
     def test_breakpoint_on_file_line(self):
         assert_ends_with('break tests/assets/file1.c:4\nc', """\
@@ -179,7 +179,7 @@ Hit breakpoint at address 0x000000000040113a
     5      int acc = 0;
     6      while (i < n) {
     7        acc += i * i;
-""", MULTI_FILE)
+""", MULTI_FILE_BIN)
 
         # Only providing the filename works too,
         # even if the file doesn't exist in the
@@ -192,7 +192,7 @@ Hit breakpoint at address 0x000000000040113a
     5      int acc = 0;
     6      while (i < n) {
     7        acc += i * i;
-""", MULTI_FILE)
+""", MULTI_FILE_BIN)
 
         # Breakpoints in different files that the
         # entrypoint work, too.
@@ -205,7 +205,7 @@ Hit breakpoint at address 0x00000000004011b0
     8               + file2_compute_something(n - 2);
     9      }
    10    }
-""", MULTI_FILE)
+""", MULTI_FILE_BIN)
 
         # Breaking on an empty line falls through
         # to the next line with code on it.
@@ -217,7 +217,7 @@ Hit breakpoint at address 0x0000000000401190
     4      if (n < 2) {
     5        return n;
     6      } else {
-""", MULTI_FILE)
+""", MULTI_FILE_BIN)
 
     def test_breakpoints_delete(self):
         assert_ends_with('break file2.c:4\nc\ndelete file2.c:4\nc', """\
@@ -230,7 +230,7 @@ Hit breakpoint at address 0x000000000040119b
     6      } else {
     7        return   file2_compute_something(n - 1)
 Child exited with code 0
-""", MULTI_FILE)
+""", MULTI_FILE_BIN)
 
         assert_ends_with('break add\nc\ndelete add\nc', """\
 Hit breakpoint at address 0x000000000040113a
@@ -242,11 +242,11 @@ Hit breakpoint at address 0x000000000040113a
     6    }
     7
 Child exited with code 0
-""", NESTED_FUNCTIONS)
+""", NESTED_FUNCTIONS_BIN)
 
 
 class TestArumentPassing:
     def test_arguments_are_passed(self):
         assert_lit('c', """\
-Command line arguments: tests/assets/print_args_bin Hello World
-""", PRINT_ARGS, ["Hello", "World"])
+Command line arguments: tests/assets/print-args.bin Hello World
+""", PRINT_ARGS_BIN, ["Hello", "World"])

@@ -1,13 +1,12 @@
 #include <elf.h>
 
-#include "test.h"
+#include "test_utils.h"
 
 #include "../src/spray_elf.h"
 
 TEST(accept_valid_executable) {
-  const char *filepath = "tests/assets/linux_x86_bin";
   ElfFile elf_file = {0};
-  ElfParseResult res = parse_elf(filepath, &elf_file);
+  ElfParseResult res = parse_elf(SIMPLE_64BIT_BIN, &elf_file);
   assert_int(res, ==, ELF_PARSE_OK);
 
   assert_int(elf_file.prog_table.n_headers, ==, 13);
@@ -58,10 +57,8 @@ TEST(reject_invalid_executables) {
   // were compiled for unsupported targets (32-bit, ARM etc.)
   // All of them should be rejects.
 
-  // 32 bit binary.
-  const char *filepath = "tests/assets/linux_32_bin";
   ElfFile elf_file = {0};
-  ElfParseResult res = parse_elf(filepath, &elf_file);
+  ElfParseResult res = parse_elf(SIMPLE_32BIT_BIN, &elf_file);
   assert_int(res, ==, ELF_PARSE_DISLIKE);
   return MUNIT_OK;
 }

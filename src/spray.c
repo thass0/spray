@@ -51,11 +51,11 @@
     For example
 
     ```sh
-    spray tests/assets/print_args_bin Hello World
+    spray tests/assets/print-args.bin Hello World
     ```
 
-    will debug the binary `print_args_bin` and pass this binary the
-    additional arguments `Hello` and `World`.
+    starts a debugging session with the executable `print-args.bin`
+    this executable the additional arguments `Hello` and `World`.
 
 */
 
