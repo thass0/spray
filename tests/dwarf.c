@@ -1,6 +1,6 @@
 #include <libdwarf-0/libdwarf.h>
-#define MUNIT_ENABLE_ASSERT_ALIASES
-#include "munit.h"
+
+#include "test.h"
 
 #define UNIT_TESTS
 #include "../src/spray_dwarf.h"

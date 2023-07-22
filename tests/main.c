@@ -1,6 +1,4 @@
-// [µnit test framework](https://github.com/nemequ/munit)
-#define MUNIT_ENABLE_ASSERT_ALIASES
-#include "munit.h"
+#include "test.h"
 
 extern MunitTest parse_elf_tests[];
 extern MunitTest dwarf_tests[];

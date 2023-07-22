@@ -1,6 +1,4 @@
-#define MUNIT_ENABLE_ASSERT_ALIASES
-#include "munit.h"
-
+#include "test.h"
 #include "../src/source_files.h"
 #include "../src/breakpoints.h"
 #include "../src/debugger.h"

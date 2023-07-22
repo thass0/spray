@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -I$(DEP)/linenoise
+CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/munit
 CPPFLAGS = -MMD
 LDFLAGS = -ldwarf
 
@@ -56,6 +56,7 @@ TEST_BUILD_DIR = tests/build
 TEST_SOURCES = $(wildcard $(TEST_SOURCE_DIR)/*.c)
 TEST_OBJECTS = $(filter-out $(BUILD_DIR)/spray.o, $(OBJECTS))
 TEST_OBJECTS += $(patsubst $(TEST_SOURCE_DIR)/%.c, $(TEST_BUILD_DIR)/%.o, $(TEST_SOURCES))
+TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
@@ -70,6 +71,9 @@ $(TEST_BINARY): $(TEST_OBJECTS)
 -include $(TEST_DEPS)
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_SOURCE_DIR)/%.c | $(TEST_BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(TEST_BUILD_DIR)/munit.o: $(DEP)/munit/munit.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 $(TEST_BUILD_DIR):

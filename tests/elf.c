@@ -1,6 +1,6 @@
 #include <elf.h>
-#define MUNIT_ENABLE_ASSERT_ALIASES
-#include "munit.h"
+
+#include "test.h"
 
 #include "../src/spray_elf.h"
 
