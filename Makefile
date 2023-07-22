@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11 -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/munit
-CPPFLAGS = -MMD
+CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
+CPPFLAGS = -MMD -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/hashmap.c
 LDFLAGS = -ldwarf
 
 BUILD_DIR = build
@@ -14,11 +14,11 @@ DEPS = $(OBJECTS:%.o=%.d)
 
 README = README.md
 
-.PHONY = all clean run test debugees
+.PHONY = all bin clean run test assets
 
 # === SPRAY ===
 
-all: $(BINARY) $(README)
+all: $(BINARY)
 	@echo Build successful 👍️
 
 run: all
@@ -35,12 +35,23 @@ $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 $(BUILD_DIR)/hashmap.o: $(DEP)/hashmap.c/hashmap.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/linenoise.o: CFLAGS += -Wno-gnu-zero-variadic-macro-arguments
 $(BUILD_DIR)/linenoise.o: $(DEP)/linenoise/linenoise.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 
 $(BUILD_DIR):
 	mkdir $(BUILD_DIR)
+
+# Clang's JSON compilation database.
+compile_commands.json:
+ifeq (, $(shell which bear))
+	$(error "Bear is required to generate `compile_commands.json`. You can get it here: https://github.com/rizsotto/Bear.git.  Run `make bin` instead if you don't want to use bear.")
+else
+	make clean
+	bear -- make all
+endif
+
 
 # === README ===
 
@@ -60,8 +71,8 @@ TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
-test: CFLAGS += -I$(TEST_SOURCE_DIR)
-test: $(TEST_BINARY) $(BINARY) | debugees
+test: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
+test: $(TEST_BINARY) $(BINARY) | assets
 	./$(TEST_BINARY) $(args)
 	pytest
 
@@ -79,9 +90,9 @@ $(TEST_BUILD_DIR)/munit.o: $(DEP)/munit/munit.c
 $(TEST_BUILD_DIR):
 	mkdir $(TEST_BUILD_DIR)
 
-debugees:
+assets:
 	$(MAKE) -C tests/assets all
 
 clean:
-	$(RM) -r $(BUILD_DIR) $(TEST_BUILD_DIR)
+	$(RM) -r $(BUILD_DIR) $(TEST_BUILD_DIR) compile_commands.json
 

@@ -1,7 +1,7 @@
 #include "breakpoints.h"
 
 #include "magic.h"
-#include "../dependencies/hashmap.c/hashmap.h"
+#include "hashmap.h"
 
 #include <assert.h>
 #include <string.h>

@@ -1,6 +1,23 @@
 
 # 🐛🐛🐛 Spray: a x86_64 linux debugger 🐛🐛🐛
 
+## Installation
+
+Spray depends on [libdwarf](https://github.com/davea42/libdwarf-code/releases)
+so if you want to build Spray, you need to install libdwarf first.
+Then, to install Spray you clone this repository and run `make`. Note the you
+have to [clone all the submodules](https://stackoverflow.com/a/4438292) too.
+
+```sh
+git clone --recurse-submodules https://github.com/d4ckard/spray.git
+cd spray
+make
+```
+
+The compiled binary is named `spray` and can be found in the `build` directory.
+
+To use `spray` as a regular command you need to [add it to your `$PATH`](https://askubuntu.com/a/322773).
+
 ## Commands
 
 Available commands are:
@@ -42,7 +59,7 @@ addresses explicitly.
 ## Running the debugger
 
 Ensure that the binary you want to debug has debug information enabled,
-i.e. was compiled with the `-g` flag.
+i.e. it was compiled with the `-g` flag.
 
 The first argument you pass to `spray` is the name of the binary that
 should be debugged (the debugee). All subsequent arguments are the
@@ -51,10 +68,12 @@ arguments passed to the debugee.
 For example
 
 ```sh
-spray tests/assets/print_args_bin Hello World
+spray tests/assets/print-args.bin Hello World
 ```
 
-will debug the binary `print_args_bin` and pass this binary the
-additional arguments `Hello` and `World`.
+starts a debugging session with the executable `print-args.bin`
+this executable the additional arguments `Hello` and `World`
+(note that you need to run `make` in `tests/assets` to build
+`print-args.bin`).
 
 

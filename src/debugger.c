@@ -3,7 +3,7 @@
 #include "registers.h"
 #include "ptrace.h"
 
-#include "../dependencies/linenoise/linenoise.h"
+#include "linenoise.h"
 
 #include <stdbool.h>
 #include <string.h>

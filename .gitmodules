@@ -1,0 +1,9 @@
+[submodule "dependencies/hashmap.c"]
+	path = dependencies/hashmap.c
+	url = https://github.com/tidwall/hashmap.c.git
+[submodule "dependencies/linenoise"]
+	path = dependencies/linenoise
+	url = https://github.com/antirez/linenoise.git
+[submodule "dependencies/munit"]
+	path = dependencies/munit
+	url = https://github.com/nemequ/munit.git
