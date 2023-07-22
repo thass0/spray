@@ -1296,7 +1296,7 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
                        might change `elf_buf` even on error.
                        This function however should only modify
                        `store` if it's successful. */
-  elf_parse_result res = parse_elf(prog_name, &elf_buf);
+  ElfParseResult res = parse_elf(prog_name, &elf_buf);
   if (res != ELF_PARSE_OK) {
     fprintf(stderr, "ELF parse failed: %s\n",
       elf_parse_result_name(res));
@@ -1307,6 +1307,7 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
   Dwarf_Error error = NULL;
   Dwarf_Debug dwarf = dwarf_init(prog_name, &error);
   if (dwarf == NULL) {
+    free_elf(elf_buf);
     fprintf(stderr, "DWARF initialization failed: %s\n",
       dwarf_errmsg(error));
     dwarf_dealloc_error(NULL, error);
@@ -1356,10 +1357,11 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
   return 0;
 }
 
-void free_debugger(Debugger dbg) {
+SprayResult free_debugger(Debugger dbg) {
   free_source_files(dbg.files);
   free_breakpoints(dbg.breakpoints);
   dwarf_finish(dbg.dwarf);
+  return free_elf(dbg.elf);
 }
 
 void run_debugger(Debugger dbg) {
@@ -1391,5 +1393,8 @@ void run_debugger(Debugger dbg) {
     linenoiseHistoryAdd(line_buf);
     linenoiseFree(line_buf);
   }
-  free_debugger(dbg);
+
+  if (free_debugger(dbg) == SP_ERR) {
+    internal_error("Failed to unmap the executable from memory");
+  }
 }

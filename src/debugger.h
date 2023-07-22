@@ -36,7 +36,9 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger *store);
 void run_debugger(Debugger dbg);
 
 // Free memory allocated by the debugger.
-// Called by `run_debugger`.
-void free_debugger(Debugger dbg);
+// Called by `run_debugger`. Returns `SP_ERR`
+// if the memory mapped ELF file couldn't be
+// unmapped.
+SprayResult free_debugger(Debugger dbg);
 
 #endif  // _SPRAY_DEBUGGER_H_

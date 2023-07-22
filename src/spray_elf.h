@@ -7,8 +7,13 @@
 
 #define _GNU_SOURCE
 
+#include "magic.h"
+
+#include <stdlib.h>
 #include <stdint.h>
 #include <elf.h>
+
+typedef unsigned char byte;
 
 typedef enum {
   ELF_TYPE_NONE = ET_NONE,
@@ -16,43 +21,57 @@ typedef enum {
   ELF_TYPE_EXEC = ET_EXEC,
   ELF_TYPE_DYN  = ET_DYN,
   ELF_TYPE_CORE = ET_CORE,
-} elf_type;
+} ElfType;
 
 typedef enum {
   ELF_ENDIAN_BIG,
   ELF_ENDIAN_LITTLE,
-} elf_endianness;
+} Endianness;
+
+// ELF program header table.
+typedef struct {
+  uint32_t n_headers;
+  Elf64_Phdr *headers;
+} ElfProgTable;
+
+// ELF section header table.
+typedef struct {
+  uint32_t n_headers;
+  // Index of section name string table in `headers`.
+  uint32_t name_idx;
+  Elf64_Shdr *headers;
+} ElfSectTable;
 
 typedef struct {
-  int blah;
-} ElfProgramHeader;
+  // Privately memory mapped content of file.
+  byte *bytes;
+  size_t n_bytes;
+} ElfData;
 
 typedef struct {
-  int blah;
-} ElfSectionHeader;
-
-typedef struct {
-  elf_type type;
-  elf_endianness endianness;
-  ElfProgramHeader *program_headers;
-  uint16_t n_program_headers;
-  ElfSectionHeader *section_headers;
-  uint16_t n_section_headers;
+  ElfType type;
+  Endianness endianness;
+  ElfProgTable prog_table;
+  ElfSectTable sect_table;
+  ElfData data;
 } ElfFile;
 
 typedef enum {
   ELF_PARSE_OK,
-  ELF_PARSE_IO_ERR,  /* Error during I/O. */
+  ELF_PARSE_IO_ERR,   /* Error during I/O. */
   ELF_PARSE_INVALID,  /* Invalid file. */
-  ELF_PARSE_DISLIKE,  /* Technically a valid ELF
-                         file but it's not suppored. */
-} elf_parse_result;
+  ELF_PARSE_DISLIKE,  /* Theoretically a valid ELF file but
+                         some feature used is not suppored. */
+} ElfParseResult;
 
-const char *elf_parse_result_name(elf_parse_result res);
+const char *elf_parse_result_name(ElfParseResult res);
 
-/* Parse an ELF file and store the info in `elf_store`.
-   Returns `ELF_PARSE_OK` on success. `*elf_store` might
+/* Parse an ELF file and store the info in `elf`.
+   Returns `ELF_PARSE_OK` on success. `*elf` might
    be changed even if the result is ultimately an error. */
-elf_parse_result parse_elf(const char *filepath, ElfFile *elf_store);
+ElfParseResult parse_elf(const char *filepath, ElfFile *elf);
+
+// Returns `SP_ERR` if unmapping the ELF file didn't work.
+SprayResult free_elf(ElfFile elf);
 
 #endif  // _SPRAY_PARSE_ELF_H_
