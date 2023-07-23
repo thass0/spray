@@ -4,6 +4,7 @@
 #include "ptrace.h"
 
 #include "linenoise.h"
+#include "spray_dwarf.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -127,7 +128,7 @@ static inline void missing_source_error(x86_addr addr) {
 // PC and Address Utilities
 // ========================
 
-/* NOTE: Breakpoints use *read addresses*. */
+/* NOTE: Breakpoints use *real addresses*. */
 
 /* Remove offset of position independet executables
    from the given address to make it work with DWARF. */
@@ -980,15 +981,31 @@ SprayResult parse_lineno(const char *line_str, unsigned *line_dest) {
   }
 }
 
+SprayResult get_function_start_addr(Dwarf_Debug dbg, const ElfFile *elf,
+                                    const char *name, x86_addr *dest) {
+  assert(dbg != NULL);
+  assert(elf != NULL);
+  assert(name != NULL);
+  assert(dest != NULL);
+
+  Elf64_Sym *func = symbol_from_name(name, elf);
+  if (func == NULL || symbol_type(func) != STT_FUNC) {
+    return SP_ERR;
+  }
+
+  SprayResult res = get_effective_start_addr(dbg, symbol_start_addr(func),
+                                             symbol_end_addr(func), dest);
+  return res;
+}
+
 SprayResult parse_break_location(Debugger dbg,
                                  const char *location,
                                  x86_addr *dest
 ) {
+  assert(dest != NULL);
+
   if (check_function_name(location) == SP_OK ){
-    SprayResult res = get_function_start_addr(dbg.dwarf,
-                                              location,
-                                              dest);
-    return res;
+    return get_function_start_addr(dbg.dwarf, &dbg.elf, location, dest);
   } else if (parse_base16(location, &dest->value) == SP_OK) {
     return SP_OK;
   } else if (check_file_line(location) == SP_OK) {
@@ -1368,7 +1385,8 @@ void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
 
   x86_addr start_main = { 0 };
-  SprayResult found_start = get_function_start_addr(dbg.dwarf, "main", &start_main);
+  SprayResult found_start =
+      get_function_start_addr(dbg.dwarf, &dbg.elf, "main", &start_main);
   if (found_start == SP_OK) {
     enable_breakpoint(dbg.breakpoints, start_main);
     ExecResult exec_res = continue_execution(dbg);

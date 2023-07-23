@@ -1129,15 +1129,11 @@ SprayResult for_each_line_in_subprog(
   return SP_OK;
 }
 
-SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_addr *start_dest) {
+SprayResult get_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
+                                     x86_addr function_end,
+                                     x86_addr *function_start) {
   assert(dbg != NULL);
-  assert(fn_name != NULL);
-  assert(start_dest != NULL);
-
-  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
-  if (!attr.is_set) {
-    return SP_ERR;
-  }
+  assert(function_start != NULL);
 
   char **filepaths = sd_get_filepaths(dbg);
   for (size_t j = 0; filepaths[j] != NULL; j++) {
@@ -1148,9 +1144,8 @@ SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_ad
       continue;
     } else { 
       unsigned first_line = 0;
-      SprayResult res = get_line_table_index_of_pc(line_table,
-                                                   attr.lowpc,
-                                                   &first_line);
+      SprayResult res =
+          get_line_table_index_of_pc(line_table, prologue_start, &first_line);
       if (res == SP_ERR) {
         sd_free_line_table(&line_table);
         continue;
@@ -1162,14 +1157,12 @@ SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_ad
 
         /* Either find the prologue end line or pick the first
            line after the line of the low PC as the start. */
-        for (
-          unsigned i = first_line;
-          i < line_table.n_lines &&
-          line_table.lines[i].addr.value <= attr.highpc.value;
-          i++
-        ) {
+        for (unsigned i = first_line;
+             i < line_table.n_lines &&
+             line_table.lines[i].addr.value <= function_end.value;
+             i++) {
           if (line_table.lines[i].prologue_end) {
-            *start_dest = line_table.lines[i].addr;
+            *function_start = line_table.lines[i].addr;
             sd_free_line_table(&line_table);
             return SP_OK;
           }
@@ -1178,9 +1171,9 @@ SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_ad
         /* None of the line entries had `prologue_end` set. */
 
         if (first_line + 1 < line_table.n_lines) {
-          *start_dest = line_table.lines[first_line + 1].addr;
+          *function_start = line_table.lines[first_line + 1].addr;
         } else {
-          *start_dest = line_table.lines[first_line].addr;
+          *function_start = line_table.lines[first_line].addr;
         }
         return SP_OK;
       }

@@ -165,13 +165,26 @@ TEST(search_returns_the_correct_result) {
   return MUNIT_OK;
 }
 
-TEST(get_function_start_works) {
+SprayResult test_get_effective_start_addr(Dwarf_Debug dbg, const char *name,
+                                          x86_addr *dest) {
+  x86_addr low_pc = {0};
+  if (!get_at_low_pc(dbg, name, &low_pc)) {
+    return SP_ERR;
+  }
+  x86_addr high_pc = {0};
+  if (!get_at_high_pc(dbg, name, &high_pc)) {
+    return SP_ERR;
+  }
+  return get_effective_start_addr(dbg, low_pc, high_pc, dest);
+}
+
+TEST(get_effective_function_start_works) {
   Dwarf_Error error = NULL;
   Dwarf_Debug dbg = dwarf_init(SIMPLE_64BIT_BIN, &error);
   assert_ptr_not_null(dbg);
   
   x86_addr main_start = { 0 };
-  SprayResult res = get_function_start_addr(dbg, "main", &main_start);
+  SprayResult res = test_get_effective_start_addr(dbg, "main", &main_start);
   assert_int(res, ==, SP_OK);
   LineEntry line_entry = get_line_entry_from_pc(dbg, main_start);
   assert_true(line_entry.is_ok);
@@ -180,7 +193,7 @@ TEST(get_function_start_works) {
   
   /* `weird_sum` has a multi-line function declaration. */
   x86_addr func_start = { 0 };
-  res = get_function_start_addr(dbg, "weird_sum", &func_start);
+  res = test_get_effective_start_addr(dbg, "weird_sum", &func_start);
   assert_int(res, ==, SP_OK);
   line_entry = get_line_entry_from_pc(dbg, func_start);
   assert_true(line_entry.is_ok);
@@ -231,14 +244,12 @@ TEST(get_line_entry_at_works) {
 }
 
 MunitTest dwarf_tests[] = {
-  REG_TEST(get_function_from_pc_works),  
-  REG_TEST(get_line_entry_from_pc_works),
-  REG_TEST(get_low_and_high_pc_works),
-  REG_TEST(iterating_lines_works),
-  REG_TEST(search_returns_the_correct_result),
-  REG_TEST(get_function_start_works),
-  REG_TEST(get_filepath_from_pc_works),
-  REG_TEST(get_line_entry_at_works),
-  { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
-};
-
+    REG_TEST(get_function_from_pc_works),
+    REG_TEST(get_line_entry_from_pc_works),
+    REG_TEST(get_low_and_high_pc_works),
+    REG_TEST(iterating_lines_works),
+    REG_TEST(search_returns_the_correct_result),
+    REG_TEST(get_effective_function_start_works),
+    REG_TEST(get_filepath_from_pc_works),
+    REG_TEST(get_line_entry_at_works),
+    {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}};

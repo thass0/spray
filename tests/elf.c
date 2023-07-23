@@ -52,6 +52,31 @@ TEST(accept_valid_executable) {
   return MUNIT_OK;
 }
 
+TEST(read_elf_symbol_table_entries) {
+  ElfFile elf_file = {0};
+  ElfParseResult res = parse_elf(MULTI_FILE_BIN, &elf_file);
+  assert_int(res, ==, ELF_PARSE_OK);
+
+  Elf64_Sym *main = symbol_from_name("main", &elf_file);
+  assert_ptr_not_null(main);
+  assert_string_equal(symbol_name(main, &elf_file), "main");
+  assert_int(symbol_binding(main), ==, STB_GLOBAL);
+  assert_int(symbol_type(main), ==, STT_FUNC);
+  assert_int(symbol_visibility(main), ==, STV_DEFAULT);
+  assert_int(symbol_value(main), ==, 0x401160);
+
+  Elf64_Sym *func = symbol_from_name("file2_compute_something", &elf_file);
+  assert_ptr_not_null(func);
+  assert_string_equal(symbol_name(func, &elf_file), "file2_compute_something");
+  assert_int(symbol_binding(func), ==, STB_GLOBAL);
+  assert_int(symbol_type(func), ==, STT_FUNC);
+  assert_int(symbol_visibility(func), ==, STV_DEFAULT);
+  assert_int(symbol_value(func), ==, 0x401190);
+
+  free_elf(elf_file);
+  return MUNIT_OK;
+}
+
 TEST(reject_invalid_executables) {
   // The following are a bunch of executables which
   // were compiled for unsupported targets (32-bit, ARM etc.)
@@ -64,7 +89,7 @@ TEST(reject_invalid_executables) {
 }
 
 MunitTest parse_elf_tests[] = {
-  REG_TEST(accept_valid_executable),
-  REG_TEST(reject_invalid_executables),
-  { NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }  
-};
+    REG_TEST(accept_valid_executable),
+    REG_TEST(reject_invalid_executables),
+    REG_TEST(read_elf_symbol_table_entries),
+    {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}};

@@ -57,8 +57,14 @@ SprayResult for_each_line_in_subprog(
   void *const init_data
 );
 
-/* Get the address of the first line in the given function. */
-SprayResult get_function_start_addr(Dwarf_Debug dbg, const char *fn_name, x86_addr *start_dest);
+/* Figure out where the function prologue of the function starting
+   at `low_pc` ends and return this address. Used for breakpoints on
+   functions to break only after the prologue.
+   `prologue_start` is the same address as a subprogram's low PC
+   and `function_end` is the same address as the high PC. */
+SprayResult get_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
+                                     x86_addr function_end,
+                                     x86_addr *function_start);
 
 #ifdef UNIT_TESTS
 /* Expose some of the internal interfaces. */

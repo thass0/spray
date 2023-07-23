@@ -2,37 +2,33 @@
 
 #include "magic.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
 #include <assert.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <string.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 enum {
   CHECK_SECTION_HEADER=0xffff,
 };
 
-
 // Validates the content of the given `Elf64_Ehdr` and
 // parses all values of interest. Some values (`n_prog_hdrs`,
-// `n_sect_hdrs` and `sect_name_table_idx`) might be too
+// `n_sect_hdrs` and `shstrtab_idx`) might be too
 // large to be stored in the `Elf64_Ehdr`. Then they are set to
 // `CHECK_SECTION_HEADER` to signal that they should be read from
 // the inital section header.
-ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src,
-                                ElfFile *elf_dest,
+ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src, ElfFile *elf_dest,
                                 uint64_t *prog_table_off,
-                                uint64_t *sect_table_off,
-                                uint32_t *n_prog_hdrs,
-                                uint32_t *n_sect_hdrs,
-                                uint32_t *sect_name_table_idx
-) {
+                                uint64_t *sect_table_off, uint32_t *n_prog_hdrs,
+                                uint32_t *n_sect_hdrs, uint32_t *shstrtab_idx) {
   assert(elf_dest != NULL);
   assert(prog_table_off != NULL);
   assert(sect_table_off != NULL);
   assert(n_prog_hdrs != NULL);
   assert(n_sect_hdrs != NULL);
-  assert(sect_name_table_idx != NULL);
+  assert(shstrtab_idx != NULL);
 
   // Is the magic number invalid?
   if  ((elf_src->e_ident[EI_MAG0] != ELFMAG0)  // 0x7f
@@ -148,9 +144,9 @@ ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src,
   // Is the index of the section name string table outside
   // the representable range?
   if (elf_src->e_shstrndx == SHN_XINDEX) {
-    *sect_name_table_idx = CHECK_SECTION_HEADER;
+    *shstrtab_idx = CHECK_SECTION_HEADER;
   } else {
-    *sect_name_table_idx = elf_src->e_shstrndx;
+    *shstrtab_idx = elf_src->e_shstrndx;
   }
 
   return ELF_PARSE_OK;
@@ -161,14 +157,12 @@ ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src,
 // is set to `CHECK_SECTION_HEADER`, then it will be set to the
 // value in this header.
 void parse_init_section(const Elf64_Shdr *init_section_header,
-                        uint32_t *n_prog_hdrs,
-                        uint32_t *n_sect_hdrs,
-                        uint32_t *sect_name_table_idx
-) {
+                        uint32_t *n_prog_hdrs, uint32_t *n_sect_hdrs,
+                        uint32_t *shstrtab_idx) {
   assert(init_section_header != NULL);
   assert(n_prog_hdrs != NULL);
   assert(n_sect_hdrs != NULL);
-  assert(sect_name_table_idx != NULL);
+  assert(shstrtab_idx != NULL);
 
   if (*n_prog_hdrs == CHECK_SECTION_HEADER) {
     *n_prog_hdrs = init_section_header->sh_info;
@@ -178,8 +172,53 @@ void parse_init_section(const Elf64_Shdr *init_section_header,
     *n_sect_hdrs = init_section_header->sh_size;
   }
 
-  if (*sect_name_table_idx == CHECK_SECTION_HEADER) {
-    *sect_name_table_idx = init_section_header->sh_link;
+  if (*shstrtab_idx == CHECK_SECTION_HEADER) {
+    *shstrtab_idx = init_section_header->sh_link;
+  }
+}
+
+// Helper to get bit mask value more clearly.
+bool is_set(int value, int mask) { return (value & mask) != 0; }
+bool is_unset(int value, int mask) { return (value & mask) == 0; }
+
+bool is_valid_symtab(Elf64_Shdr *shdr) {
+  return shdr->sh_type == SHT_SYMTAB &&
+         // `SHF_ALLOC` is always set for .dynsym.
+         is_unset(shdr->sh_flags, SHF_ALLOC) &&
+         shdr->sh_entsize == sizeof(Elf64_Sym);
+}
+
+bool is_valid_strtab(Elf64_Shdr *shdr) {
+  return shdr->sh_type == SHT_STRTAB && is_unset(shdr->sh_flags, SHF_ALLOC);
+}
+
+SprayResult parse_table_indices(Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
+                                uint32_t shstrtab_idx, uint32_t *symtab_idx,
+                                uint32_t *strtab_idx) {
+  assert(sect_headers != NULL);
+  assert(symtab_idx != NULL);
+  assert(strtab_idx != NULL);
+
+  // NOTE: To check if a given index has been set already,
+  // we can check if it is zero. This relies on the fact
+  // that the section header at index zero is reserved and
+  // cannot be used for any of the entries we are looking for.
+
+  Elf64_Shdr *cur_hdr = NULL;
+  for (uint32_t i = 0; i < n_sect_hdrs; i++) {
+    cur_hdr = &sect_headers[i];
+    if (is_valid_symtab(cur_hdr) && *symtab_idx == 0) {
+      *symtab_idx = i;
+    } else if (is_valid_strtab(cur_hdr) && i != shstrtab_idx &&
+               *strtab_idx == 0) {
+      *strtab_idx = i;
+    }
+  }
+
+  if (*symtab_idx != 0 && *strtab_idx != 0) {
+    return SP_OK;
+  } else {
+    return SP_ERR;
   }
 }
 
@@ -209,6 +248,14 @@ static inline Elf64_Phdr *phdr_at(byte *bytes, size_t off) {
 
 static inline Elf64_Shdr *shdr_at(byte *bytes, size_t off) {
   return (Elf64_Shdr *) (bytes + off);
+}
+
+static inline Elf64_Sym *symtab_at(byte *bytes, size_t off) {
+  return (Elf64_Sym *)(bytes + off);
+}
+
+static inline char *strtab_at(byte *bytes, size_t off) {
+  return (char *)(bytes + off);
 }
 
 ElfParseResult parse_elf(const char *filepath, ElfFile *elf_store) {
@@ -252,19 +299,15 @@ ElfParseResult parse_elf(const char *filepath, ElfFile *elf_store) {
   uint64_t sect_table_off = 0;
   uint32_t n_sect_hdrs = 0;
 
-  uint32_t sect_name_table_idx = 0;
+  uint32_t shstrtab_idx = 0;
 
-  ElfParseResult elf_header_res = parse_elf_header(elf_header,
-                                                   elf_store,
-                                                   &prog_table_off,
-                                                   &sect_table_off,
-                                                   &n_prog_hdrs,
-                                                   &n_sect_hdrs,
-                                                   &sect_name_table_idx);
+  ElfParseResult elf_header_res =
+      parse_elf_header(elf_header, elf_store, &prog_table_off, &sect_table_off,
+                       &n_prog_hdrs, &n_sect_hdrs, &shstrtab_idx);
 
   if (elf_header_res != ELF_PARSE_OK) {
     if (munmap(bytes, n_bytes) == -1) {
-      return  ELF_PARSE_IO_ERR;
+      return ELF_PARSE_IO_ERR;
     } else {
       return elf_header_res;
     }
@@ -273,15 +316,28 @@ ElfParseResult parse_elf(const char *filepath, ElfFile *elf_store) {
   Elf64_Shdr *sect_headers = shdr_at(bytes, sect_table_off);
 
   // Fill-in missing values if they weren't found in the ELF header.
-  parse_init_section(sect_headers,
-                     &n_prog_hdrs,
-                     &n_sect_hdrs,
-                     &sect_name_table_idx);
+  parse_init_section(sect_headers, &n_prog_hdrs, &n_sect_hdrs, &shstrtab_idx);
 
-  elf_store->sect_table = (ElfSectTable) {
-    .n_headers=n_sect_hdrs,
-    .name_idx=sect_name_table_idx,
-    .headers=sect_headers,
+  // Find the section headers for the symbol table and the string table.
+  uint32_t symtab_idx = 0;
+  uint32_t strtab_idx = 0;
+  SprayResult tables_res = parse_table_indices(
+      sect_headers, n_sect_hdrs, shstrtab_idx, &symtab_idx, &strtab_idx);
+
+  if (tables_res == SP_ERR) {
+    if (munmap(bytes, n_bytes) == -1) {
+      return ELF_PARSE_IO_ERR;
+    } else {
+      return ELF_PARSE_INVALID;
+    }
+  }
+
+  elf_store->sect_table = (ElfSectTable){
+      .n_headers = n_sect_hdrs,
+      .symtab_idx = symtab_idx,
+      .shstrtab_idx = shstrtab_idx,
+      .strtab_idx = strtab_idx,
+      .headers = sect_headers,
   };
 
   Elf64_Phdr *prog_headers = phdr_at(bytes, prog_table_off);
@@ -316,4 +372,60 @@ SprayResult free_elf(ElfFile elf) {
   } else {
     return SP_OK;
   }
+}
+
+Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf) {
+  assert(name != NULL);
+  assert(elf != NULL);
+
+  Elf64_Shdr *symtab_hdr = &elf->sect_table.headers[elf->sect_table.symtab_idx];
+  Elf64_Sym *symtab = symtab_at(elf->data.bytes, symtab_hdr->sh_offset);
+
+  uint64_t n_symbols = symtab_hdr->sh_size / symtab_hdr->sh_entsize;
+
+  for (uint64_t i = 0; i < n_symbols; i++) {
+    if (strcmp(symbol_name(&symtab[i], elf), name) == 0) {
+      return &symtab[i];
+    }
+  }
+
+  return NULL;
+}
+
+int symbol_binding(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return ELF64_ST_BIND(sym->st_info);
+}
+int symbol_type(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return ELF64_ST_TYPE(sym->st_info);
+}
+int symbol_visibility(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return sym->st_other;
+}
+uint64_t symbol_value(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return sym->st_value;
+}
+
+x86_addr symbol_start_addr(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return (x86_addr){sym->st_value};
+}
+
+x86_addr symbol_end_addr(Elf64_Sym *sym) {
+  assert(sym != NULL);
+  return (x86_addr){// The symbol's size is the offset from the
+                    // start address if the symbol is a function.
+                    sym->st_value + sym->st_size};
+}
+
+char *symbol_name(Elf64_Sym *sym, const ElfFile *elf) {
+  assert(sym != NULL);
+  assert(elf != NULL);
+
+  Elf64_Shdr *strtab_hdr = &elf->sect_table.headers[elf->sect_table.strtab_idx];
+  char *strtab = strtab_at(elf->data.bytes, strtab_hdr->sh_offset);
+  return &strtab[sym->st_name];
 }

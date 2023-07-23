@@ -73,3 +73,5 @@ ptrace
 thasso
 Idependencies
 ifeq
+dynsym
+shstrtab
