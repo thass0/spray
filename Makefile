@@ -14,7 +14,7 @@ DEPS = $(OBJECTS:%.o=%.d)
 
 README = README.md
 
-.PHONY = all bin clean run test assets
+.PHONY = all bin clean run test unit integration assets
 
 # === SPRAY ===
 
@@ -71,9 +71,13 @@ TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
-test: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
-test: $(TEST_BINARY) $(BINARY) | assets
+test: unit integration
+
+unit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
+unit: $(TEST_BINARY) $(BINARY) assets
 	./$(TEST_BINARY) $(args)
+
+integration: $(BINARY) assets
 	pytest
 
 $(TEST_BINARY): $(TEST_OBJECTS)
@@ -95,4 +99,5 @@ assets:
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(TEST_BUILD_DIR) compile_commands.json
+	$(MAKE) -C tests/assets clean
 
