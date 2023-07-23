@@ -4,5 +4,3 @@ build/
 compile_commands.json
 **/__pycache__/
 **/*.bin
-.cspell.json
-.project-words.txt
