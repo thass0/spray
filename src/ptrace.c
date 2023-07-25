@@ -87,3 +87,11 @@ SprayResult pt_get_signal_info(pid_t pid, siginfo_t *siginfo) {
     return SP_OK;
   }
 }
+
+void print_addr(x86_addr addr) {
+  printf(HEX_FORMAT, addr.value);
+}
+
+void print_word(x86_word word) {
+  printf(HEX_FORMAT, word.value);
+}

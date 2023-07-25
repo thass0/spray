@@ -7,6 +7,8 @@ import random
 DEBUGGER = 'build/spray'
 SIMPLE_64BIT_BIN = 'tests/assets/64bit-linux-simple.bin'
 NESTED_FUNCTIONS_BIN = 'tests/assets/nested-functions.bin'
+FRAME_POINTER_BIN = 'tests/assets/frame-pointer-nested-functions.bin'
+NO_FRAME_POINTER_BIN = 'tests/assets/no-frame-pointer-nested-functions.bin'
 MULTI_FILE_BIN = 'tests/assets/multi-file.bin'
 PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
 
@@ -90,9 +92,9 @@ class TestStepCommands:
 """, NESTED_FUNCTIONS_BIN)
 
         assert_lit('n\nn\nn', """\
-   17      int sum = add(5, 6);
-   18      int product = mul(sum, 3);
-   19      printf("Sum: %d; Product: %d\\n", sum, product);
+   17      int product = mul(9, 3);
+   18      int sum = add(product, 6);
+   19      printf("Product: %d; Sum: %d\\n", product, sum);
    20 ->   return 0;
    21    }
    22
@@ -250,3 +252,27 @@ class TestArumentPassing:
         assert_lit('c', """\
 Command line arguments: tests/assets/print-args.bin Hello World
 """, PRINT_ARGS_BIN, ["Hello", "World"])
+
+
+class TestBacktrace:
+    def test_basic_backtrace(self):
+        assert_ends_with('b add\nc\nbt', """\
+How did we even get here? (backtrace)
+  0x0000000000401065 _start
+  0x00007ffff7df6c0b <?>
+  0x00007ffff7df6b4a <?>
+  0x00000000004011be main:17
+  0x0000000000401183 mul:11
+  0x000000000040113a add:4
+""", FRAME_POINTER_BIN)
+
+        assert_ends_with('b add\nc\nbt', """\
+WARN: it seems like this executable doesn't maintain a frame pointer.
+      This results in incorrect or incomplete backtraces.
+HINT: Try to compile again with `-fno-omit-frame-pointer`.
+
+How did we even get here? (backtrace)
+  0x0000000000401065 _start
+  0x00007ffff7df6c0b <?>
+  0x0000000000401138 add:4
+""", NO_FRAME_POINTER_BIN)

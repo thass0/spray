@@ -1,7 +1,8 @@
 #include "debugger.h"
+#include "backtrace.h"
 #include "magic.h"
-#include "registers.h"
 #include "ptrace.h"
+#include "registers.h"
 
 #include "linenoise.h"
 #include "spray_dwarf.h"
@@ -24,16 +25,6 @@
 // ==============
 // Error Messages
 // ==============
-
-#define HEX_FORMAT "0x%016lx"
-
-static inline void print_addr(x86_addr addr) {
-  printf(HEX_FORMAT, addr.value);
-}
-
-static inline void print_word(x86_word word) {
-  printf(HEX_FORMAT, word.value);
-}
 
 /* NOTE: Command error messages are stored
  * in the following enum and array because
@@ -876,6 +867,16 @@ void exec_command_step_over(Debugger dbg) {
   print_exec_res(dbg, exec_res);
 }
 
+void exec_command_backtrace(Debugger dbg) {
+  CallFrame *backtrace =
+      init_backtrace(dbg.dwarf, &dbg.elf, dbg.pid, get_pc(dbg.pid));
+  if (backtrace == NULL) {
+    internal_error("Failed to determine backtrace");
+  } else {
+    print_backtrace(backtrace);
+  }
+  free_backtrace(backtrace);
+}
 
 // ===============
 // Command Parsing
@@ -988,7 +989,7 @@ SprayResult get_function_start_addr(Dwarf_Debug dbg, const ElfFile *elf,
   assert(name != NULL);
   assert(dest != NULL);
 
-  Elf64_Sym *func = symbol_from_name(name, elf);
+  const Elf64_Sym *func = symbol_from_name(name, elf);
   if (func == NULL || symbol_type(func) != STT_FUNC) {
     return SP_ERR;
   }
@@ -1222,6 +1223,8 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
     } else if (is_command(cmd, "n", "next")) {
       if (!line_is_parsed(tokens, i)) break;
       exec_command_step_over(*dbg);
+    } else if (is_command(cmd, "bt", "backtrace")) {
+      exec_command_backtrace(*dbg);
     } else {
       unknown_cmd_error();
     }

@@ -10,6 +10,7 @@
 #ifndef _SPRAY_PTRACE_H_
 #define _SPRAY_PTRACE_H_
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <signal.h>
@@ -22,6 +23,12 @@
 
 typedef struct { uint64_t value; } x86_word; 
 typedef struct { uint64_t value; } x86_addr;
+
+#define HEX_FORMAT "0x%016lx"
+
+void print_addr(x86_addr addr);
+
+void print_word(x86_word word);
 
 SprayResult pt_read_memory(pid_t pid, x86_addr addr, x86_word *store);
 SprayResult pt_write_memory(pid_t pid, x86_addr addr, x86_word word);

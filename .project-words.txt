@@ -75,3 +75,5 @@ Idependencies
 ifeq
 dynsym
 shstrtab
+fomit
+insts

@@ -82,24 +82,28 @@ SprayResult free_elf(ElfFile elf);
 
 // Get the symbol table entry for the symbol name.
 // Returns `NULL` in no such symbol was found.
-Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf);
+const Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf);
+
+// Get the symbol table entry for the symbol that
+// belongs to the given instruction address.
+const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf);
 
 // Access different fields in a symbol. The way information
 // is stored in the different members of a symbol is a bit
 // weird so these wrappers make the code more readable.
 
-int symbol_binding(Elf64_Sym *sym);
-int symbol_type(Elf64_Sym *sym);
-int symbol_visibility(Elf64_Sym *sym);
-uint64_t symbol_value(Elf64_Sym *sym);
+int symbol_binding(const Elf64_Sym *sym);
+int symbol_type(const Elf64_Sym *sym);
+int symbol_visibility(const Elf64_Sym *sym);
+uint64_t symbol_value(const Elf64_Sym *sym);
 
 // Get start (low PC) and end (high PC) address of function symbol.
 // Return values are meaningless in this context if the symbol is
 // not a function.
-x86_addr symbol_start_addr(Elf64_Sym *sym);
-x86_addr symbol_end_addr(Elf64_Sym *sym);
+x86_addr symbol_start_addr(const Elf64_Sym *sym);
+x86_addr symbol_end_addr(const Elf64_Sym *sym);
 
 // Looks up the symbol name in the string table.
-char *symbol_name(Elf64_Sym *sym, const ElfFile *elf);
+const char *symbol_name(const Elf64_Sym *sym, const ElfFile *elf);
 
 #endif  // _SPRAY_PARSE_ELF_H_

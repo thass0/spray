@@ -18,7 +18,7 @@ README = README.md
 
 # === SPRAY ===
 
-all: $(BINARY)
+all: $(BINARY) assets
 	@echo Build successful 👍️
 
 run: all
