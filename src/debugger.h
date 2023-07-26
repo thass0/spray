@@ -9,18 +9,16 @@
 #include <stdlib.h>
 
 #include "breakpoints.h"
-#include "spray_elf.h"
-#include "spray_dwarf.h"
-#include "source_files.h"
 #include "history.h"
+#include "info.h"
+#include "source_files.h"
 
 typedef struct {
   const char *prog_name;     /* Tracee program name. */
   pid_t pid;                 /* Tracee pid. */
   Breakpoints *breakpoints;  /* Breakpoints. */
-  ElfFile elf;               /* Tracee ELF information. */
+  DebugInfo *info;           /* Debug information about the tracee. */
   x86_addr load_address;     /* Load address. Set for PIEs, 0 otherwise. */
-  Dwarf_Debug dwarf;         /* Libdwarf debug information. */
   SourceFiles *files;        /* Cache of program source files read. */
   History history;           /* Command history of recent commands. */
 } Debugger;

@@ -430,7 +430,8 @@ void sd_free_line_table(LineTable *line_table) {
   *line_table = (LineTable) { 0 };
 }
 
-int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_Error *error) {
+int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry *line_entry,
+                                  Dwarf_Error *error) {
   assert(line != NULL);
   assert(error != NULL);
 
@@ -485,6 +486,8 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry* line_entry, Dwarf_
   line_entry->is_ok = true;
   line_entry->new_statement = dwarf_bool_to_bool(new_statement);
   line_entry->prologue_end = dwarf_bool_to_bool(prologue_end);
+  line_entry->is_exact =
+      false; // `false` by default. Might be set by `get_line_entry_from_pc`.
   line_entry->ln = lineno;
   line_entry->cl = colno;
   line_entry->addr = (x86_addr) { addr };
@@ -868,8 +871,6 @@ SprayResult get_line_table_index_of_line(const LineTable line_table,
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
 
-  Dwarf_Addr pc_addr = pc.value;
-
   char *filepath = get_filepath_from_pc(dbg, pc);  
   if (filepath == NULL) {
     return (LineEntry) { .is_ok=false };
@@ -882,8 +883,9 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 
   for (unsigned i = 0; i < line_table.n_lines; i++) {
-    if (line_table.lines[i].addr.value == pc_addr) {
+    if (line_table.lines[i].addr.value == pc.value) {
       LineEntry ret = line_table.lines[i];
+      ret.is_exact = true;
       sd_free_line_table(&line_table);
       return ret;
     }
@@ -896,20 +898,13 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     sd_free_line_table(&line_table);
     return (LineEntry) { .is_ok=false };
   } else {
-    LineEntry ret =  line_table.lines[pc_line_idx];
+    LineEntry ret = line_table.lines[pc_line_idx];
     sd_free_line_table(&line_table);
+    // Does the line entry match the given PC exactly?
+    if (ret.is_ok && ret.addr.value == pc.value) {
+      ret.is_exact = true;
+    }
     return ret;
-  }
-}
-
-LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc) {
-  assert(dbg != NULL);
-
-  LineEntry line_entry = get_line_entry_from_pc(dbg, pc);
-  if (line_entry.is_ok && line_entry.addr.value == pc.value) {
-    return line_entry;    
-  } else {
-    return (LineEntry) { .is_ok=false };
   }
 }
 

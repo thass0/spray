@@ -1,4 +1,4 @@
-/* Opinionated wrapper around libdwarf. */
+/* Spray's wrapper around libdwarf. */
 
 #pragma once
 
@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 /* Initialized debug info. Returns NULL on error. */
-Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error);
+Dwarf_Debug dwarf_init(const char *filepath, Dwarf_Error *error);
 
 /* Get the name of the function which the given PC is part of.
    The string that's returned must be free'd by the caller. */
@@ -25,9 +25,13 @@ typedef struct {
   bool is_ok;
   bool new_statement;
   bool prologue_end;
+  // Set to true if the PC used to retrieve the
+  // line entry was exactly equal to `addr`.
+  bool is_exact;
   unsigned ln;
   unsigned cl;
   x86_addr addr;
+  // Don't free this string. It's owned by the `Dwarf_Debug` instance.
   char *filepath;
 } LineEntry;
 
@@ -35,10 +39,6 @@ typedef struct {
    line entry contains the address of PC. A
    line entry with `is_ok = false` is returned on error. */
 LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
-/* Returns the line entry for th PC only if
-   the line entry has exactly the same address
-   as PC. */
-LineEntry get_line_entry_from_pc_exact(Dwarf_Debug dbg, x86_addr pc);
 /* The the line entry of the given position. */
 LineEntry get_line_entry_at(Dwarf_Debug dbg, const char *filepath, unsigned lineno);
 

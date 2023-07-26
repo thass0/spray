@@ -5,7 +5,6 @@
 #include "registers.h"
 
 #include "linenoise.h"
-#include "spray_dwarf.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -165,16 +164,17 @@ void set_pc(pid_t pid, x86_addr pc) {
 
 void print_current_source(Debugger dbg) {
   x86_addr pc = get_dwarf_pc(dbg);
-  LineEntry line_entry = get_line_entry_from_pc(dbg.dwarf, pc);
-  if (line_entry.is_ok) {
-    SprayResult res = print_source(
-      dbg.files,
-      line_entry.filepath,
-      line_entry.ln,
-      3);
+  const DebugSymbol *sym = sym_by_addr(pc, dbg.info);
+
+  const Position *pos = sym_position(sym, dbg.info);
+  const char *filepath = sym_filepath(sym, dbg.info);
+
+  if (pos != NULL && filepath != NULL) {
+    SprayResult res = print_source(dbg.files, filepath, pos->line, 3);
     if (res == SP_ERR) {
       internal_error("Failed to read source file %s; "
-        "can't print source", line_entry.filepath);
+                     "can't print source",
+                     filepath);
     }
   } else {
     missing_source_error(pc);
@@ -193,7 +193,7 @@ typedef enum {
   EXEC_CONT_DEAD,
   EXEC_INVALID_WAIT_STATUS,
   EXEC_FUNCTION_NOT_FOUND,
-  EXEC_FILEPATH_NOT_FOUND,
+  EXEC_SET_BREAKPOINTS_FAILED,
   EXEC_PC_LINE_NOT_FOUND,
   EXEC_STEP,
 } ExecErrCode;
@@ -273,10 +273,10 @@ static inline ExecResult exec_function_not_found(void) {
     .code.err=EXEC_FUNCTION_NOT_FOUND,
   };
 }
-static inline ExecResult exec_filepath_not_found(void) {
-  return (ExecResult) {
-    .type=SP_ERR,
-    .code.err=EXEC_FILEPATH_NOT_FOUND,
+static inline ExecResult exec_set_breakpoints_failed(void) {
+  return (ExecResult){
+      .type = SP_ERR,
+      .code.err = EXEC_SET_BREAKPOINTS_FAILED,
   };
 }
 static inline ExecResult exec_pc_line_not_found(void) {
@@ -364,8 +364,8 @@ void print_exec_err(ExecResult *exec_res) {
     case EXEC_FUNCTION_NOT_FOUND:
       internal_error("Failed to find current function");
       break;
-    case EXEC_FILEPATH_NOT_FOUND:
-      internal_error("Failed to find path to current file");
+    case EXEC_SET_BREAKPOINTS_FAILED:
+      internal_error("Failed to set breakpoints in current scope");
       break;
     case EXEC_PC_LINE_NOT_FOUND:
       internal_error("Failed to find current line");
@@ -554,23 +554,27 @@ ExecResult step_out(Debugger dbg) {
 
 /* Single step instructions until the line number has changed. */
 ExecResult single_step_line(Debugger dbg) {
-  unsigned init_lineno = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg)).ln;
+  const Position *pos = addr_position(get_dwarf_pc(dbg), dbg.info);
+  if (pos == NULL) {
+    return exec_pc_line_not_found();
+  }
+
+  uint32_t init_line = pos->line;
 
   unsigned n_instruction_steps = 0;
-  LineEntry next_line = get_line_entry_from_pc_exact(dbg.dwarf, get_dwarf_pc(dbg));
   /* Single step instructions until we find a valid line
      with a different line number than before. */
-  while (!next_line.is_ok || next_line.ln == init_lineno) {
+  while (!pos->is_exact || pos->line == init_line) {
     ExecResult exec_res = single_step_instruction(dbg);
     if (is_exec_err(&exec_res)) {
       return exec_res;
     }
 
-    next_line = get_line_entry_from_pc_exact(dbg.dwarf, get_dwarf_pc(dbg));
     n_instruction_steps ++;
 
-    /* Did we reach the maximum number of steps? */
-    if (n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
+    // Should (or can) we continue searching?
+    pos = addr_position(get_dwarf_pc(dbg), dbg.info);
+    if (pos == NULL || n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
       return exec_step_target_not_found();
     }
   }
@@ -578,93 +582,25 @@ ExecResult single_step_line(Debugger dbg) {
   return exec_ok();
 }
 
-typedef struct {
-  size_t to_del_alloc;
-  size_t to_del_idx;
-  x86_addr *to_del_breakpoints;
-  x86_addr load_address;
-  unsigned orig_lineno;
-  Breakpoints *breakpoints;
-} CallbackData;
-
-enum { TO_DEL_ALLOC_SIZE=8 };
-
-SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line, void *const void_data) {
-  assert(line != NULL);
-  assert(void_data != NULL);
-
-  CallbackData *data = (CallbackData *) void_data;
-
-  x86_addr real_line_addr = dwarf_to_real(data->load_address,
-                                          line->addr);
-
-  if (
-    data->orig_lineno != line->ln &&
-    !lookup_breakpoint(data->breakpoints, real_line_addr)
-  ) {
-    enable_breakpoint(data->breakpoints, real_line_addr);
-
-    if (data->to_del_idx >= data->to_del_alloc) {
-      data->to_del_alloc += TO_DEL_ALLOC_SIZE;
-      data->to_del_breakpoints = (x86_addr *)
-        realloc (data->to_del_breakpoints, sizeof(x86_addr) * data->to_del_alloc);
-      assert(data->to_del_breakpoints != NULL);
-    }
-    data->to_del_breakpoints[data->to_del_idx++] = real_line_addr;
-  }
-
-  return SP_OK;
-}
-
 /* Step to the next line. Don't step into functions. */
 ExecResult step_over(Debugger dbg) {
-  /* This functions sets breakpoints all over the current DWARf
-     subprogram so that we step no matter what the line we step
-     over does. */
+  /* This functions sets breakpoints all over the current DWARF
+     subprogram except for the next line so that we stop right
+     after executing the code in it. */
 
-  LineEntry current_line_entry = get_line_entry_from_pc(dbg.dwarf, get_dwarf_pc(dbg));
-  if (!current_line_entry.is_ok) {
-    return exec_pc_line_not_found();
-  }
-
-  unsigned current_lineno = current_line_entry.ln;
-
-  x86_addr pc = get_dwarf_pc(dbg);
-  char *fn_name = get_function_from_pc(dbg.dwarf, pc);
-  if (fn_name == NULL) {
+  const DebugSymbol *func = sym_by_addr(get_dwarf_pc(dbg), dbg.info);
+  if (func == NULL) {
     return exec_function_not_found();
   }
-  char *filepath = get_filepath_from_pc(dbg.dwarf, pc);
-  if (filepath == NULL) {
-    free(fn_name);
-    return exec_filepath_not_found();
+
+  x86_addr *to_del = NULL;
+  size_t n_to_del = 0;
+
+  SprayResult set_res = set_step_over_breakpoints(
+      func, dbg.info, dbg.load_address, dbg.breakpoints, &to_del, &n_to_del);
+  if (set_res == SP_ERR) {
+    return exec_set_breakpoints_failed();
   }
-
-  size_t to_del_alloc = TO_DEL_ALLOC_SIZE;
-  size_t to_del_idx = 0;
-  x86_addr *to_del_breakpoints =
-    (x86_addr *) calloc (TO_DEL_ALLOC_SIZE, sizeof(x86_addr));
-  assert(to_del_breakpoints != NULL);
-
-  CallbackData data = {
-    to_del_alloc,
-    to_del_idx,
-    to_del_breakpoints,
-    dbg.load_address,
-    current_lineno,
-    dbg.breakpoints,
-  };
-
-  for_each_line_in_subprog(
-    dbg.dwarf,
-    fn_name,
-    filepath,
-    callback__set_dwarf_line_breakpoint,
-    &data
-  );
-
-  free(fn_name);
-  free(filepath);
 
   x86_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
@@ -676,12 +612,10 @@ ExecResult step_over(Debugger dbg) {
   continue_execution(dbg);
   ExecResult exec_res = wait_for_signal(dbg);
 
-  for (size_t i = 0; i < data.to_del_idx; i++) {
-    delete_breakpoint(
-      dbg.breakpoints,
-      data.to_del_breakpoints[i]);
+  for (size_t i = 0; i < n_to_del; i++) {
+    delete_breakpoint(dbg.breakpoints, to_del[i]);
   }
-  free(data.to_del_breakpoints);
+  free(to_del);
 
   if (remove_internal_breakpoint) {
     delete_breakpoint(
@@ -868,8 +802,7 @@ void exec_command_step_over(Debugger dbg) {
 }
 
 void exec_command_backtrace(Debugger dbg) {
-  CallFrame *backtrace =
-      init_backtrace(dbg.dwarf, &dbg.elf, dbg.pid, get_pc(dbg.pid));
+  CallFrame *backtrace = init_backtrace(get_pc(dbg.pid), dbg.pid, dbg.info);
   if (backtrace == NULL) {
     internal_error("Failed to determine backtrace");
   } else {
@@ -982,23 +915,6 @@ SprayResult parse_lineno(const char *line_str, unsigned *line_dest) {
   }
 }
 
-SprayResult get_function_start_addr(Dwarf_Debug dbg, const ElfFile *elf,
-                                    const char *name, x86_addr *dest) {
-  assert(dbg != NULL);
-  assert(elf != NULL);
-  assert(name != NULL);
-  assert(dest != NULL);
-
-  const Elf64_Sym *func = symbol_from_name(name, elf);
-  if (func == NULL || symbol_type(func) != STT_FUNC) {
-    return SP_ERR;
-  }
-
-  SprayResult res = get_effective_start_addr(dbg, symbol_start_addr(func),
-                                             symbol_end_addr(func), dest);
-  return res;
-}
-
 SprayResult parse_break_location(Debugger dbg,
                                  const char *location,
                                  x86_addr *dest
@@ -1006,7 +922,8 @@ SprayResult parse_break_location(Debugger dbg,
   assert(dest != NULL);
 
   if (check_function_name(location) == SP_OK ){
-    return get_function_start_addr(dbg.dwarf, &dbg.elf, location, dest);
+    const DebugSymbol *func = sym_by_name(location, dbg.info);
+    return function_start_addr(func, dbg.info, dest);
   } else if (parse_base16(location, &dest->value) == SP_OK) {
     return SP_OK;
   } else if (check_file_line(location) == SP_OK) {
@@ -1021,14 +938,9 @@ SprayResult parse_break_location(Debugger dbg,
       return SP_ERR;
     }
 
-    LineEntry line = get_line_entry_at(dbg.dwarf, filepath, lineno);
+    SprayResult addr_res = addr_at(filepath, lineno, dbg.info, dest);
     free(location_cpy);
-    if (line.is_ok) {
-      *dest = line.addr;
-      return SP_OK;
-    } else {
-      return SP_ERR;
-    }
+    return addr_res;
   } else {
     return SP_ERR;
   }
@@ -1270,7 +1182,7 @@ void init_load_address(Debugger *dbg) {
   assert(dbg != NULL);
 
   // Is this a dynamic executable?
-  if (dbg->elf.type == ELF_TYPE_DYN) {
+  if (is_dyn_exec(dbg->info)) {
     // Open the process' `/proc/<pid>/maps` file.
     char proc_maps_filepath[PROC_MAPS_FILEPATH_LEN];
     snprintf(
@@ -1284,7 +1196,7 @@ void init_load_address(Debugger *dbg) {
 
     // Read the first address from the file.
     // This is OK since address space
-    //  layout randomization is disabled.
+    // layout randomization is disabled.
     char *addr = NULL;
     size_t n = 0;
     ssize_t nread = getdelim(&addr, &n, (int) '-', proc_map);
@@ -1311,26 +1223,9 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
     return -1;
   }
 
-  // Parse the ELF header.
-  ElfFile elf_buf;  /* Must buffer currently because `parse_elf`
-                       might change `elf_buf` even on error.
-                       This function however should only modify
-                       `store` if it's successful. */
-  ElfParseResult res = parse_elf(prog_name, &elf_buf);
-  if (res != ELF_PARSE_OK) {
-    fprintf(stderr, "ELF parse failed: %s\n",
-      elf_parse_result_name(res));
-    return -1;
-  }
-
-  // Initialized the DWARF info.
-  Dwarf_Error error = NULL;
-  Dwarf_Debug dwarf = dwarf_init(prog_name, &error);
-  if (dwarf == NULL) {
-    free_elf(elf_buf);
-    fprintf(stderr, "DWARF initialization failed: %s\n",
-      dwarf_errmsg(error));
-    dwarf_dealloc_error(NULL, error);
+  DebugInfo *info = init_debug_info(prog_name);
+  if (info == NULL) {
+    fprintf(stderr, "Failed to initialize debugging information\n");
     return -1;
   }
 
@@ -1360,16 +1255,15 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
     waitpid(pid, &wait_status, options);
 
     // Now we can finally touch `store` 😄.
-    *store = (Debugger) {
-      .prog_name=prog_name,
-      .pid=pid,
-      .breakpoints=init_breakpoints(pid),
-      .elf=elf_buf,
-      /* `load_address` is initialized by `init_load_address`. */
-      .load_address.value=0,
-      .dwarf=dwarf,
-      .files=init_source_files(),
-      .history=init_history(),
+    *store = (Debugger){
+        .prog_name = prog_name,
+        .pid = pid,
+        .breakpoints = init_breakpoints(pid),
+        .info = info,
+        /* `load_address` is initialized by `init_load_address`. */
+        .load_address.value = 0,
+        .files = init_source_files(),
+        .history = init_history(),
     };
     init_load_address(store);
   }
@@ -1380,16 +1274,16 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
 SprayResult free_debugger(Debugger dbg) {
   free_source_files(dbg.files);
   free_breakpoints(dbg.breakpoints);
-  dwarf_finish(dbg.dwarf);
-  return free_elf(dbg.elf);
+  free_history(dbg.history);
+  return free_debug_info(&dbg.info);
 }
 
 void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
 
   x86_addr start_main = { 0 };
-  SprayResult found_start =
-      get_function_start_addr(dbg.dwarf, &dbg.elf, "main", &start_main);
+  const DebugSymbol *main = sym_by_name("main", dbg.info);
+  SprayResult found_start = function_start_addr(main, dbg.info, &start_main);
   if (found_start == SP_OK) {
     enable_breakpoint(dbg.breakpoints, start_main);
     ExecResult exec_res = continue_execution(dbg);

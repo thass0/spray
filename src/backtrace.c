@@ -7,29 +7,50 @@
 #include <assert.h>
 #include <stdio.h>
 
-CallFrame *init_call_frame(Dwarf_Debug dbg, const ElfFile *elf,
-                           CallFrame *caller, x86_addr pc,
-                           x86_addr frame_pointer) {
-  const Elf64_Sym *func_sym = symbol_from_addr(pc, elf);
+typedef struct {
+  x86_addr pc;
+  x86_addr frame_pointer;
+  struct {
+    // If `has_lineno` is false, `lineno` is meaningless.
+    // Always check `has_lineno` before using `lineno`.
+    bool has_lineno;
+    uint32_t lineno;
+  };
+  const char *function;
+} CallLocation;
+
+struct CallFrame {
+  CallFrame *caller;
+  CallLocation location;
+};
+
+CallFrame *init_call_frame(CallFrame *caller, x86_addr pc,
+                           x86_addr frame_pointer, DebugInfo *info) {
+  const DebugSymbol *func_sym = sym_by_addr(pc, info);
+
   const char *func_name = NULL;
+  const Position *pos = NULL;
+
   if (func_sym != NULL) {
-    func_name = symbol_name(func_sym, elf);
-  }
-
-  LineEntry this_line = get_line_entry_from_pc(dbg, pc);
-
-  int64_t lineno = -1;
-  if (this_line.is_ok) {
-    lineno = this_line.ln;
+    func_name = sym_name(func_sym, info);
+    pos = sym_position(func_sym, info);
   }
 
   CallFrame *frame = malloc(sizeof(*frame));
   assert(frame != NULL);
+
+  if (pos != NULL) {
+    frame->location.has_lineno = true;
+    frame->location.lineno = pos->line;
+  } else {
+    frame->location.has_lineno = false;
+  }
+
   frame->caller = caller;
   frame->location.pc = pc;
   frame->location.frame_pointer = frame_pointer;
-  frame->location.lineno = lineno;
   frame->location.function = func_name;
+
   return frame;
 }
 
@@ -42,15 +63,15 @@ CallFrame *init_call_frame(Dwarf_Debug dbg, const ElfFile *elf,
    to the start of the frame (i.e. the stack pointer right at the
    start of the function). If this isn't found, it's likely that
    the compiler omitted the frame pointer so we should emit a warning. */
-bool stores_frame_pointer(const ElfFile *elf, pid_t pid, x86_addr pc) {
-  const Elf64_Sym *function = symbol_from_addr(pc, elf);
-  if (function == NULL) {
+// bool stores_frame_pointer(const ElfFile *elf, pid_t pid, x86_addr pc) {
+bool stores_frame_pointer(x86_addr pc, pid_t pid, DebugInfo *info) {
+  const DebugSymbol *func = sym_by_addr(pc, info);
+  if (func == NULL) {
     return false;
   }
 
   x86_word insts = {0};
-  SprayResult mem_res =
-      pt_read_memory(pid, symbol_start_addr(function), &insts);
+  SprayResult mem_res = pt_read_memory(pid, sym_start_addr(func), &insts);
   if (mem_res == SP_ERR) {
     return false;
   }
@@ -65,10 +86,8 @@ bool stores_frame_pointer(const ElfFile *elf, pid_t pid, x86_addr pc) {
    Try compiling again with `-fno-omit-frame-pointer` if
    this doesn't work. */
 
-CallFrame *init_backtrace(Dwarf_Debug dbg, const ElfFile *elf, pid_t pid,
-                          x86_addr pc) {
-  assert(dbg != NULL);
-  unused(pc);
+CallFrame *init_backtrace(x86_addr pc, pid_t pid, DebugInfo *info) {
+  assert(info != NULL);
 
   // Get the saved base pointer of the caller.
   x86_addr frame_pointer = {0};
@@ -78,14 +97,14 @@ CallFrame *init_backtrace(Dwarf_Debug dbg, const ElfFile *elf, pid_t pid,
     return NULL;
   }
 
-  if (!stores_frame_pointer(elf, pid, pc)) {
+  if (!stores_frame_pointer(pc, pid, info)) {
     printf("WARN: it seems like this executable doesn't maintain a frame "
            "pointer.\n"
            "      This results in incorrect or incomplete backtraces.\n"
            "HINT: Try to compile again with `-fno-omit-frame-pointer`.\n\n");
   }
 
-  CallFrame *call_frame = init_call_frame(dbg, elf, NULL, pc, frame_pointer);
+  CallFrame *call_frame = init_call_frame(NULL, pc, frame_pointer, info);
 
   while (frame_pointer.value != 0) {
     // Read the return address of the current function
@@ -107,7 +126,7 @@ CallFrame *init_backtrace(Dwarf_Debug dbg, const ElfFile *elf, pid_t pid,
       return NULL;
     }
 
-    call_frame = init_call_frame(dbg, elf, call_frame, pc, frame_pointer);
+    call_frame = init_call_frame(call_frame, pc, frame_pointer, info);
   }
 
   return call_frame;
@@ -141,8 +160,8 @@ void print_backtrace(CallFrame *call_frame) {
         printf("<?>");
       }
 
-      if (location->lineno >= 0) {
-        printf(":%ld\n", location->lineno);
+      if (location->has_lineno) {
+        printf(":%u\n", location->lineno);
       } else {
         printf("\n");
       }

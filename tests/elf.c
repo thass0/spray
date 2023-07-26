@@ -63,7 +63,6 @@ TEST(read_elf_symbol_table_entries) {
   assert_int(symbol_binding(main), ==, STB_GLOBAL);
   assert_int(symbol_type(main), ==, STT_FUNC);
   assert_int(symbol_visibility(main), ==, STV_DEFAULT);
-  assert_int(symbol_value(main), ==, 0x401160);
 
   const Elf64_Sym *func2 =
       symbol_from_name("file2_compute_something", &elf_file);
@@ -72,7 +71,6 @@ TEST(read_elf_symbol_table_entries) {
   assert_int(symbol_binding(func2), ==, STB_GLOBAL);
   assert_int(symbol_type(func2), ==, STT_FUNC);
   assert_int(symbol_visibility(func2), ==, STV_DEFAULT);
-  assert_int(symbol_value(func2), ==, 0x401190);
 
   const Elf64_Sym *func1 = symbol_from_addr((x86_addr){0x00401128}, &elf_file);
   assert_ptr_not_null(func1);
@@ -80,7 +78,6 @@ TEST(read_elf_symbol_table_entries) {
   assert_int(symbol_binding(func1), ==, STB_GLOBAL);
   assert_int(symbol_type(func1), ==, STT_FUNC);
   assert_int(symbol_visibility(func1), ==, STV_DEFAULT);
-  assert_int(symbol_value(func1), ==, 0x401110);
 
   free_elf(elf_file);
   return MUNIT_OK;

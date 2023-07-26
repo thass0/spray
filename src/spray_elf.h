@@ -95,7 +95,6 @@ const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf);
 int symbol_binding(const Elf64_Sym *sym);
 int symbol_type(const Elf64_Sym *sym);
 int symbol_visibility(const Elf64_Sym *sym);
-uint64_t symbol_value(const Elf64_Sym *sym);
 
 // Get start (low PC) and end (high PC) address of function symbol.
 // Return values are meaningless in this context if the symbol is
