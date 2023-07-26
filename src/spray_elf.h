@@ -73,36 +73,36 @@ const char *elf_parse_result_name(ElfParseResult res);
 /* Parse an ELF file and store the info in `elf`.
    Returns `ELF_PARSE_OK` on success. `*elf` might
    be changed even if the result is ultimately an error. */
-ElfParseResult parse_elf(const char *filepath, ElfFile *elf);
+ElfParseResult se_parse_elf(const char *filepath, ElfFile *elf);
 
 // Returns `SP_ERR` if unmapping the ELF file didn't work.
-SprayResult free_elf(ElfFile elf);
+SprayResult se_free_elf(ElfFile elf);
 
 /* Symbol table interface. */
 
 // Get the symbol table entry for the symbol name.
 // Returns `NULL` in no such symbol was found.
-const Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf);
+const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf);
 
 // Get the symbol table entry for the symbol that
 // belongs to the given instruction address.
-const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf);
+const Elf64_Sym *se_symbol_from_addr(x86_addr addr, const ElfFile *elf);
 
 // Access different fields in a symbol. The way information
 // is stored in the different members of a symbol is a bit
 // weird so these wrappers make the code more readable.
 
-int symbol_binding(const Elf64_Sym *sym);
-int symbol_type(const Elf64_Sym *sym);
-int symbol_visibility(const Elf64_Sym *sym);
+int se_symbol_binding(const Elf64_Sym *sym);
+int se_symbol_type(const Elf64_Sym *sym);
+int se_symbol_visibility(const Elf64_Sym *sym);
 
 // Get start (low PC) and end (high PC) address of function symbol.
 // Return values are meaningless in this context if the symbol is
 // not a function.
-x86_addr symbol_start_addr(const Elf64_Sym *sym);
-x86_addr symbol_end_addr(const Elf64_Sym *sym);
+x86_addr se_symbol_start_addr(const Elf64_Sym *sym);
+x86_addr se_symbol_end_addr(const Elf64_Sym *sym);
 
 // Looks up the symbol name in the string table.
-const char *symbol_name(const Elf64_Sym *sym, const ElfFile *elf);
+const char *se_symbol_name(const Elf64_Sym *sym, const ElfFile *elf);
 
 #endif  // _SPRAY_PARSE_ELF_H_

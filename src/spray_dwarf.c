@@ -28,7 +28,7 @@ const char *what_dwarf_result(int dwarf_res) {
   }
 }
 
-Dwarf_Debug dwarf_init(const char *restrict filepath, Dwarf_Error *error) {  
+Dwarf_Debug sd_dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   assert(filepath != NULL);
   assert(error != NULL);
 
@@ -353,28 +353,6 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
   }
 }
 
-char *get_function_from_pc(Dwarf_Debug dbg, x86_addr pc) {
-  assert(dbg != NULL);
-  Dwarf_Error error = NULL;
-
-  Dwarf_Addr pc_addr = pc.value;
-  char *fn_name = NULL;  // <- Store the function name here.
-  
-  int res = sd_search_dwarf_dbg(dbg, &error,
-    callback__find_subprog_name_by_pc,
-    &pc_addr,
-    &fn_name);
-
-  if (res != DW_DLV_OK) {
-   if (res == DW_DLV_ERROR) {
-      dwarf_dealloc_error(dbg, error);
-    } 
-    return NULL;
-  } else {
-    return fn_name;
-  }
-}
-
 /* NOTE: Acquiring a `Dwarf_Line_Context` is only possible
    if the given DIE is the compilation unit DIE. */
 bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die cu_die, Dwarf_Line_Context *line_context) {
@@ -487,7 +465,7 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry *line_entry,
   line_entry->new_statement = dwarf_bool_to_bool(new_statement);
   line_entry->prologue_end = dwarf_bool_to_bool(prologue_end);
   line_entry->is_exact =
-      false; // `false` by default. Might be set by `get_line_entry_from_pc`.
+      false; // `false` by default. Might be set by `sd_line_entry_from_pc`.
   line_entry->ln = lineno;
   line_entry->cl = colno;
   line_entry->addr = (x86_addr) { addr };
@@ -596,7 +574,7 @@ bool callback__find_filepath_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
   }
 }
 
-char *get_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+char *sd_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
   Dwarf_Error error = NULL;  
 
@@ -868,10 +846,10 @@ SprayResult get_line_table_index_of_line(const LineTable line_table,
   }
 }
 
-LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+LineEntry sd_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   assert(dbg != NULL);
 
-  char *filepath = get_filepath_from_pc(dbg, pc);  
+  char *filepath = sd_filepath_from_pc(dbg, pc);
   if (filepath == NULL) {
     return (LineEntry) { .is_ok=false };
   }
@@ -908,7 +886,8 @@ LineEntry get_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
   }
 }
 
-LineEntry get_line_entry_at(Dwarf_Debug dbg, const char *filepath, unsigned lineno) {
+LineEntry sd_line_entry_at(Dwarf_Debug dbg, const char *filepath,
+                           unsigned lineno) {
   assert(dbg != NULL);
   assert(filepath != NULL);
 
@@ -1036,49 +1015,10 @@ SubprogAttr sd_get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
   }
 }
 
-/* Get the `low_pc` and `high_pc` attributes for the
-   subprogram with the given name. Returns `true` if
-   attribute was found.
-   Both `get_at_*_pc` functions are unused and not exposed
-   globally. They may be useful again though. */
-bool get_at_low_pc(Dwarf_Debug dbg, const char* fn_name, x86_addr *lowpc_dest) {
-  assert(dbg != NULL);
-  assert(lowpc_dest != NULL);
-
-  if (fn_name == NULL) {
-    return false;
-  }
-
-  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
-  if (attr.is_set) {
-    lowpc_dest->value = attr.lowpc.value;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool get_at_high_pc(Dwarf_Debug dbg, const char *fn_name, x86_addr *highpc_dest) {  
-  assert(dbg != NULL);
-  assert(fn_name != NULL);
-  assert(highpc_dest != NULL);
-
-  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
-  if (attr.is_set) {
-    highpc_dest->value = attr.highpc.value;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-SprayResult for_each_line_in_subprog(
-  Dwarf_Debug dbg,
-  const char *fn_name,
-  const char *filepath,
-  LineCallback callback,
-  void *const init_data
-) {
+SprayResult sd_for_each_line_in_subprog(Dwarf_Debug dbg, const char *fn_name,
+                                        const char *filepath,
+                                        LineCallback callback,
+                                        void *const init_data) {
   assert(dbg != NULL);
   assert(fn_name != NULL);
   assert(filepath != NULL);
@@ -1124,9 +1064,9 @@ SprayResult for_each_line_in_subprog(
   return SP_OK;
 }
 
-SprayResult get_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
-                                     x86_addr function_end,
-                                     x86_addr *function_start) {
+SprayResult sd_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
+                                    x86_addr function_end,
+                                    x86_addr *function_start) {
   assert(dbg != NULL);
   assert(function_start != NULL);
 

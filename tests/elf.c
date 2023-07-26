@@ -6,7 +6,7 @@
 
 TEST(accept_valid_executable) {
   ElfFile elf_file = {0};
-  ElfParseResult res = parse_elf(SIMPLE_64BIT_BIN, &elf_file);
+  ElfParseResult res = se_parse_elf(SIMPLE_64BIT_BIN, &elf_file);
   assert_int(res, ==, ELF_PARSE_OK);
 
   assert_int(elf_file.prog_table.n_headers, ==, 13);
@@ -48,38 +48,41 @@ TEST(accept_valid_executable) {
   assert_int(symtab_sh.sh_info, ==, 50);
   assert_int(symtab_sh.sh_addralign, ==, 8);
 
-  free_elf(elf_file);
+  se_free_elf(elf_file);
   return MUNIT_OK;
 }
 
 TEST(read_elf_symbol_table_entries) {
   ElfFile elf_file = {0};
-  ElfParseResult res = parse_elf(MULTI_FILE_BIN, &elf_file);
+  ElfParseResult res = se_parse_elf(MULTI_FILE_BIN, &elf_file);
   assert_int(res, ==, ELF_PARSE_OK);
 
-  const Elf64_Sym *main = symbol_from_name("main", &elf_file);
+  const Elf64_Sym *main = se_symbol_from_name("main", &elf_file);
   assert_ptr_not_null(main);
-  assert_string_equal(symbol_name(main, &elf_file), "main");
-  assert_int(symbol_binding(main), ==, STB_GLOBAL);
-  assert_int(symbol_type(main), ==, STT_FUNC);
-  assert_int(symbol_visibility(main), ==, STV_DEFAULT);
+  assert_string_equal(se_symbol_name(main, &elf_file), "main");
+  assert_int(se_symbol_binding(main), ==, STB_GLOBAL);
+  assert_int(se_symbol_type(main), ==, STT_FUNC);
+  assert_int(se_symbol_visibility(main), ==, STV_DEFAULT);
 
   const Elf64_Sym *func2 =
-      symbol_from_name("file2_compute_something", &elf_file);
+      se_symbol_from_name("file2_compute_something", &elf_file);
   assert_ptr_not_null(func2);
-  assert_string_equal(symbol_name(func2, &elf_file), "file2_compute_something");
-  assert_int(symbol_binding(func2), ==, STB_GLOBAL);
-  assert_int(symbol_type(func2), ==, STT_FUNC);
-  assert_int(symbol_visibility(func2), ==, STV_DEFAULT);
+  assert_string_equal(se_symbol_name(func2, &elf_file),
+                      "file2_compute_something");
+  assert_int(se_symbol_binding(func2), ==, STB_GLOBAL);
+  assert_int(se_symbol_type(func2), ==, STT_FUNC);
+  assert_int(se_symbol_visibility(func2), ==, STV_DEFAULT);
 
-  const Elf64_Sym *func1 = symbol_from_addr((x86_addr){0x00401128}, &elf_file);
+  const Elf64_Sym *func1 =
+      se_symbol_from_addr((x86_addr){0x00401128}, &elf_file);
   assert_ptr_not_null(func1);
-  assert_string_equal(symbol_name(func1, &elf_file), "file1_compute_something");
-  assert_int(symbol_binding(func1), ==, STB_GLOBAL);
-  assert_int(symbol_type(func1), ==, STT_FUNC);
-  assert_int(symbol_visibility(func1), ==, STV_DEFAULT);
+  assert_string_equal(se_symbol_name(func1, &elf_file),
+                      "file1_compute_something");
+  assert_int(se_symbol_binding(func1), ==, STB_GLOBAL);
+  assert_int(se_symbol_type(func1), ==, STT_FUNC);
+  assert_int(se_symbol_visibility(func1), ==, STV_DEFAULT);
 
-  free_elf(elf_file);
+  se_free_elf(elf_file);
   return MUNIT_OK;
 }
 
@@ -89,7 +92,7 @@ TEST(reject_invalid_executables) {
   // All of them should be rejects.
 
   ElfFile elf_file = {0};
-  ElfParseResult res = parse_elf(SIMPLE_32BIT_BIN, &elf_file);
+  ElfParseResult res = se_parse_elf(SIMPLE_32BIT_BIN, &elf_file);
   assert_int(res, ==, ELF_PARSE_DISLIKE);
   return MUNIT_OK;
 }

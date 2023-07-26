@@ -258,7 +258,7 @@ static inline char *strtab_at(byte *bytes, size_t off) {
   return (char *)(bytes + off);
 }
 
-ElfParseResult parse_elf(const char *filepath, ElfFile *elf_store) {
+ElfParseResult se_parse_elf(const char *filepath, ElfFile *elf_store) {
   assert(filepath != NULL);
   assert(elf_store != NULL);
 
@@ -354,7 +354,6 @@ ElfParseResult parse_elf(const char *filepath, ElfFile *elf_store) {
   return ELF_PARSE_OK;
 }
 
-
 const char *elf_parse_result_name(ElfParseResult res) {
   static const char *elf_parse_result_names[] = {
     [ELF_PARSE_OK]="parsed file successfully",
@@ -366,7 +365,7 @@ const char *elf_parse_result_name(ElfParseResult res) {
   return elf_parse_result_names[res];
 }
 
-SprayResult free_elf(ElfFile elf) {
+SprayResult se_free_elf(ElfFile elf) {
   if (munmap(elf.data.bytes, elf.data.n_bytes) == -1) {
     return SP_ERR;
   } else {
@@ -374,7 +373,7 @@ SprayResult free_elf(ElfFile elf) {
   }
 }
 
-const Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf) {
+const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf) {
   assert(name != NULL);
   assert(elf != NULL);
 
@@ -384,7 +383,7 @@ const Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf) {
   uint64_t n_symbols = symtab_hdr->sh_size / symtab_hdr->sh_entsize;
 
   for (uint64_t i = 0; i < n_symbols; i++) {
-    if (strcmp(symbol_name(&symtab[i], elf), name) == 0) {
+    if (strcmp(se_symbol_name(&symtab[i], elf), name) == 0) {
       return &symtab[i];
     }
   }
@@ -392,7 +391,7 @@ const Elf64_Sym *symbol_from_name(const char *name, const ElfFile *elf) {
   return NULL;
 }
 
-const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf) {
+const Elf64_Sym *se_symbol_from_addr(x86_addr addr, const ElfFile *elf) {
   assert(elf != NULL);
 
   assert(elf != NULL);
@@ -403,8 +402,8 @@ const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf) {
   uint64_t n_symbols = symtab_hdr->sh_size / symtab_hdr->sh_entsize;
 
   for (uint64_t i = 0; i < n_symbols; i++) {
-    if (symbol_start_addr(&symtab[i]).value <= addr.value &&
-        symbol_end_addr(&symtab[i]).value >= addr.value) {
+    if (se_symbol_start_addr(&symtab[i]).value <= addr.value &&
+        se_symbol_end_addr(&symtab[i]).value >= addr.value) {
       return &symtab[i];
     }
   }
@@ -412,15 +411,15 @@ const Elf64_Sym *symbol_from_addr(x86_addr addr, const ElfFile *elf) {
   return NULL;
 }
 
-int symbol_binding(const Elf64_Sym *sym) {
+int se_symbol_binding(const Elf64_Sym *sym) {
   assert(sym != NULL);
   return ELF64_ST_BIND(sym->st_info);
 }
-int symbol_type(const Elf64_Sym *sym) {
+int se_symbol_type(const Elf64_Sym *sym) {
   assert(sym != NULL);
   return ELF64_ST_TYPE(sym->st_info);
 }
-int symbol_visibility(const Elf64_Sym *sym) {
+int se_symbol_visibility(const Elf64_Sym *sym) {
   assert(sym != NULL);
   return sym->st_other;
 }
@@ -429,19 +428,19 @@ uint64_t symbol_value(const Elf64_Sym *sym) {
   return sym->st_value;
 }
 
-x86_addr symbol_start_addr(const Elf64_Sym *sym) {
+x86_addr se_symbol_start_addr(const Elf64_Sym *sym) {
   assert(sym != NULL);
   return (x86_addr){sym->st_value};
 }
 
-x86_addr symbol_end_addr(const Elf64_Sym *sym) {
+x86_addr se_symbol_end_addr(const Elf64_Sym *sym) {
   assert(sym != NULL);
   return (x86_addr){// The symbol's size is the offset from the
                     // start address if the symbol is a function.
                     sym->st_value + sym->st_size};
 }
 
-const char *symbol_name(const Elf64_Sym *sym, const ElfFile *elf) {
+const char *se_symbol_name(const Elf64_Sym *sym, const ElfFile *elf) {
   assert(sym != NULL);
   assert(elf != NULL);
 

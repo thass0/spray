@@ -125,7 +125,7 @@ DebugInfo *init_debug_info(const char *filepath) {
   }
 
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = dwarf_init(filepath, &error);
+  Dwarf_Debug dbg = sd_dwarf_init(filepath, &error);
   if (dbg == NULL) {
     dwarf_dealloc_error(NULL, error);
     return NULL;
@@ -135,7 +135,7 @@ DebugInfo *init_debug_info(const char *filepath) {
   if (elf == NULL) {
     return NULL;
   }
-  ElfParseResult elf_res = parse_elf(filepath, elf);
+  ElfParseResult elf_res = se_parse_elf(filepath, elf);
   if (elf_res == SP_ERR) {
     free(elf);
     dwarf_finish(dbg);
@@ -175,7 +175,7 @@ SprayResult free_debug_info(DebugInfo **infop) {
     free(info->elf);
     free(info);
     *infop = NULL;
-    return free_elf(elf);
+    return se_free_elf(elf);
   } else {
     return SP_OK;
   }
@@ -186,7 +186,7 @@ const DebugSymbol *sym_by_name(const char *name, DebugInfo *info) {
     return NULL;
   }
 
-  const Elf64_Sym *elf = symbol_from_name(name, info->elf);
+  const Elf64_Sym *elf = se_symbol_from_name(name, info->elf);
   if (elf == NULL) {
     return NULL;
   }
@@ -201,7 +201,7 @@ const DebugSymbol *sym_by_addr(x86_addr addr, DebugInfo *info) {
     return NULL;
   }
 
-  const Elf64_Sym *elf = symbol_from_addr(addr, info->elf);
+  const Elf64_Sym *elf = se_symbol_from_addr(addr, info->elf);
   if (elf == NULL) {
     return NULL;
   }
@@ -218,7 +218,7 @@ const char *sym_name(const DebugSymbol *sym, const DebugInfo *info) {
     return NULL;
   }
 
-  return symbol_name(sym->elf, info->elf);
+  return se_symbol_name(sym->elf, info->elf);
 }
 
 SprayResult function_start_addr(const DebugSymbol *func, const DebugInfo *info,
@@ -226,9 +226,9 @@ SprayResult function_start_addr(const DebugSymbol *func, const DebugInfo *info,
   if (func == NULL || info == NULL || addr == NULL) {
     return SP_ERR;
   } else {
-    if (symbol_type(func->elf) == STT_FUNC) {
-      return get_effective_start_addr(info->dbg, sym_start_addr(func),
-                                      sym_end_addr(func), addr);
+    if (se_symbol_type(func->elf) == STT_FUNC) {
+      return sd_effective_start_addr(info->dbg, sym_start_addr(func),
+                                     sym_end_addr(func), addr);
     } else {
       return SP_ERR;
     }
@@ -239,7 +239,7 @@ x86_addr sym_start_addr(const DebugSymbol *sym) {
   if (sym == NULL) {
     return (x86_addr){0};
   } else {
-    return symbol_start_addr(sym->elf);
+    return se_symbol_start_addr(sym->elf);
   }
 }
 
@@ -247,7 +247,7 @@ x86_addr sym_end_addr(const DebugSymbol *sym) {
   if (sym == NULL) {
     return (x86_addr){0};
   } else {
-    return symbol_end_addr(sym->elf);
+    return se_symbol_end_addr(sym->elf);
   }
 }
 
@@ -287,7 +287,7 @@ const char *sym_filepath(const DebugSymbol *sym, const DebugInfo *info) {
   if (sym->filepath != NULL) {
     return sym->filepath;
   } else {
-    char *filepath = get_filepath_from_pc(info->dbg, sym_addr(sym));
+    char *filepath = sd_filepath_from_pc(info->dbg, sym_addr(sym));
     if (filepath == NULL) {
       return NULL;
     } else {
@@ -306,7 +306,7 @@ const Position *sym_position(const DebugSymbol *sym, const DebugInfo *info) {
   if (sym->has_position) {
     return &sym->position;
   } else {
-    LineEntry line_entry = get_line_entry_from_pc(info->dbg, sym_addr(sym));
+    LineEntry line_entry = sd_line_entry_from_pc(info->dbg, sym_addr(sym));
     if (!line_entry.is_ok) {
       return NULL;
     } else {
@@ -355,7 +355,7 @@ SprayResult addr_at(const char *filepath, uint32_t lineno,
   if (filepath == NULL || info == NULL || addr == NULL) {
     return SP_ERR;
   } else {
-    LineEntry line = get_line_entry_at(info->dbg, filepath, lineno);
+    LineEntry line = sd_line_entry_at(info->dbg, filepath, lineno);
     if (line.is_ok) {
       *addr = line.addr;
       return SP_OK;
@@ -443,8 +443,8 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
       to_del_alloc, to_del_idx, to_del, load_address, pos->line, breakpoints,
   };
 
-  for_each_line_in_subprog(info->dbg, func_name, filepath,
-                           callback__set_dwarf_line_breakpoint, &data);
+  sd_for_each_line_in_subprog(info->dbg, func_name, filepath,
+                              callback__set_dwarf_line_breakpoint, &data);
 
   *n_to_del = data.to_del_idx;
   *to_del_ptr = to_del;
