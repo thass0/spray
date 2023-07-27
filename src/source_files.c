@@ -6,8 +6,8 @@
 #include <assert.h>
 #include <string.h>
 
-int source_lines_compare(const void *a, const void *b, void *udata) {
-  unused(udata);
+int source_lines_compare(const void *a, const void *b, void *user_data) {
+  unused(user_data);
   const SourceLines *lines_a = (SourceLines *) a;
   const SourceLines *lines_b = (SourceLines *) b;
   return strcmp(lines_a->filepath, lines_b->filepath);
@@ -28,7 +28,7 @@ void free_source_files(SourceFiles *source_files) {
   size_t iter = 0;
   void *entry;
   while (hashmap_iter(source_files, &iter, &entry)) {
-    const SourceLines *lines = (SourceLines *) entry;
+    const SourceLines *lines = entry;
     for (size_t i = 0; i < lines->n_lines; i++) {
       free(lines->lines[i]);
     }
@@ -47,7 +47,7 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
   assert(source_filepath != NULL);
 
   SourceLines lookup = { .filepath = (char *) source_filepath };
-  const SourceLines *lines = (SourceLines *) hashmap_get(source_files, &lookup);
+  const SourceLines *lines = hashmap_get(source_files, &lookup);
 
   if (lines != NULL) {
     return lines;
@@ -59,33 +59,32 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
 
     size_t n_alloc = LINE_BLOCK_SIZE;
     SourceLines lines = {
-      .lines = (char **) calloc (n_alloc, sizeof(char *)),
-      .n_lines = 0,
-      .n_alloc = n_alloc,
-      .filepath = (char *) calloc (strlen(source_filepath) + 1, sizeof(char)),
+        .lines = calloc(n_alloc, sizeof(char *)),
+        .n_lines = 0,
+        .n_alloc = n_alloc,
+        .filepath = calloc(strlen(source_filepath) + 1, sizeof(char)),
     };
     assert(lines.lines != NULL);
-    /* Copy the filepath. */
     assert(lines.filepath != NULL);
+
     strcpy(lines.filepath, source_filepath);
 
     size_t n_chars_read = 0;  /* Required by `getline(3)` not used rn. */
     for (; lines.n_lines < lines.n_alloc; lines.n_lines++) {
-      /* Allocate more memory before the first loop
-         condition fails. */
+      // Increase the array size to prevent the loop from ending.
       if (lines.n_lines + 1 >= lines.n_alloc) {
         size_t new_alloc_start_offset = lines.n_alloc;
         lines.n_alloc += LINE_BLOCK_SIZE;
         lines.lines =
-          (char **) realloc (lines.lines, lines.n_alloc* sizeof(char *));
-        /* Zero all the newly allocated memory. */
+            realloc(lines.lines, sizeof(*lines.lines) * lines.n_alloc);
+        // Zero the new memory.
         memset(lines.lines + new_alloc_start_offset,
           0, LINE_BLOCK_SIZE * sizeof(char *));
       }
 
       if (getline(&lines.lines[lines.n_lines], &n_chars_read, f) == -1) {
-        /* EOF. Must increase manually `n_lines`
-           because the loop won't restart. */
+        // We hit the EOF, increase `lines.n_lines` once
+        // more to account for the previous line.
         lines.n_lines ++;
         break;
       }
@@ -94,7 +93,7 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
     fclose(f);
 
     hashmap_set(source_files, &lines);
-    return (SourceLines *) hashmap_get(source_files, &lines);
+    return hashmap_get(source_files, &lines);
   }
 }
 
@@ -128,7 +127,7 @@ SprayResult print_source(
   }
 
   /* NOTE: Line numbers are one-indexed; we must
-     subtract one to access arrays. */
+     subtract 1 to use them as array indices. */
   const char *cur_line = NULL;
   for (
     unsigned cur_lineno = start_lineno;
@@ -144,7 +143,8 @@ SprayResult print_source(
       fputs("    ", stdout);
     }
 
-    /* The string read by `getline(3)` ends in a newline. */
+    /* The string read by `getline(3)` ends in a newline
+       so we don't need to add one ourselves. */
     fputs(cur_line, stdout);
   }
 

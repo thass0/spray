@@ -46,7 +46,7 @@ $(BUILD_DIR):
 # Clang's JSON compilation database.
 compile_commands.json:
 ifeq (, $(shell which bear))
-	$(error "Bear is required to generate `compile_commands.json`. You can get it here: https://github.com/rizsotto/Bear.git.  Run `make bin` instead if you don't want to use bear.")
+	$(error "Bear is required to generate `compile_commands.json`. You can get it here: https://github.com/rizsotto/Bear.git.")
 else
 	make clean
 	bear -- make all

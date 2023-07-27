@@ -151,7 +151,7 @@ class TestBreakpointCommands:
 
     def test_breakpoint_on_function(self):
         assert_ends_with('b weird_sum\nc', """\
-Hit breakpoint at address 0x000000000040111a
+Hit breakpoint at address 0x000000000040111a in tests/assets/simple.c
     1    int weird_sum(int a,
     2                  int b) {
     3 ->   int c = a + 1;
@@ -162,7 +162,7 @@ Hit breakpoint at address 0x000000000040111a
         # This checks that the function `add` has
         # precedence over the address `(0x)add`.
         assert_ends_with('b add\nc', """\
-Hit breakpoint at address 0x000000000040113a
+Hit breakpoint at address 0x000000000040113a in tests/assets/nested_functions.c
     1    #include <stdio.h>
     2
     3    int add(int a, int b) {
@@ -199,7 +199,7 @@ Hit breakpoint at address 0x000000000040113a
         # Breakpoints in different files that the
         # entrypoint work, too.
         assert_ends_with('break file2.c:7\nc', """\
-Hit breakpoint at address 0x00000000004011b0
+Hit breakpoint at address 0x00000000004011b0 in tests/assets/multi-file/file2.c
     4      if (n < 2) {
     5        return n;
     6      } else {
@@ -212,7 +212,7 @@ Hit breakpoint at address 0x00000000004011b0
         # Breaking on an empty line falls through
         # to the next line with code on it.
         assert_ends_with('break file2.c:1\nc', """\
-Hit breakpoint at address 0x0000000000401190
+Hit breakpoint at address 0x0000000000401190 in tests/assets/multi-file/file2.c
     1    #include "file2.h"
     2
     3 -> int file2_compute_something(int n) {
@@ -223,7 +223,7 @@ Hit breakpoint at address 0x0000000000401190
 
     def test_breakpoints_delete(self):
         assert_ends_with('break file2.c:4\nc\ndelete file2.c:4\nc', """\
-Hit breakpoint at address 0x000000000040119b
+Hit breakpoint at address 0x000000000040119b in tests/assets/multi-file/file2.c
     1    #include "file2.h"
     2
     3    int file2_compute_something(int n) {
@@ -235,7 +235,7 @@ Child exited with code 0
 """, MULTI_FILE_BIN)
 
         assert_ends_with('break add\nc\ndelete add\nc', """\
-Hit breakpoint at address 0x000000000040113a
+Hit breakpoint at address 0x000000000040113a in tests/assets/nested_functions.c
     1    #include <stdio.h>
     2
     3    int add(int a, int b) {

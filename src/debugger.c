@@ -162,7 +162,49 @@ void set_pc(pid_t pid, x86_addr pc) {
 // Command and Internal Execution Result
 // =====================================
 
-void print_current_source(Debugger dbg) {
+// Return the part of `filepath` that's relative to
+// the present working directory.
+char *as_relative(char *filepath) {
+  if (filepath == NULL) {
+    return NULL;
+  }
+
+  char *cwd_buf = malloc(sizeof(*cwd_buf) * PATH_MAX);
+  char *cwd = getcwd(cwd_buf, PATH_MAX);
+  if (cwd == NULL) {
+    return NULL;
+  }
+
+  // Set `i` to the first index in `filepath` that's not part of the cwd.
+  size_t i = 0;
+  while (cwd[i] == filepath[i]) {
+    i++;
+  }
+
+  free(cwd_buf);
+
+  // Return the part of `filepath` that's not part of the cwd.
+  // `+ 1` removes the initial slash that's left because `cwd`
+  // doesn't end in a slash.
+  return filepath + i + 1;
+}
+
+void print_as_relative(const char *filepath) {
+  assert(filepath != NULL);
+
+  char *relative_buf = strdup(filepath);
+  char *relative = as_relative(relative_buf);
+  if (relative != NULL) {
+    printf("%s", relative);
+    free(relative_buf);
+  } else {
+    printf("%s", filepath);
+  }
+}
+
+// If `is_user_breakpoint` is true, then a message is printed
+// giving the user information about their breakpoint.
+void print_current_source(Debugger dbg, bool is_user_breakpoint) {
   x86_addr pc = get_dwarf_pc(dbg);
   const DebugSymbol *sym = sym_by_addr(pc, dbg.info);
 
@@ -170,10 +212,17 @@ void print_current_source(Debugger dbg) {
   const char *filepath = sym_filepath(sym, dbg.info);
 
   if (pos != NULL && filepath != NULL) {
+    if (is_user_breakpoint) {
+      printf("Hit breakpoint at address ");
+      print_addr(get_pc(dbg.pid));
+      printf(" in ");
+      print_as_relative(filepath);
+      printf("\n");
+    }
+
     SprayResult res = print_source(dbg.files, filepath, pos->line, 3);
     if (res == SP_ERR) {
-      internal_error("Failed to read source file %s; "
-                     "can't print source",
+      internal_error("Failed to read source file %s. Can't print source",
                      filepath);
     }
   } else {
@@ -328,14 +377,16 @@ void print_exec_ok(Debugger dbg, ExecResult *exec_res) {
           "fault, reason %d\n", code);
       } else if (signo == SIGTRAP) {
         if (code == SI_KERNEL || code == TRAP_BRKPT) {
+          bool is_user_breakpoint = false;
           if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
-            /* Only print 'Hit breakpoint' message if the breakpoint that
-               causes this SIGTRAP is permanent, i.e. set by the user. */
-            printf("Hit breakpoint at address ");
-            print_addr(get_pc(dbg.pid));
-            printf("\n");
+            // The debugger might insert breakpoints internally to implement
+            // different kinds of stepping behaviour. If the breakpoint that
+            // led here was such an internal breakpoint, then looking it up
+            // will fail because it will already be deleted. Any breakpoint
+            // that we can look up again is one that was set by the user.
+            is_user_breakpoint = true;
           }
-          print_current_source(dbg);
+          print_current_source(dbg, is_user_breakpoint);
         } else {
           printf("Child was stopped by signal SIGTRAP\n");
         }
@@ -776,7 +827,7 @@ void exec_command_single_step_instruction(Debugger dbg) {
   if (is_exec_err(&exec_res)) {
     print_exec_res(dbg, exec_res);
   } else {
-    print_current_source(dbg);
+    print_current_source(dbg, false);
   }
 }
 
@@ -792,7 +843,7 @@ void exec_command_single_step(Debugger dbg) {
   if (is_exec_err(&exec_res)) {
     print_exec_res(dbg, exec_res);
   } else {
-    print_current_source(dbg);
+    print_current_source(dbg, false);
   }
 }
 
@@ -1300,7 +1351,7 @@ void run_debugger(Debugger dbg) {
     }
   }
 
-  print_current_source(dbg);
+  print_current_source(dbg, false);
 
   char *line_buf = NULL;
   while ((line_buf = linenoise("spray> ")) != NULL) {
