@@ -1,14 +1,14 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
 CPPFLAGS = -MMD -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/hashmap.c
-LDFLAGS = -ldwarf
+LDFLAGS = -ldwarf -lchicken
 
 BUILD_DIR = build
 SOURCE_DIR = src
 DEP = dependencies
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
 OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
-OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o
+OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-colored.o
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -28,6 +28,16 @@ $(BINARY): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $(BINARY)
 
 -include $(DEPS)
+
+# Wow, seems like CHICKEN is quite strict ...
+$(BUILD_DIR)/source_files.o: CFLAGS += -Wno-unused-parameter -Wno-strict-prototypes -Wno-pedantic -Wno-unused-but-set-variable -Wno-gnu-statement-expression-from-macro-expansion -Wno-unused-variable
+$(BUILD_DIR)/source_files.o: CPPFLAGS += -I/usr/include/chicken
+$(BUILD_DIR)/source_files.o: $(SOURCE_DIR)/source_files.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/print-colored.o: CPPFLAGS += -I/usr/include/chicken
+$(BUILD_DIR)/print-colored.o: $(SOURCE_DIR)/print-colored.scm | $(BUILD_DIR)
+	csc -c -embedded -output-file $(BUILD_DIR)/print-colored.o $<
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
@@ -70,12 +80,14 @@ TEST_OBJECTS += $(patsubst $(TEST_SOURCE_DIR)/%.c, $(TEST_BUILD_DIR)/%.o, $(TEST
 TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
+TEST_SCHEME_SCRIPT = tests/colorize.scm
 
 test: unit integration
 
 unit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
 unit: $(TEST_BINARY) $(BINARY) assets
 	./$(TEST_BINARY) $(args)
+	$(TEST_SCHEME_SCRIPT)
 
 integration: $(BINARY) assets
 	pytest

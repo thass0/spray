@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <chicken.h>  // For `CHICKEN_run` to make `print_colored` available.
 
 int source_lines_compare(const void *a, const void *b, void *user_data) {
   unused(user_data);
@@ -19,6 +20,7 @@ uint64_t source_lines_hash(const void *entry, uint64_t seed0, uint64_t seed1) {
 }
 
 SourceFiles *init_source_files(void) {
+  CHICKEN_run(C_toplevel);  // Make `print_colored` available.
   return hashmap_new(sizeof(SourceLines), 0, 0, 0,
     source_lines_hash, source_lines_compare, NULL, NULL);
 }
@@ -97,6 +99,9 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
   }
 }
 
+// Definied in `colorize.scm`. Prints out a colored version of the source code.
+extern void print_colored(const char *code);
+
 SprayResult print_source(
   SourceFiles *source_files,
   const char *source_filepath,
@@ -128,7 +133,7 @@ SprayResult print_source(
 
   /* NOTE: Line numbers are one-indexed; we must
      subtract 1 to use them as array indices. */
-  const char *cur_line = NULL;
+  /*const char *cur_line = NULL;
   for (
     unsigned cur_lineno = start_lineno;
     cur_lineno < end_lineno;
@@ -137,16 +142,29 @@ SprayResult print_source(
     printf(" %4d", cur_lineno);
     cur_line = lines->lines[cur_lineno - 1];
     if (cur_lineno == lineno) {
-      /* Highlight current line. */
+      // Highlight current line.
       fputs(" -> ", stdout);
     } else if (strlen(cur_line) > 1) {
       fputs("    ", stdout);
     }
 
-    /* The string read by `getline(3)` ends in a newline
-       so we don't need to add one ourselves. */
+    // The string read by `getline(3)` ends in a newline
+    // so we don't need to add one ourselves.
     fputs(cur_line, stdout);
+  }*/
+
+  char *code = NULL;
+  for (unsigned lineno = start_lineno;
+       lineno < end_lineno;
+       lineno++) {
+    size_t len = code == NULL ? 0 : strlen(code);
+    size_t added = strlen(lines->lines[lineno - 1]);
+    code = realloc(code, len + added + 1);
+    memcpy(code + len, lines->lines[lineno - 1], added);
+    code[len + added] = '\0';
   }
+  print_colored(code);
+  free(code);
 
   return SP_OK;
 }
