@@ -499,7 +499,7 @@ ExecResult wait_for_signal(Debugger dbg) {
    * - child resumes from a signal
    */
   int wait_status;  /* Store status info here. */
-  int options = 0;  /* Normal behviour. */
+  int options = 0;  /* Normal behaviour. */
   waitpid(dbg.pid, &wait_status, options);
 
   /* Display some info about the state-change which

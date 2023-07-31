@@ -12,6 +12,8 @@
 (define token-tag-literal 'tt-literal)
 (define token-tag-identifier 'tt-identifier)
 (define token-tag-type' tt-type)
+(define token-tag-preproc-directive 'tt-preproc)
+(define token-tag-include-filepath 'tt-include-filepath)
 
 (define (make-token text token-tag)
   (cons token-tag text))
@@ -27,7 +29,7 @@
       (error "token-text, token must be a pair" token)))
 
 ;;; Regular expressions for scanning C code. They mostly
-;;; resenble what's  used in [this](https://www.lysator.liu.se/c/ANSI-C-grammar-l.html)
+;;; resemble what's  used in [this](https://www.lysator.liu.se/c/ANSI-C-grammar-l.html)
 ;;; scanner although some modifications were made.
 (define literal-regex (regexp "^\"([^\"\\\\]|\\\\[\\s\\S])*\""))
 (define whitespace-regex (regexp "^[\t\n \r]*"))
@@ -41,6 +43,10 @@
 (define float-constant-regex-frac (regexp "^[0-9]*\\.[0-9]+([Ee][+-]?[0-9]+)?(f|F|l|L)?"))
 ;; Floating point constants requiring whole number part.
 (define float-constant-regex-whole (regexp "^[0-9]+\\.[0-9]*([Ee][+-]?[0-9]+)?(f|F|l|L)?"))
+;; A preprocessor directive. Optionally also matches the `<filename>`/`"filename"` part of `#include`s.
+(define preproc-directive-regex (regexp "^(#[a-z_]+)([ \t]+[<\"]([^\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
+;; Match anything that's not whitespace. Used to recover from invalid pieces of syntax.
+(define any-regex (regexp "^[^ \n\t\r]*"))
 
 (define (regex-match? regex str)
   (let ((search-result (string-search regex str)))
@@ -97,6 +103,10 @@
 	(regex-match? sci-constant-regex str)
 	(regex-match? float-constant-regex-frac str)
 	(regex-match? float-constant-regex-whole str)))
+  (define (starts-with-preproc? str)
+    (regex-match? preproc-directive-regex str))
+  (define (starts-with-any? str)
+    (regex-match? any-regex str))
 
   (define (start-keyword str)
     (find-start-or-error str keyword-strs))
@@ -133,6 +143,20 @@
 	   (car (string-search float-constant-regex-whole str)))
 	  (else
 	   (error "start-constant, expected to find match" str))))
+  (define (start-preproc str)
+    (if (regex-match? preproc-directive-regex str)
+	;; This regex matches some subgroups to also get the filepath used
+	;; by `#include` directives. This specific subgroup is returned too.
+	(let ((match (string-search preproc-directive-regex str)))
+	  (list (car match)		; The `car` is the entire match,
+		(cadr match)		; this is the directive itself and
+		(caddr match)))		; this is the optional filepath (including the
+					; space between the filepath and the directive).
+	(error "start-prepro, expected to find match" str)))
+  (define (start-any str)
+    (if (regex-match? any-regex str)
+	(car (string-search any-regex str))
+	(error "start-any, expected to find match" str)))
 
   (define (string-rest str cutoff)
     (substring str (string-length cutoff) (string-length str)))
@@ -191,7 +215,25 @@
 	      (string-rest str constant)
 	      (cons (make-token constant token-tag-constant)
 		    tokens))))
+	  ((starts-with-preproc? str)
+	   (let ((directive (start-preproc str)))
+	     (tokenize-iter
+	      (string-rest str (car directive))
+	      (let ((directive-tokens
+		     (cons (make-token (cadr directive) token-tag-preproc-directive)
+			   tokens)))
+		(if (cadr directive)	; Check if a subgroup was matched too.
+		    (cons (make-token (caddr directive) token-tag-include-filepath)
+			  directive-tokens)
+		    directive-tokens)))))
+	  ((starts-with-any? str)
+	   (let ((any (start-any str)))
+	     (tokenize-iter
+	      (string-rest str any)
+	      (cons (make-token any token-tag-other)
+		    tokens))))
 	  (else
+	   ;; Give up by appending the rest of the string as a single block.
 	   (tokenize-iter
 	    ""
 	    (cons (make-token str token-tag-other)
@@ -211,6 +253,7 @@
 
   (define (tag-color tag)
     (cond ((eq? tag token-tag-keyword) keyword-color)
+	  ((eq? tag token-tag-preproc-directive) keyword-color)
 	  ((eq? tag token-tag-operator) operator-color)
 	  ((eq? tag token-tag-type) type-color)
 	  ((eq? tag token-tag-literal) literal-color)

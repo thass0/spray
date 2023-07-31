@@ -67,6 +67,12 @@ exec csi -s "$0" "$@"
     (assert (regex-match? float-constant-regex-whole "0184.708e+9fl"))
     (assert (not (regex-match? float-constant-regex-whole ".41e+085L"))))
   (test-float-constant-regex-whole)
+  (define (test-preproc-directive-regex)
+    (assert (regex-match? preproc-directive-regex "#include"))
+    (assert (regex-match? preproc-directive-regex "#undef"))
+    (assert (regex-match? preproc-directive-regex "#include_next"))
+    (assert (regex-match? preproc-directive-regex "#include <blah.h>"))
+    (assert (regex-match? preproc-directive-regex "#import \"blah.h\"")))
   'test-regex-passed)
 (display (test-regex)) (newline)
 
@@ -90,5 +96,15 @@ exec csi -s "$0" "$@"
 		    (tt-whitespace . " ") (tt-identifier . "i") (tt-special-symbol . ")")
 		    (tt-special-symbol . ";") (tt-whitespace . "\n    ") (tt-special-symbol . "}")
 		    (tt-whitespace . "\n"))))
+  ;; The tokenizer doesn't accept 'Äpfel' which isn't a valid identifier.
+  ;; However, it must continue correctly scanning the rest of the source
+  ;; after finding a whitespace character.
+  (assert (equal? (tokenize  "int Äpfel = (6 + 4) * 9;")
+		  '((tt-type . "int") (tt-whitespace . " ") (tt-other . "Äpfel")
+		    (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ")
+		    (tt-special-symbol . "(") (tt-constant . "6") (tt-whitespace . " ")
+		    (tt-operator . "+") (tt-whitespace . " ") (tt-constant . "4")
+		    (tt-special-symbol . ")") (tt-whitespace . " ") (tt-operator . "*")
+		    (tt-whitespace . " ") (tt-constant . "9") (tt-special-symbol . ";"))))
   'test-tokenize-passed)
 (display (test-tokenize)) (newline)

@@ -1,7 +1,6 @@
 ABIVERSION
 addralign
 attrnum
-behviour
 debugee
 diename
 dwarfdump
@@ -28,7 +27,6 @@ MUNIT
 Munit
 munit
 OSABI
-paramter
 pathbuf
 PEEKDATA
 phentsize
@@ -70,10 +68,10 @@ Wextra
 Ilibdwarf
 Isrc
 ptrace
-thasso
 Idependencies
 ifeq
 dynsym
 shstrtab
 fomit
 insts
+lchicken

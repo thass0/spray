@@ -53,7 +53,7 @@ Dwarf_Debug sd_dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   /* Holds the debugger on success. */
   Dwarf_Debug dbg = NULL;
 
-  int res = dwarf_init_path(filepath,  /* Only external paramter. */
+  int res = dwarf_init_path(filepath,  /* Only external parameter. */
     true_pathbuf, true_pathlen,
     group_number,
     error_handler, error_argument,  /* Both `NULL` => unused. */

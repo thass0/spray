@@ -99,7 +99,7 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
   }
 }
 
-// Definied in `colorize.scm`. Prints out a colored version of the source code.
+// Defined in `colorize.scm`. Prints out a colored version of the source code.
 extern void print_colored(const char *code);
 
 SprayResult print_source(
