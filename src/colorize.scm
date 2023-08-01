@@ -1,12 +1,14 @@
 (import (chicken string))
 (import (srfi-1))
 (import (srfi-13))
-(import regex)
+(import regex)				; `regexp` and `string-search`.
+(import format)				; `format`
 
 
 ;;; Token tags.
 
 (define token-tag-whitespace 'tt-whitespace)
+(define token-tag-newline 'tt-newline)
 (define token-tag-other 'tt-other)
 (define token-tag-keyword 'tt-keyword)
 (define token-tag-operator 'tt-operator)
@@ -47,7 +49,7 @@
 ;;; scanner although some modifications were made.
 
 (define literal-regex (regexp "^\"([^\"\\\\]|\\\\[\\s\\S])*\""))
-(define whitespace-regex (regexp "^[\t\n \r]*"))
+(define whitespace-regex (regexp "^[\t\r ]*"))
 (define identifier-regex (regexp "^[a-zA-Z_][a-zA-Z_0-9]*"))
 (define hex-constant-regex (regexp "^0[xX][a-fA-F0-9]+(u|U|l|L)*"))
 (define octal-constant-regex (regexp "^0[0-7]+(u|U|l|L)*"))
@@ -120,6 +122,9 @@
   (define (starts-with-whitespace? str)
     (regex-match? whitespace-regex str))
 
+  (define (starts-with-newline? str)
+    (string-prefix? "\n" str))
+
   (define (starts-with-identifier? str)
     (regex-match? identifier-regex str))
 
@@ -161,6 +166,9 @@
   (define (scan-whitespace code)
     (make-token-list (full-match whitespace-regex code)
 		     token-tag-whitespace))
+
+  (define (scan-newline code)
+    (make-token-list "\n" token-tag-newline))
 
   (define (scan-identifier code)
     ;; Check if `identifier` is the identifier of a type.
@@ -225,6 +233,8 @@
 	   (scan-literal code))
 	  ((starts-with-whitespace? code)
 	   (scan-whitespace code))
+	  ((starts-with-newline? code)
+	   (scan-newline code))
 	  ((starts-with-identifier? code)
 	   (scan-identifier code))
 	  ((starts-with-constant? code)
@@ -269,7 +279,7 @@
 
 
 ;;; Print and color `tokens`.
-(define (print-tokens tokens)
+(define (print-tokens tokens start-lineno active-lineno)
   (define (def-color color)
     (string-append "\033[" color "m"))
 
@@ -289,9 +299,43 @@
 	  ((eq? tag token-tag-constant) constant-color)
 	  (else no-color)))
 
-  (for-each
-   (lambda (token)
-     (display (tag-color (token-tag token)))
-     (display (token-text token))
-     (display no-color))
-   tokens))
+  (define format-token
+    (let ((lineno-str "")
+	  (lineno start-lineno))
+      (lambda (token)
+	(define (before-token)
+	  (let ((before-line lineno-str))
+	    (set! lineno-str "")
+	    (conc before-line
+		  (tag-color (token-tag token)))))
+
+	(define (after-token)
+	  (define (highlight-active)
+	    (if (= lineno active-lineno)
+		" -> "
+		"    "))
+	  (if (eq? (token-tag token) token-tag-newline)
+	      (begin
+		(set! lineno-str (conc (format #f " ~4d" lineno)
+				       (highlight-active)))
+		(set! lineno (+ lineno 1))))
+	  no-color)
+
+	(conc (before-token)
+	      (token-text token)
+	      (after-token)))))
+
+  (define (print-iter tokens)
+    (if (not (null? tokens))
+	(begin
+	  (display (format-token (car tokens)))
+	  (print-iter (cdr tokens)))))
+
+  ;; Line numbers are added to the output *after* each newline
+  ;; token. Since we want a line number on on on the first line
+  ;; too, this newline token is added to the start of the tokens.
+  (define (init-print-tokens token)
+    (cons (make-token "" token-tag-newline)
+	  tokens))
+
+  (print-iter (init-print-tokens tokens)))

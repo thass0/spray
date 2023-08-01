@@ -31,17 +31,16 @@ void free_source_files(SourceFiles *source_files) {
   void *entry;
   while (hashmap_iter(source_files, &iter, &entry)) {
     const SourceLines *lines = entry;
-    for (size_t i = 0; i < lines->n_lines; i++) {
-      free(lines->lines[i]);
-    }
-    free(lines->lines);
+    free(lines->line_lengths);
+    free(lines->code);
     free(lines->filepath);
   }
   hashmap_free(source_files);
 }
 
-enum print_source_block_size {
-  LINE_BLOCK_SIZE = 128,
+enum {
+  LINE_LENGTH_BLOCK = 64,
+  CODE_BLOCK = 1024,
 };
 
 const SourceLines *get_source_lines(SourceFiles *source_files, const char *source_filepath) {
@@ -59,38 +58,56 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
       return NULL;
     }
 
-    size_t n_alloc = LINE_BLOCK_SIZE;
-    SourceLines lines = {
-        .lines = calloc(n_alloc, sizeof(char *)),
-        .n_lines = 0,
-        .n_alloc = n_alloc,
-        .filepath = calloc(strlen(source_filepath) + 1, sizeof(char)),
-    };
-    assert(lines.lines != NULL);
-    assert(lines.filepath != NULL);
+    size_t code_size = 0;
+    size_t code_size_alloc = CODE_BLOCK;
+    size_t code_offset = 0;
 
+    size_t n_lines_alloc = LINE_LENGTH_BLOCK;
+
+    SourceLines lines = {
+      .code = calloc(code_size_alloc, sizeof(char)),
+      .line_lengths = calloc(n_lines_alloc, sizeof(size_t)),
+      .n_lines = 0,
+      .filepath = calloc(strlen(source_filepath) + 1, sizeof(char)),
+    };
+    assert(lines.code != NULL);
+    assert(lines.line_lengths != NULL);
+    assert(lines.filepath != NULL);
     strcpy(lines.filepath, source_filepath);
 
-    size_t n_chars_read = 0;  /* Required by `getline(3)` not used rn. */
-    for (; lines.n_lines < lines.n_alloc; lines.n_lines++) {
-      // Increase the array size to prevent the loop from ending.
-      if (lines.n_lines + 1 >= lines.n_alloc) {
-        size_t new_alloc_start_offset = lines.n_alloc;
-        lines.n_alloc += LINE_BLOCK_SIZE;
-        lines.lines =
-            realloc(lines.lines, sizeof(*lines.lines) * lines.n_alloc);
-        // Zero the new memory.
-        memset(lines.lines + new_alloc_start_offset,
-          0, LINE_BLOCK_SIZE * sizeof(char *));
+    size_t line_length = 0;
+    size_t getline_buf_size = 0;
+    char *getline_buf = NULL;
+    while (getline(&getline_buf, &getline_buf_size, f) != -1) {
+      line_length = strlen(getline_buf);
+
+      if (lines.n_lines >= n_lines_alloc) {
+	n_lines_alloc += LINE_LENGTH_BLOCK;
+	lines.line_lengths = realloc(lines.line_lengths, sizeof(size_t) * n_lines_alloc);
+	assert(lines.line_lengths != NULL);
+      }
+      lines.line_lengths[lines.n_lines++] = line_length;
+
+      code_offset = code_size;
+      code_size += line_length;
+      if (code_size >= code_size_alloc) {
+	code_size_alloc += CODE_BLOCK;
+	lines.code = realloc(lines.code, sizeof(char) * code_size_alloc);
+	assert(lines.code != NULL);
       }
 
-      if (getline(&lines.lines[lines.n_lines], &n_chars_read, f) == -1) {
-        // We hit the EOF, increase `lines.n_lines` once
-        // more to account for the previous line.
-        lines.n_lines ++;
-        break;
-      }
+      strncpy(lines.code + code_offset, getline_buf, line_length);
     }
+
+    free(getline_buf);
+
+    /* Add a NULL-terminator. */
+    code_size += 1;
+    if (code_size >= code_size_alloc) {
+      lines.code = realloc(lines.code, sizeof(char) * code_size);
+      assert(lines.code != NULL);
+    }
+    lines.code[code_size - 1] = '\0';
 
     fclose(f);
 
@@ -99,8 +116,30 @@ const SourceLines *get_source_lines(SourceFiles *source_files, const char *sourc
   }
 }
 
+/* Return the offset at which the line at `lineno` starts. */
+SprayResult line_offset(const size_t *line_lengths, size_t n_lengths, unsigned lineno, size_t *offset) {
+  assert(line_lengths != NULL);
+  assert(offset != NULL);
+
+  /* NOTE: Line numbers are one-indexed; we must
+     subtract 1 to use them as array indices. */
+  size_t idx = lineno - 1;
+  if (idx >= n_lengths) {
+    return SP_ERR;
+  }
+
+  /* Accumulate all offsets until we reach the given line number. */
+  size_t offset_acc = 0;
+  for (size_t i = 0; i < idx; i++) {
+    offset_acc += line_lengths[i];
+  }
+  *offset = offset_acc;
+
+  return SP_OK;
+}
+
 // Defined in `colorize.scm`. Prints out a colored version of the source code.
-extern void print_colored(const char *code);
+extern void print_colored(const char *code, unsigned start_lineno, unsigned active_lineno);
 
 SprayResult print_source(
   SourceFiles *source_files,
@@ -131,40 +170,17 @@ SprayResult print_source(
     end_lineno = lines->n_lines;
   }
 
-  /* NOTE: Line numbers are one-indexed; we must
-     subtract 1 to use them as array indices. */
-  /*const char *cur_line = NULL;
-  for (
-    unsigned cur_lineno = start_lineno;
-    cur_lineno < end_lineno;
-    cur_lineno++
-  ) {
-    printf(" %4d", cur_lineno);
-    cur_line = lines->lines[cur_lineno - 1];
-    if (cur_lineno == lineno) {
-      // Highlight current line.
-      fputs(" -> ", stdout);
-    } else if (strlen(cur_line) > 1) {
-      fputs("    ", stdout);
-    }
+  size_t start_offset = 0;
+  line_offset(lines->line_lengths, lines->n_lines, start_lineno, &start_offset);
+  size_t end_offset = 0;
+  line_offset(lines->line_lengths, lines->n_lines, end_lineno, &end_offset);
 
-    // The string read by `getline(3)` ends in a newline
-    // so we don't need to add one ourselves.
-    fputs(cur_line, stdout);
-  }*/
+  char temp = lines->code[end_offset];
+  lines->code[end_offset] = '\0';
 
-  char *code = NULL;
-  for (unsigned lineno = start_lineno;
-       lineno < end_lineno;
-       lineno++) {
-    size_t len = code == NULL ? 0 : strlen(code);
-    size_t added = strlen(lines->lines[lineno - 1]);
-    code = realloc(code, len + added + 1);
-    memcpy(code + len, lines->lines[lineno - 1], added);
-    code[len + added] = '\0';
-  }
-  print_colored(code);
-  free(code);
+  print_colored(lines->code + start_offset, start_lineno, lineno);
+
+  lines->code[end_offset] = temp;
 
   return SP_OK;
 }

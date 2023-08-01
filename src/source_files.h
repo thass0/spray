@@ -12,10 +12,10 @@
 #include "hashmap.h"
 
 typedef struct {
-  char **lines;
-  size_t n_lines;  /* Number of lines stores in `lines`. */
-  size_t n_alloc;  /* Number of lines allocated in `lines`. */
-  char *filepath;  /* This is the hashmap's key. */
+  char *code;			/* Content of source file. */
+  size_t *line_lengths;        /* Lengths of each line in `code`, including the trailing '\n'. */
+  size_t n_lines;       	/* Number of  elements in `line_lengths`. */
+  char *filepath;		/* Path to source file. This is the hashmap's key. */
 } SourceLines;
 
 typedef struct hashmap SourceFiles;
