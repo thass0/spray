@@ -3,6 +3,9 @@
 (import (srfi-13))
 (import regex)
 
+
+;;; Token tags.
+
 (define token-tag-whitespace 'tt-whitespace)
 (define token-tag-other 'tt-other)
 (define token-tag-keyword 'tt-keyword)
@@ -18,6 +21,16 @@
 (define (make-token text token-tag)
   (cons token-tag text))
 
+(define (make-token-list text token-tag)
+  (list (make-token text token-tag)))
+
+(define (make-end-token)
+  (make-token "" 'tt-end))
+
+(define (end-token? token)
+  (and (equal? (token-text token) "")
+       (eq? (token-tag token) 'tt-end)))
+
 (define (token-tag token)
   (if (pair? token)
       (car token)
@@ -28,9 +41,11 @@
       (cdr token)
       (error "token-text, token must be a pair" token)))
 
+
 ;;; Regular expressions for scanning C code. They mostly
 ;;; resemble what's  used in [this](https://www.lysator.liu.se/c/ANSI-C-grammar-l.html)
 ;;; scanner although some modifications were made.
+
 (define literal-regex (regexp "^\"([^\"\\\\]|\\\\[\\s\\S])*\""))
 (define whitespace-regex (regexp "^[\t\n \r]*"))
 (define identifier-regex (regexp "^[a-zA-Z_][a-zA-Z_0-9]*"))
@@ -48,53 +63,66 @@
 ;; Match anything that's not whitespace. Used to recover from invalid pieces of syntax.
 (define any-regex (regexp "^[^ \n\t\r]*"))
 
+;;; Does `str` match `regex`?
 (define (regex-match? regex str)
   (let ((search-result (string-search regex str)))
   (and (pair? search-result)
        (not (equal? (car search-result) "")))))
 
+;;; Return the full match of `str` and `regex`.
+(define (full-match regex str)
+  (car (string-search regex str)))
+
+
+ ;;; Lists of meaningful string literals in C sources.
+(define C-keywords '("case" "default" "if" "else" "switch" "while"
+		       "do" "for" "goto" "continue" "break" "return"
+		       "struct" "union" "enum" "typedef" "extern"
+		       "static" "register" "auto" "const" "volatile"
+		       "restrict"))
+(define C-operators '(">>=" "<<=" "+=" "-=" "*=" "/=" "%=" "&=" "^=" "|="
+			">>" "<<" "++" "--" "->" "&&" "||" "<=" ">=" "==" "!="
+			"=" "." "&" "!" "~" "-" "+" "*" "/" "%" "<" ">" "^"
+			"|" "?" ":" "sizeof"))
+(define C-builtin-types '("char" "short" "int" "long" "signed"
+		    "unsigned" "float" "double" "void"))
+(define C-special-symbols '("(" ")" "[" "]" "{" "}" "," ";" "..."))
+
+
+;;; Tokenize `code`.
 (define (tokenize code)
-  (define (find-start given-str possible-prefixes)
+  ;; Does `given-str` start with any of the prefixes in `possible-prefixes`?
+  (define (find-prefix given-str possible-prefixes)
     (find
      (lambda (possible-prefix)
        (string-prefix? possible-prefix given-str))
      possible-prefixes))
-  (define (starts-with-some? given-str possible-prefixes)
-    (if (find-start given-str possible-prefixes)
+
+  ;; Predicate for `find-prefix`.
+  (define (prefix? given-str possible-prefixes)
+    (if (find-prefix given-str possible-prefixes)
 	#t #f))
-  (define (find-start-or-error given-str possible-prefixes)
-    (let ((start (find-start given-str possible-prefixes)))
-      (if (not start)
-	  (error "find-start-or-error, failed to find start" given-str possible-prefixes)
-	  start)))
 
-  (define keyword-strs '("case" "default" "if" "else" "switch" "while"
-			 "do" "for" "goto" "continue" "break" "return"
-			 "struct" "union" "enum" "typedef" "extern"
-			 "static" "register" "auto" "const" "volatile"
-			 "restrict"))
-  (define operator-strs '(">>=" "<<=" "+=" "-=" "*=" "/=" "%=" "&=" "^=" "|="
-			  ">>" "<<" "++" "--" "->" "&&" "||" "<=" ">=" "==" "!="
-			  "=" "." "&" "!" "~" "-" "+" "*" "/" "%" "<" ">" "^"
-			  "|" "?" ":" "sizeof"))
-  (define type-strs '("char" "short" "int" "long" "signed"
-		      "unsigned" "float" "double" "void"))
-
-  (define special-symbol-strs '("(" ")" "[" "]" "{" "}" "," ";" "..."))
 
   (define (starts-with-keyword? str)
-    (starts-with-some? str keyword-strs))
+    (prefix? str C-keywords))
+
   (define (starts-with-operator? str)
-    (starts-with-some? str operator-strs))
+    (prefix? str C-operators))
+
   (define (starts-with-special-symbol? str)
-    (starts-with-some? str special-symbol-strs))
+    (prefix? str C-special-symbols))
+
   (define (starts-with-literal? str)
     (if (string-search literal-regex str)
 	#t #f))
+
   (define (starts-with-whitespace? str)
-      (regex-match? whitespace-regex str))
+    (regex-match? whitespace-regex str))
+
   (define (starts-with-identifier? str)
     (regex-match? identifier-regex str))
+
   (define (starts-with-constant? str)
     (or (regex-match? hex-constant-regex str)
 	(regex-match? octal-constant-regex str)
@@ -103,143 +131,144 @@
 	(regex-match? sci-constant-regex str)
 	(regex-match? float-constant-regex-frac str)
 	(regex-match? float-constant-regex-whole str)))
+
   (define (starts-with-preproc? str)
     (regex-match? preproc-directive-regex str))
+
   (define (starts-with-any? str)
     (regex-match? any-regex str))
 
-  (define (start-keyword str)
-    (find-start-or-error str keyword-strs))
-  (define (start-operator str)
-    (find-start-or-error str operator-strs))
-  (define (start-special-symbol str)
-    (find-start-or-error str special-symbol-strs))
-  (define (start-literal str)
-    (if (regex-match? literal-regex str)
-	(car (string-search literal-regex str))
-	(error "start-literal, expected to find match" str)))
-  (define (start-whitespace str)
-    (if (regex-match? whitespace-regex str)
-	(car (string-search whitespace-regex str))
-	(error "start-whitespace, expected to find match" str)))
-  (define (start-identifier str)
-      (if (regex-match? identifier-regex str)
-	  (car (string-search identifier-regex str))
-	  (error "start-identifier, expected to find match" str)))
-  (define (start-constant str)
-    (cond ((regex-match? hex-constant-regex str)
-	   (car (string-search hex-constant-regex str)))
-	  ((regex-match? octal-constant-regex str)
-	   (car (string-search octal-constant-regex str)))
-	  ((regex-match? decimal-constant-regex str)
-	   (car (string-search decimal-constant-regex str)))
-	  ((regex-match? char-constant-regex str)
-	   (car (string-search char-constant-regex str)))
-	  ((regex-match? sci-constant-regex str)
-	   (car (string-search sci-constant-regex str)))
-	  ((regex-match? float-constant-regex-frac str)
-	   (car (string-search float-constant-regex-frac str)))
-	  ((regex-match? float-constant-regex-whole str)
-	   (car (string-search float-constant-regex-whole str)))
-	  (else
-	   (error "start-constant, expected to find match" str))))
-  (define (start-preproc str)
-    (if (regex-match? preproc-directive-regex str)
-	;; This regex matches some subgroups to also get the filepath used
-	;; by `#include` directives. This specific subgroup is returned too.
-	(let ((match (string-search preproc-directive-regex str)))
-	  (list (car match)		; The `car` is the entire match,
-		(cadr match)		; this is the directive itself and
-		(caddr match)))		; this is the optional filepath (including the
-					; space between the filepath and the directive).
-	(error "start-prepro, expected to find match" str)))
-  (define (start-any str)
-    (if (regex-match? any-regex str)
-	(car (string-search any-regex str))
-	(error "start-any, expected to find match" str)))
 
+  ;;; NOTE: All scan procedures assume that the corresponding
+  ;;; `starts-with-*?` procedure is called first so as to verify
+  ;;; that the string actually matches the regex.
+  (define (scan-keyword code)
+    (make-token-list (find-prefix code C-keywords)
+		     token-tag-keyword))
+
+  (define (scan-operator code)
+    (make-token-list (find-prefix code C-operators)
+		     token-tag-operator))
+
+  (define (scan-special-symbol code)
+    (make-token-list (find-prefix code C-special-symbols)
+		     token-tag-special-symbol))
+
+  (define (scan-literal code)
+    (make-token-list (full-match literal-regex code)
+		     token-tag-literal))
+
+  (define (scan-whitespace code)
+    (make-token-list (full-match whitespace-regex code)
+		     token-tag-whitespace))
+
+  (define (scan-identifier code)
+    ;; Check if `identifier` is the identifier of a type.
+    (define (type-identifier? identifier)
+      (find
+       (lambda (type)
+	 (string=? type identifier))
+       C-builtin-types))
+    (let ((match (full-match identifier-regex code)))
+      (make-token-list
+       match
+       (if (type-identifier? match)
+	   token-tag-type
+	   token-tag-identifier))))
+
+  (define (scan-constant code)
+    (make-token-list
+     (cond ((regex-match? hex-constant-regex code)
+	    (full-match hex-constant-regex code))
+	   ((regex-match? octal-constant-regex code)
+	    (full-match octal-constant-regex code))
+	   ((regex-match? decimal-constant-regex code)
+	    (full-match decimal-constant-regex code))
+	   ((regex-match? char-constant-regex code)
+	    (full-match char-constant-regex code))
+	   ((regex-match? sci-constant-regex code)
+	    (full-match sci-constant-regex code))
+	   ((regex-match? float-constant-regex-frac code)
+	    (full-match float-constant-regex-frac code))
+	   ((regex-match? float-constant-regex-whole code)
+	    (full-match float-constant-regex-whole code))
+	   (else
+	    (error "scan-constant, expected to find match" code)))
+     token-tag-constant))
+
+  (define (scan-preproc code)
+    (let ((match (string-search preproc-directive-regex code)))
+      (if (caddr match)
+	  (list (make-token (cadr match)
+			    token-tag-preproc-directive)
+		(make-token (caddr match)
+			    token-tag-include-filepath))
+	  (make-token-list (cadr match)
+			   token-tag-preproc-directive))))
+
+  (define (scan-any code)
+    (make-token-list (full-match any-regex code)
+		     token-tag-other))
+
+
+  ;;; Scan the next token in the code.
+  (define (scan code)
+    (cond ((string-null? code)
+	   '())
+	  ((starts-with-keyword? code)
+	   (scan-keyword code))
+	  ((starts-with-operator? code)
+	   (scan-operator code))
+	  ((starts-with-special-symbol? code)
+	   (scan-special-symbol code))
+	  ((starts-with-literal? code)
+	   (scan-literal code))
+	  ((starts-with-whitespace? code)
+	   (scan-whitespace code))
+	  ((starts-with-identifier? code)
+	   (scan-identifier code))
+	  ((starts-with-constant? code)
+	   (scan-constant code))
+	  ((starts-with-preproc? code)
+	   (scan-preproc code))
+	  ((starts-with-any? code)
+	   (scan-any code))
+	  (else
+	   (error "scan, invalid input" code))))
+
+  ;;; Return the next token in the code.
+  (define next-token
+    ;; Queue of tokens to be retured before scanning the next token.
+    (let ((token-queue '()))
+      (lambda (code)
+	(if (null? token-queue)
+	    (let ((new-tokens (scan code)))
+	      (if (null? new-tokens)
+		  (make-end-token)	; Signal that input is over.
+		  (begin
+		    (set! token-queue (cdr new-tokens))
+		    (car new-tokens))))
+	    (let ((this-token (car token-queue)))
+	      (set! token-queue (cdr token-queue))
+	      this-token)))))
+
+  ;;; Return the rest of `str` after removing
+  ;;; `(string-length cutoff)` characters from its start.
   (define (string-rest str cutoff)
     (substring str (string-length cutoff) (string-length str)))
 
-  (define (type-identifier? identifier)
-    (find
-     (lambda (type)
-       (string=? type identifier))
-     type-strs))
-
-  (define (tokenize-iter str tokens)
-    (cond ((string-null? str)
-	   (reverse tokens))
-	  ((starts-with-keyword? str)
-	   (let ((keyword (start-keyword str)))
-	     (tokenize-iter
-	      (string-rest str keyword)
-	      (cons (make-token keyword token-tag-keyword)
-		    tokens))))
-	  ((starts-with-operator? str)
-	   (let ((operator (start-operator str)))
-	     (tokenize-iter
-	      (string-rest str operator)
-	      (cons (make-token operator token-tag-operator)
-		    tokens))))
-	  ((starts-with-special-symbol? str)
-	   (let ((special-symbol (start-special-symbol str)))
-	     (tokenize-iter
-	      (string-rest str special-symbol)
-	      (cons (make-token special-symbol token-tag-special-symbol)
-		    tokens))))
-	  ((starts-with-literal? str)
-	   (let ((literal (start-literal str)))
-	     (tokenize-iter
-	      (string-rest str literal)
-	      (cons (make-token literal token-tag-literal)
-		    tokens))))
-	  ((starts-with-whitespace? str)
-	   (let ((whitespace (start-whitespace str)))
-	     (tokenize-iter
-	      (string-rest str whitespace)
-	      (cons (make-token whitespace token-tag-whitespace)
-		    tokens))))
-	  ((starts-with-identifier? str)
-	   (let ((identifier (start-identifier str)))
-	     (tokenize-iter
-	      (string-rest str identifier)
-	      (cons (make-token identifier
-				(if (type-identifier? identifier)
-				    token-tag-type
-				    token-tag-identifier))
-		    tokens))))
-	  ((starts-with-constant? str)
-	   (let ((constant (start-constant str)))
-	     (tokenize-iter
-	      (string-rest str constant)
-	      (cons (make-token constant token-tag-constant)
-		    tokens))))
-	  ((starts-with-preproc? str)
-	   (let ((directive (start-preproc str)))
-	     (tokenize-iter
-	      (string-rest str (car directive))
-	      (let ((directive-tokens
-		     (cons (make-token (cadr directive) token-tag-preproc-directive)
-			   tokens)))
-		(if (cadr directive)	; Check if a subgroup was matched too.
-		    (cons (make-token (caddr directive) token-tag-include-filepath)
-			  directive-tokens)
-		    directive-tokens)))))
-	  ((starts-with-any? str)
-	   (let ((any (start-any str)))
-	     (tokenize-iter
-	      (string-rest str any)
-	      (cons (make-token any token-tag-other)
-		    tokens))))
-	  (else
-	   ;; Give up by appending the rest of the string as a single block.
-	   (tokenize-iter
-	    ""
-	    (cons (make-token str token-tag-other)
-		  tokens)))))
+  ;; Tokenize the code.
+  (define (tokenize-iter code tokens)
+    (let ((token (next-token code)))
+      (if (end-token? token)
+	  (reverse tokens)
+	  (tokenize-iter
+	   (string-rest code (token-text token))
+	   (cons token tokens)))))
   (tokenize-iter code '()))
 
+
+;;; Print and color `tokens`.
 (define (print-tokens tokens)
   (define (def-color color)
     (string-append "\033[" color "m"))
