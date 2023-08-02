@@ -61,7 +61,7 @@
 ;; Floating point constants requiring whole number part.
 (define float-constant-regex-whole (regexp "^[0-9]+\\.[0-9]*([Ee][+-]?[0-9]+)?(f|F|l|L)?"))
 ;; A preprocessor directive. Optionally also matches the `<filename>`/`"filename"` part of `#include`s.
-(define preproc-directive-regex (regexp "^(#[a-z_]+)([ \t]+[<\"]([^\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
+(define preproc-directive-regex (regexp "^(#[a-z_]+)([ \t]+[<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
 ;; Match anything that's not whitespace. Used to recover from invalid pieces of syntax.
 (define any-regex (regexp "^[^ \n\t\r]*"))
 
