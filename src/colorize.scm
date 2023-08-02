@@ -279,7 +279,7 @@
 
 
 ;;; Print and color `tokens`.
-(define (print-tokens tokens start-lineno active-lineno)
+(define (print-tokens tokens start-lineno active-lineno use-color)
   (define (def-color color)
     (string-append "\033[" color "m"))
 
@@ -289,37 +289,56 @@
   (define literal-color (def-color "31"))
   (define constant-color (def-color "34"))
   (define no-color (def-color "0"))
+  (define nothing "")
 
   (define (tag-color tag)
-    (cond ((eq? tag token-tag-keyword) keyword-color)
-	  ((eq? tag token-tag-preproc-directive) keyword-color)
-	  ((eq? tag token-tag-operator) operator-color)
-	  ((eq? tag token-tag-type) type-color)
-	  ((eq? tag token-tag-literal) literal-color)
-	  ((eq? tag token-tag-constant) constant-color)
-	  (else no-color)))
+  (cond ((eq? tag token-tag-keyword) keyword-color)
+  ((eq? tag token-tag-preproc-directive) keyword-color)
+  ((eq? tag token-tag-operator) operator-color)
+  ((eq? tag token-tag-type) type-color)
+  ((eq? tag token-tag-literal) literal-color)
+  ((eq? tag token-tag-constant) constant-color)
+  (else no-color)))
+
+  (define (before-color tag)
+    (if use-color
+	(tag-color tag)
+	nothing))
+  (define (after-color)
+    (if use-color
+	no-color
+	nothing))
+
+  (define (default-line-init token) "")
 
   (define format-token
-    (let ((lineno-str "")
+    (let ((line-init default-line-init)
 	  (lineno start-lineno))
       (lambda (token)
 	(define (before-token)
-	  (let ((before-line lineno-str))
-	    (set! lineno-str "")
-	    (conc before-line
-		  (tag-color (token-tag token)))))
+	  (let ((before-line line-init))
+	    (set! line-init default-line-init)
+	    (conc (before-line token)
+		  (before-color (token-tag token)))))
 
 	(define (after-token)
-	  (define (highlight-active)
-	    (if (= lineno active-lineno)
-		" -> "
-		"    "))
+	  (define (highlight-active next-token)
+	    (cond ((= lineno active-lineno)
+		   " -> ")
+		  ((not (eq? (token-tag next-token)
+			     token-tag-newline))
+		   "    ")		; Only add whitespace to inactive lines if
+		  (else			; the next line isn't just another newline.
+		   "")))
 	  (if (eq? (token-tag token) token-tag-newline)
-	      (begin
-		(set! lineno-str (conc (format #f " ~4d" lineno)
-				       (highlight-active)))
-		(set! lineno (+ lineno 1))))
-	  no-color)
+	      (set! line-init
+		(lambda (next-token)
+		  (let ((lineno-str
+			 (conc (format #f " ~4d" lineno)
+			       (highlight-active next-token))))
+		    (set! lineno (+ lineno 1))
+		    lineno-str))))
+	  (after-color))
 
 	(conc (before-token)
 	      (token-text token)

@@ -121,16 +121,14 @@ SprayResult line_offset(const size_t *line_lengths, size_t n_lengths, unsigned l
   assert(line_lengths != NULL);
   assert(offset != NULL);
 
-  /* NOTE: Line numbers are one-indexed; we must
-     subtract 1 to use them as array indices. */
-  size_t idx = lineno - 1;
-  if (idx >= n_lengths) {
-    return SP_ERR;
+  size_t n_acc_lengths = lineno - 1;
+  if (n_acc_lengths > n_lengths) {
+    n_acc_lengths = n_lengths;
   }
 
   /* Accumulate all offsets until we reach the given line number. */
   size_t offset_acc = 0;
-  for (size_t i = 0; i < idx; i++) {
+  for (size_t i = 0; i < n_acc_lengths; i++) {
     offset_acc += line_lengths[i];
   }
   *offset = offset_acc;
@@ -139,7 +137,8 @@ SprayResult line_offset(const size_t *line_lengths, size_t n_lengths, unsigned l
 }
 
 // Defined in `colorize.scm`. Prints out a colored version of the source code.
-extern void print_colored(const char *code, unsigned start_lineno, unsigned active_lineno);
+extern void print_colored(const char *code, unsigned start_lineno,
+			  unsigned active_lineno, bool use_color);
 
 SprayResult print_source(
   SourceFiles *source_files,
@@ -164,12 +163,6 @@ SprayResult print_source(
     end_lineno += n_context - lineno;
   }
 
-  /* Is the line context we want to display
-     outside of the possible range of lines? */
-  if (end_lineno > lines->n_lines) {
-    end_lineno = lines->n_lines;
-  }
-
   size_t start_offset = 0;
   line_offset(lines->line_lengths, lines->n_lines, start_lineno, &start_offset);
   size_t end_offset = 0;
@@ -178,7 +171,7 @@ SprayResult print_source(
   char temp = lines->code[end_offset];
   lines->code[end_offset] = '\0';
 
-  print_colored(lines->code + start_offset, start_lineno, lineno);
+  print_colored(lines->code + start_offset, start_lineno, lineno, 0);
 
   lines->code[end_offset] = temp;
 

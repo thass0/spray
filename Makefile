@@ -85,7 +85,7 @@ TEST_SCHEME_SCRIPT = tests/colorize.scm
 test: unit integration
 
 unit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
-unit: $(TEST_BINARY) $(BINARY) assets
+unit: $(TEST_BINARY) assets
 	./$(TEST_BINARY) $(args)
 	$(TEST_SCHEME_SCRIPT)
 
