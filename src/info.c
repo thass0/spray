@@ -388,7 +388,7 @@ typedef struct {
   Breakpoints *breakpoints;
 } CallbackData;
 
-enum { TO_DEL_ALLOC_SIZE = 8 };
+enum { TO_DEL_ALLOC_SIZE = 16 };
 
 SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line,
                                                 void *const void_data) {
@@ -415,6 +415,10 @@ SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line,
   return SP_OK;
 }
 
+/* Set breakpoints for `step_over`. If this function succeeds, it will
+   allocate an array in `*to_del_ptr` which holds the addresses of
+   `*n_to_del` breakpoints. The caller has to free `*to_del_ptr` and
+   delete all breakpoints. */
 SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       const DebugInfo *info,
                                       x86_addr load_address,
@@ -432,22 +436,24 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
     return SP_ERR;
   }
 
-  size_t to_del_alloc = TO_DEL_ALLOC_SIZE;
-  size_t to_del_idx = 0;
-  x86_addr *to_del = calloc(TO_DEL_ALLOC_SIZE, sizeof(x86_addr));
-  if (to_del == NULL) {
+  CallbackData data = {
+      .to_del_alloc = TO_DEL_ALLOC_SIZE,
+      .to_del_idx = 0,
+      .to_del = calloc(TO_DEL_ALLOC_SIZE, sizeof(x86_addr)),
+      .load_address = load_address,
+      .skip_line = pos->line,
+      .breakpoints = breakpoints,
+  };
+
+  if (data.to_del == NULL) {
     return SP_ERR;
   }
-
-  CallbackData data = {
-      to_del_alloc, to_del_idx, to_del, load_address, pos->line, breakpoints,
-  };
 
   sd_for_each_line_in_subprog(info->dbg, func_name, filepath,
                               callback__set_dwarf_line_breakpoint, &data);
 
   *n_to_del = data.to_del_idx;
-  *to_del_ptr = to_del;
+  *to_del_ptr = data.to_del;
 
   return SP_OK;
 }
