@@ -1268,6 +1268,7 @@ void init_load_address(Debugger *dbg) {
 
 int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
   assert(store != NULL);
+  assert(prog_name != NULL);
 
   if (access(prog_name, F_OK) != 0) {
     fprintf(stderr, "File %s doesn't exist\n", prog_name);

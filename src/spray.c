@@ -78,34 +78,25 @@
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/personality.h>
-#include <sys/ptrace.h>
-
+#include "args.h"
 #include "debugger.h"
 
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    fprintf(stderr, "Usage: spray PROGRAM_NAME\n");
+  Args args = {0};
+  int args_res = parse_args(argc, argv, &args);
+
+  if (args_res == -1) {
+    print_help_message(prog_name_arg(argc, argv));
     return -1;
   }
 
-  char *prog_name = strdup(argv[1]);
-  char **prog_argv = argv + 1;
-
   Debugger debugger;
 
-  if (setup_debugger(prog_name, prog_argv, &debugger) == -1) {
-    free(prog_name);
+  if (setup_debugger(args.file, args.args, &debugger) == -1) {
     return -1;
   }
 
   run_debugger(debugger);
-
-  free(prog_name);
 
   return 0;
 }

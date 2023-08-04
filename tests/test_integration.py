@@ -1,4 +1,4 @@
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, run
 from typing import Optional
 import re
 import string
@@ -19,9 +19,9 @@ def random_string() -> str:
 
 
 def run_cmd(commands: str, debugee: str, args: list[str]) -> str:
-    p = Popen([DEBUGGER, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE)
-    output = p.communicate(commands.encode('UTF-8'))
-    return output[0].decode('UTF-8')
+    with Popen([DEBUGGER, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE) as dbg:
+        output = dbg.communicate(commands.encode('UTF-8'))
+        return output[0].decode('UTF-8')
 
 
 def assert_lit(cmd: str,
@@ -252,6 +252,29 @@ class TestArumentPassing:
         assert_lit('c', """\
 Command line arguments: tests/assets/print-args.bin Hello World
 """, PRINT_ARGS_BIN, ["Hello", "World"])
+
+USAGE_MSG = 'usage: ' + DEBUGGER
+
+class TestCLI:
+    def output(self, args: Optional[list[str]] = []):
+        return run([DEBUGGER] + args, capture_output=True, text=True).stderr
+
+    def test_help_if_no_args(self):
+        assert USAGE_MSG in self.output()
+
+    def test_help_if_invalid_flag(self):
+        # `--colorize` is not a valid flag.
+        assert USAGE_MSG in self.output(['--colorize'])
+        assert USAGE_MSG in self.output(['--colorize', FRAME_POINTER_BIN])
+        assert USAGE_MSG in self.output(['--colorize', PRINT_ARGS_BIN, 'hello', 'world'])
+
+    def test_help_if_wrong_prefix(self):
+        # `-c` is valid, `--c` is not!
+        assert USAGE_MSG in self.output(['--c', PRINT_ARGS_BIN])
+
+    def test_help_if_no_binary(self):
+        # `--no-color` is a valid flag but we didn't specify a binary.
+        assert USAGE_MSG in self.output(['--no-color'])
 
 
 class TestBacktrace:
