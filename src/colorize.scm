@@ -311,17 +311,17 @@
 
   (define (default-line-init token) "")
 
-  (define format-token
+  (define format-token!
     (let ((line-init default-line-init)
 	  (lineno start-lineno))
       (lambda (token)
-	(define (before-token)
+	(define (before-token!)
 	  (let ((before-line line-init))
 	    (set! line-init default-line-init)
 	    (conc (before-line token)
 		  (before-color (token-tag token)))))
 
-	(define (after-token)
+	(define (after-token!)
 	  (define (highlight-active next-token)
 	    (cond ((= lineno active-lineno)
 		   " -> ")
@@ -340,14 +340,14 @@
 		    lineno-str))))
 	  (after-color))
 
-	(conc (before-token)
+	(conc (before-token!)
 	      (token-text token)
-	      (after-token)))))
+	      (after-token!)))))
 
   (define (print-iter tokens)
     (if (not (null? tokens))
 	(begin
-	  (display (format-token (car tokens)))
+	  (display (format-token! (car tokens)))
 	  (print-iter (cdr tokens)))))
 
   ;; Line numbers are added to the output *after* each newline
