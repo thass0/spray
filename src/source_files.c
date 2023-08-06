@@ -1,5 +1,6 @@
 #include "source_files.h"
 
+#include "args.h"
 #include "magic.h"
 
 #include <stdlib.h>
@@ -171,10 +172,10 @@ SprayResult print_source(
   char temp = lines->code[end_offset];
   lines->code[end_offset] = '\0';
 
-  print_colored(lines->code + start_offset, start_lineno, lineno, 0);
+  bool use_color = !get_args()->flags.no_color;
+  print_colored(lines->code + start_offset, start_lineno, lineno, use_color);
 
   lines->code[end_offset] = temp;
 
   return SP_OK;
 }
-

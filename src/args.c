@@ -1,5 +1,6 @@
 #include "args.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -114,8 +115,36 @@ int parse_args(int argc, char **argv, Args *args) {
     if (file_idx + 1 < argc) {
       /* The arguments passed to the debugged executable include its name. */
       args->args = argv + file_idx;
+      args->n_args = argc - file_idx;
     }
   }
 
   return 0;
 }
+
+static Args GLOBAL_ARGS = {0};
+
+void set_args(const Args *args) {
+  assert(args != NULL);
+
+  GLOBAL_ARGS.flags = args->flags;
+
+  /* Replace the filepath to the executable. */
+  free(GLOBAL_ARGS.file);
+  GLOBAL_ARGS.file = strdup(args->file);
+
+  /* Replace the `args` array. */
+  for (size_t i = 0; i < GLOBAL_ARGS.n_args; i++) {
+    free(GLOBAL_ARGS.args[i]);
+  }
+  free(GLOBAL_ARGS.args);
+
+  /* Allocate one pointer more than needed so that the
+     array is terminated by a NULL pointer. */
+  GLOBAL_ARGS.args = calloc(args->n_args + 1, sizeof(char *));
+  for (size_t i = 0; i < args->n_args; i++) {
+    GLOBAL_ARGS.args[i] = strdup(args->args[i]);
+  }
+}
+
+const Args *get_args(void) { return &GLOBAL_ARGS; }

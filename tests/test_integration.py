@@ -19,7 +19,7 @@ def random_string() -> str:
 
 
 def run_cmd(commands: str, debugee: str, args: list[str]) -> str:
-    with Popen([DEBUGGER, debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE) as dbg:
+    with Popen([DEBUGGER, '--no-color', debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE) as dbg:
         output = dbg.communicate(commands.encode('UTF-8'))
         return output[0].decode('UTF-8')
 
