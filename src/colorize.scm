@@ -71,6 +71,7 @@
 ;; Comments must match anything except for newline characters
 ;; so as to maintain the line numberings.
 (define comment-text-regex (regexp "^(\\*(?!\\/)|[^*\n])*"))
+(define line-comment-text-regex (regexp "^[^\n]*"))
 ;; Match anything that's not whitespace. Used to recover from invalid pieces of syntax.
 (define any-regex (regexp "^[^ \n\t\r]*"))
 
@@ -100,6 +101,7 @@
 (define C-special-symbols '("(" ")" "[" "]" "{" "}" "," ";" "..."))
 (define C-comment '("/*"))
 (define C-uncomment '("*/"))
+(define C++-comment '("//"))
 
 
 ;;; Tokenize `code`.
@@ -118,6 +120,9 @@
 
   (define (starts-with-comment? str)
     (prefix? str C-comment))
+
+  (define (starts-with-line-comment? str)
+    (prefix? str C++-comment))
 
   (define (starts-with-uncomment? str)
     (prefix? str C-uncomment))
@@ -166,6 +171,14 @@
   (define (scan-comment code)
     (make-token-list (find-prefix code C-comment)
 		     token-tag-comment))
+
+  (define (scan-line-comment code)
+    (make-token-list (find-prefix code C++-comment)
+		     token-tag-comment))
+
+  (define (scan-line-comment-text code)
+    (make-token-list (full-match line-comment-text-regex code)
+		     token-tag-comment-text))
 
   (define (scan-comment-text code)
     (make-token-list (full-match comment-text-regex code)
@@ -290,14 +303,16 @@
 	    (begin
 	      (set! mode 'comment-mode)
 	      (scan-comment code)))
+	   ((starts-with-line-comment? code)
+	    (begin
+	      (set! mode 'line-comment-mode)
+	      (scan-line-comment code)))
 	   (else
+	    ;; Scan normal code.
 	    (scan-normal-mode code))))
 	 ((eq? mode 'comment-mode)
 	  (cond
 	   ((starts-with-newline? code)
-	    ;; Add a newline token inside the comment.
-	    ;; Continue scanning a comment after this.
-	    ;; The comments ends here in the C++ style.
 	    (scan-newline code))
 	   ((starts-with-uncomment? code)
 	    ;; End the comment
@@ -305,8 +320,18 @@
 	      (set! mode 'normal-mode)
 	      (scan-uncomment code)))
 	   (else
-	    ;; Eat-up the comment.
-	    (scan-comment-text code))))))))
+	    ;; Eat-up the block comment.
+	    (scan-comment-text code))))
+	 ((eq? mode 'line-comment-mode)
+	  (cond
+	   ((starts-with-newline? code)
+	    ;; C++ style comments end after a newline. 
+	    (begin
+	      (set! mode 'normal-mode)
+	      (scan-newline code)))
+	   (else
+	    ;; Eat-up the line comment.
+	    (scan-line-comment-text code))))))))
 
 ;;; Return the next token in the code.
   (define next-token
@@ -448,23 +473,23 @@
 		  (before-color (token-tag token)))))
 
 	(define (after-token!)
-	  (define (highlight-active next-token)
+	  (define (highlight-active-line token)
 	    (define (visible-content? token)
 	      (and
 	       (not (eq? token-tag-newline (token-tag token)))
 	       (not (string-null? (token-text token)))))
 	    (cond ((= lineno active-lineno)
 		   " -> ")
-		  ((visible-content? next-token)
-		   "    ")		; Only add whitespace to inactive lines if
-		  (else			; there is visible content on the next line.
+		  ((visible-content? token) ; Only add whitespace to align this line
+		   "    ")		    ; if there is visible content on it.
+		  (else
 		   "")))
 	  (if (eq? (token-tag token) token-tag-newline)
 	      (set! line-init
 		(lambda (next-token)
 		  (let ((lineno-str
 			 (conc (format #f " ~4d" lineno)
-			       (highlight-active next-token))))
+			       (highlight-active-line next-token))))
 		    (set! lineno (+ lineno 1))
 		    lineno-str))))
 	  (after-color))
