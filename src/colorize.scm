@@ -462,7 +462,7 @@
 
   (define (default-line-init token) "")
 
-  (define format-token!
+  (define format-token
     (let ((line-init default-line-init)
 	  (lineno start-lineno))
       (lambda (token)
@@ -498,17 +498,21 @@
 	      (token-text token)
 	      (after-token!)))))
 
-  (define (print-iter tokens)
-    (if (not (null? tokens))
-	(begin
-	  (display (format-token! (car tokens)))
-	  (print-iter (cdr tokens)))))
 
-  ;; Line numbers are added to the output *after* each newline
-  ;; token. Since we want a line number on on on the first line
-  ;; too, this newline token is added to the start of the tokens.
-  (define (init-print-tokens token)
-    (cons (make-token "" token-tag-newline)
-	  tokens))
+  (define (format-tokens tokens)
+    ;; Line numbers are added to the output *after* each newline
+    ;; token. Since we want a line number on on on the first line
+    ;; too, this newline token is added to the start of the tokens.
+    (define (init-tokens token)
+      (cons (make-token "" token-tag-newline)
+	    tokens))
+    (define (format-token-iter tokens output)
+      (if (null? tokens)
+	  output
+	  (format-token-iter
+	   (cdr tokens)
+	   (conc output
+		 (format-token (car tokens))))))
+    (format-token-iter (init-tokens tokens) ""))
 
-  (print-iter (init-print-tokens tokens)))
+  (display (format-tokens tokens)))
