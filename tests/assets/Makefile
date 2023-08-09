@@ -7,7 +7,8 @@ SIMPLE = simple.c
 NESTED = nested_functions.c
 MULTI_FILE = multi-file/file1.c multi-file/file2.c
 PRINT_ARGS = print_args.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin
+COMMENTED = commented.c
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin
 
 all: $(TARGETS)
 
@@ -26,6 +27,8 @@ no-frame-pointer-nested-functions.bin: $(NESTED)
 multi-file.bin: $(MULTI_FILE)
 	$(CC) $(CFLAGS) $(MULTI_FILE) -o $@
 print-args.bin: $(PRINT_ARGS)
+	$(CC) $(CFLAGS) $< -o $@
+commented.bin: $(COMMENTED)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:

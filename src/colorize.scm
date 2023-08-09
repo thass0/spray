@@ -19,6 +19,10 @@
 (define token-tag-type' tt-type)
 (define token-tag-preproc-directive 'tt-preproc)
 (define token-tag-include-filepath 'tt-include-filepath)
+(define token-tag-comment 'tt-comment)
+(define token-tag-uncomment 'tt-uncomment)
+(define token-tag-trailing-uncomment 'tt-trailing-uncomment)
+(define token-tag-comment-text 'tt-comment-text)
 
 (define (make-token text token-tag)
   (cons token-tag text))
@@ -60,8 +64,13 @@
 (define float-constant-regex-frac (regexp "^[0-9]*\\.[0-9]+([Ee][+-]?[0-9]+)?(f|F|l|L)?"))
 ;; Floating point constants requiring whole number part.
 (define float-constant-regex-whole (regexp "^[0-9]+\\.[0-9]*([Ee][+-]?[0-9]+)?(f|F|l|L)?"))
-;; A preprocessor directive. Optionally also matches the `<filename>`/`"filename"` part of `#include`s.
-(define preproc-directive-regex (regexp "^(#[a-z_]+)([ \t]+[<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
+;; A preprocessor directive. Optionally also matches the
+;; `<filename>`/`"filename"` part of `#include`s.
+(define preproc-directive-regex
+  (regexp "^(#[a-z_]+)([ \t]+[<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
+;; Comments must match anything except for newline characters
+;; so as to maintain the line numberings.
+(define comment-text-regex (regexp "^(\\*(?!\\/)|[^*\n])*"))
 ;; Match anything that's not whitespace. Used to recover from invalid pieces of syntax.
 (define any-regex (regexp "^[^ \n\t\r]*"))
 
@@ -89,6 +98,8 @@
 (define C-builtin-types '("char" "short" "int" "long" "signed"
 		    "unsigned" "float" "double" "void"))
 (define C-special-symbols '("(" ")" "[" "]" "{" "}" "," ";" "..."))
+(define C-comment '("/*"))
+(define C-uncomment '("*/"))
 
 
 ;;; Tokenize `code`.
@@ -105,6 +116,11 @@
     (if (find-prefix given-str possible-prefixes)
 	#t #f))
 
+  (define (starts-with-comment? str)
+    (prefix? str C-comment))
+
+  (define (starts-with-uncomment? str)
+    (prefix? str C-uncomment))
 
   (define (starts-with-keyword? str)
     (prefix? str C-keywords))
@@ -144,9 +160,25 @@
     (regex-match? any-regex str))
 
 
-  ;;; NOTE: All scan procedures assume that the corresponding
-  ;;; `starts-with-*?` procedure is called first so as to verify
-  ;;; that the string actually matches the regex.
+  ;; NOTE: All scan procedures assume that the corresponding
+  ;; `starts-with-*?` procedure is called first so as to verify
+  ;; that the string actually matches the regex.
+  (define (scan-comment code)
+    (make-token-list (find-prefix code C-comment)
+		     token-tag-comment))
+
+  (define (scan-comment-text code)
+    (make-token-list (full-match comment-text-regex code)
+		     token-tag-comment-text))
+
+  (define (scan-uncomment code)
+    (make-token-list (find-prefix code C-uncomment)
+		     token-tag-uncomment))
+
+  (define (scan-trailing-uncomment code)
+    (make-token-list (find-prefix code C-uncomment)
+		     token-tag-trailing-uncomment))
+
   (define (scan-keyword code)
     (make-token-list (find-prefix code C-keywords)
 		     token-tag-keyword))
@@ -218,35 +250,65 @@
     (make-token-list (full-match any-regex code)
 		     token-tag-other))
 
+  (define (scan-normal-mode code)
+    (cond
+     ((starts-with-uncomment? code)
+      (scan-trailing-uncomment code))
+     ((starts-with-keyword? code)
+      (scan-keyword code))
+     ((starts-with-operator? code)
+      (scan-operator code))
+     ((starts-with-special-symbol? code)
+      (scan-special-symbol code))
+     ((starts-with-literal? code)
+      (scan-literal code))
+     ((starts-with-whitespace? code)
+      (scan-whitespace code))
+     ((starts-with-newline? code)
+      (scan-newline code))
+     ((starts-with-identifier? code)
+      (scan-identifier code))
+     ((starts-with-constant? code)
+      (scan-constant code))
+     ((starts-with-preproc? code)
+      (scan-preproc code))
+     ((starts-with-any? code)
+      (scan-any code))
+     (else
+      (error "scan, invalid input" code))))
 
-  ;;; Scan the next token in the code.
-  (define (scan code)
-    (cond ((string-null? code)
-	   '())
-	  ((starts-with-keyword? code)
-	   (scan-keyword code))
-	  ((starts-with-operator? code)
-	   (scan-operator code))
-	  ((starts-with-special-symbol? code)
-	   (scan-special-symbol code))
-	  ((starts-with-literal? code)
-	   (scan-literal code))
-	  ((starts-with-whitespace? code)
-	   (scan-whitespace code))
-	  ((starts-with-newline? code)
-	   (scan-newline code))
-	  ((starts-with-identifier? code)
-	   (scan-identifier code))
-	  ((starts-with-constant? code)
-	   (scan-constant code))
-	  ((starts-with-preproc? code)
-	   (scan-preproc code))
-	  ((starts-with-any? code)
-	   (scan-any code))
-	  (else
-	   (error "scan, invalid input" code))))
+;;; Scan the next token in the code.
+  (define scan
+    (let ((mode 'normal-mode))
+      (lambda (code)
+	(cond
+	 ((string-null? code)
+	  '())
+	 ((eq? mode 'normal-mode)
+	  (cond
+	   ((starts-with-comment? code)
+	    (begin
+	      (set! mode 'comment-mode)
+	      (scan-comment code)))
+	   (else
+	    (scan-normal-mode code))))
+	 ((eq? mode 'comment-mode)
+	  (cond
+	   ((starts-with-newline? code)
+	    ;; Add a newline token inside the comment.
+	    ;; Continue scanning a comment after this.
+	    ;; The comments ends here in the C++ style.
+	    (scan-newline code))
+	   ((starts-with-uncomment? code)
+	    ;; End the comment
+	    (begin
+	      (set! mode 'normal-mode)
+	      (scan-uncomment code)))
+	   (else
+	    ;; Eat-up the comment.
+	    (scan-comment-text code))))))))
 
-  ;;; Return the next token in the code.
+;;; Return the next token in the code.
   (define next-token
     ;; Queue of tokens to be retured before scanning the next token.
     (let ((token-queue '()))
@@ -262,8 +324,62 @@
 	      (set! token-queue (cdr token-queue))
 	      this-token)))))
 
-  ;;; Return the rest of `str` after removing
-  ;;; `(string-length cutoff)` characters from its start.
+  ;;; Sometimes comments begin outside of the given piece of
+  ;;; source code. Then there is a trailing `*/` somewhere at
+  ;;; the start. This procedure includes anything up to that `*/`
+  ;;; in the comment.
+  (define (extend-comment tokens)
+    (define (cons-comment comment-tokens comment-text)
+      (let ((token (if (not (null? comment-tokens))
+		       (car comment-tokens)
+		       (make-token "" token-tag-other)))) ; Any token tag except newline.
+	(if (eq? (token-tag token) token-tag-newline)
+	    (cons
+	     (make-token comment-text
+			 token-tag-comment-text)
+	     comment-tokens)
+	    ;; Merge `comment-text` into the current comment text token.
+	    (cons
+	     (make-token (conc (token-text token) comment-text)
+			 token-tag-comment-text)
+	     (if (null? comment-tokens)
+		 '()
+		 (cdr comment-tokens))))))
+    (define (extend-comment-iter comment-extension comment-text rest-tokens)
+      (let ((token (car rest-tokens)))
+	(cond ((eq? (token-tag token) token-tag-trailing-uncomment)
+	       (append (reverse
+			(cons-comment comment-extension
+				      comment-text))
+		       rest-tokens))
+	      ((eq? (token-tag token) token-tag-newline)
+	       ;; Copy this newline into the extensoin. The comment
+	       ;; text collected up to this point must be added to
+	       ;; the comment extension.
+	       (extend-comment-iter
+		(cons
+		 token			; The newline token.
+		 (cons-comment comment-extension comment-text))
+		""
+		(cdr rest-tokens)))
+	      (else
+	       ;; Add this token's text to the comment.
+	       (extend-comment-iter comment-extension
+				    (conc comment-text
+					  (token-text token))
+				    (cdr rest-tokens))))))
+    (let ((trailing
+	   (find
+	    (lambda (token)
+	      (eq? (token-tag token)
+		   token-tag-trailing-uncomment))
+	    tokens)))
+      (if trailing
+	  (extend-comment-iter '() "" tokens)
+	  tokens)))
+
+;;; Return the rest of `str` after removing
+;;; `(string-length cutoff)` characters from its start.
   (define (string-rest str cutoff)
     (substring str (string-length cutoff) (string-length str)))
 
@@ -275,7 +391,8 @@
 	  (tokenize-iter
 	   (string-rest code (token-text token))
 	   (cons token tokens)))))
-  (tokenize-iter code '()))
+  (extend-comment
+   (tokenize-iter code '())))
 
 
 ;;; Print and color `tokens`.
@@ -283,27 +400,36 @@
   (define (def-color color)
     (string-append "\033[" color "m"))
 
-  (define keyword-color (def-color "35"))
-  (define operator-color (def-color "33"))
-  (define type-color (def-color "32"))
   (define literal-color (def-color "31"))
+  (define type-color (def-color "32"))
+  (define operator-color (def-color "33"))
   (define constant-color (def-color "34"))
+  (define keyword-color (def-color "35"))
+  (define comment-color (def-color "96"))
   (define no-color (def-color "0"))
   (define nothing "")
 
-  (define (tag-color tag)
-  (cond ((eq? tag token-tag-keyword) keyword-color)
-  ((eq? tag token-tag-preproc-directive) keyword-color)
-  ((eq? tag token-tag-operator) operator-color)
-  ((eq? tag token-tag-type) type-color)
-  ((eq? tag token-tag-literal) literal-color)
-  ((eq? tag token-tag-constant) constant-color)
-  (else no-color)))
+  (define (comment-tag? tag)
+    (or (eq? tag token-tag-comment)
+	(eq? tag token-tag-comment-text)
+	(eq? tag token-tag-uncomment)
+	(eq? tag token-tag-trailing-uncomment)))
+
+  (define (tag-before-color tag)
+    (cond ((eq? tag token-tag-keyword) keyword-color)
+	  ((eq? tag token-tag-preproc-directive) keyword-color)
+	  ((eq? tag token-tag-operator) operator-color)
+	  ((eq? tag token-tag-type) type-color)
+	  ((eq? tag token-tag-literal) literal-color)
+	  ((eq? tag token-tag-constant) constant-color)
+	  ((comment-tag? tag) comment-color)
+	  (else no-color)))
 
   (define (before-color tag)
     (if use-color
-	(tag-color tag)
+	(tag-before-color tag)
 	nothing))
+
   (define (after-color)
     (if use-color
 	no-color
@@ -323,12 +449,15 @@
 
 	(define (after-token!)
 	  (define (highlight-active next-token)
+	    (define (visible-content? token)
+	      (and
+	       (not (eq? token-tag-newline (token-tag token)))
+	       (not (string-null? (token-text token)))))
 	    (cond ((= lineno active-lineno)
 		   " -> ")
-		  ((not (eq? (token-tag next-token)
-			     token-tag-newline))
+		  ((visible-content? next-token)
 		   "    ")		; Only add whitespace to inactive lines if
-		  (else			; the next line isn't just another newline.
+		  (else			; there is visible content on the next line.
 		   "")))
 	  (if (eq? (token-tag token) token-tag-newline)
 	      (set! line-init

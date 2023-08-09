@@ -11,6 +11,7 @@ FRAME_POINTER_BIN = 'tests/assets/frame-pointer-nested-functions.bin'
 NO_FRAME_POINTER_BIN = 'tests/assets/no-frame-pointer-nested-functions.bin'
 MULTI_FILE_BIN = 'tests/assets/multi-file.bin'
 PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
+COMMENTED_BIN = 'tests/assets/commented.bin'
 
 
 def random_string() -> str:
@@ -18,8 +19,8 @@ def random_string() -> str:
     return ''.join(random.choice(letters) for i in range(8))
 
 
-def run_cmd(commands: str, debugee: str, args: list[str]) -> str:
-    with Popen([DEBUGGER, '--no-color', debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE) as dbg:
+def run_cmd(commands: str, debugee: str, flags: list[str], args: list[str]) -> str:
+    with Popen([DEBUGGER] + flags + [debugee] + args, stdout=PIPE, stdin=PIPE, stderr=PIPE) as dbg:
         output = dbg.communicate(commands.encode('UTF-8'))
         return output[0].decode('UTF-8')
 
@@ -28,7 +29,7 @@ def assert_lit(cmd: str,
                out: str,
                debugee: Optional[str] = SIMPLE_64BIT_BIN,
                args: Optional[list[str]] = [""]):
-    stdout = run_cmd(cmd, debugee, args)
+    stdout = run_cmd(cmd, debugee, ['--no-color'], args)
     assert out in stdout
 
 
@@ -36,7 +37,7 @@ def assert_ends_with(cmd: str,
                      end: str,
                      debugee: Optional[str] = SIMPLE_64BIT_BIN,
                      args: Optional[list[str]] = [""]):
-    stdout = run_cmd(cmd, debugee, args)
+    stdout = run_cmd(cmd, debugee, ['--no-color'], args)
     pattern = f'{re.escape(end)}$'
     match = re.search(pattern, stdout, re.MULTILINE)
     if not match:
@@ -299,3 +300,19 @@ How did we even get here? (backtrace)
   0x00007ffff7df6c0b <?>
   0x0000000000401138 add:4
 """, NO_FRAME_POINTER_BIN)
+
+
+class TestColors:
+    def test_colored_comments(self):
+        stdout = run_cmd('', COMMENTED_BIN, [], [])
+        # `expect` contains all the escape codes that
+        # will produce the right syntax highlighting.
+        expect = """\
+\033[0m\033[0m    3\033[96m\033[0m\033[0m
+\033[0m    4    \033[96m  I start outside the text that's printed. \033[0m\033[96m*/\033[0m\033[0m
+\033[0m    5    \033[32mint\033[0m\033[0m \033[0m\033[0mmain\033[0m\033[0m(\033[0m\033[32mvoid\033[0m\033[0m)\033[0m\033[0m \033[0m\033[0m{\033[0m\033[0m
+\033[0m    6 -> \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"blah\\n"\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m  \033[0m\033[96m/*\033[0m\033[96m `blah` is a great placeholder! \033[0m\033[96m*/\033[0m\033[0m
+\033[0m    7    \033[0m  \033[0m\033[32mint\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m \033[0m\033[33m=\033[0m\033[0m \033[0m\033[34m7\033[0m\033[0m;\033[0m\033[0m
+\033[0m    8    \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"Some numbers: %d"\033[0m\033[0m,\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m
+\033[0m    9    \033[0m  \033[0m\033[96m/*\033[0m\033[96m (this comment ends outside the printed text)\033[0m\033[0m"""
+        assert expect in stdout
