@@ -2,7 +2,7 @@
 	<h3 align="center">🐛🐛🐛 Spray 🐛🐛🐛</h3>
 	<p align="center">Make debugging ergonomic.</p>
  <p align="center">
-  <a href="https://github.com/d4ckard/spray/README.md#installation">Get started</a> -
+  <a href="https://github.com/d4ckard/spray/#%EF%B8%8F-installation">Get started</a> -
   <a href="https://github.com/d4ckard/spray/issues">Issues</a> -
   <a href="https://github.com/d4ckard/spray/issues/new">Bug report</a>
 </p>
