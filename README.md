@@ -5,9 +5,10 @@
   <a href="https://github.com/d4ckard/spray/#%EF%B8%8F-installation">Get started</a> -
   <a href="https://github.com/d4ckard/spray/issues">Issues</a> -
   <a href="https://github.com/d4ckard/spray/issues/new">Bug report</a>
+ </p>
 </p>
 
-</p>
+![Using Spray](.assets/using_spray.png)
 
 Spray is a debugger mainly targeted at C code. Its goal is to minimize the amount of
 overhead that many debuggers introduce. In general, Spray's vision is to make it as easy
