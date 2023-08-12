@@ -12,8 +12,6 @@ OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-co
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
-README = README.md
-
 .PHONY = all bin clean run test unit integration assets
 
 # === SPRAY ===
@@ -61,13 +59,6 @@ else
 	make clean
 	bear -- make all
 endif
-
-
-# === README ===
-
-$(README): src/spray.c
-	@sed -n '/\/\*/,/\*\// { s/\/\*//; s/\*\///; s/^\s*//; p; }' $< > $@
-	@echo Rebuilt $(README)
 
 
 # === TESTS ===
