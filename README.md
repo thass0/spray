@@ -8,7 +8,8 @@
  </p>
 </p>
 
-![Using Spray](.assets/using_spray.png)
+![Spray debugging itself](.assets/using_spray.png) 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
 
 Spray is a debugger mainly targeted at C code. Its goal is to minimize the amount of
 overhead that many debuggers introduce. In general, Spray's vision is to make it as easy
@@ -56,6 +57,26 @@ The compiled binary is named `spray` and can be found in the `build` directory.
 
 To use `spray` as a regular command you need to [add it to your `$PATH`](https://askubuntu.com/a/322773).
 
+## 🏃‍♀️ Running Spray
+
+Ensure that the binary you want to debug has debug information enabled,
+i.e. it was compiled with the `-g` flag.
+
+The first argument you pass to `spray` is the name of the binary that
+should be debugged (the debugee). All subsequent arguments are the
+arguments passed to the debugee.
+
+For example
+
+```sh
+spray tests/assets/print-args.bin Hello World
+```
+
+starts a debugging session with the executable `print-args.bin`
+this executable the additional arguments `Hello` and `World`
+(note that you need to run `make` in `tests/assets` to build
+`print-args.bin`).
+
 ## ⌨️ Commands
 
 Available commands are:
@@ -94,26 +115,5 @@ can be read as the function `add` or the number `0xadd`), this location
 is always interpreted as a function name. Use the prefix `0x` to specify
 addresses explicitly.
 
-## 🏃‍♀️ Running the debugger
-
-Ensure that the binary you want to debug has debug information enabled,
-i.e. it was compiled with the `-g` flag.
-
-The first argument you pass to `spray` is the name of the binary that
-should be debugged (the debugee). All subsequent arguments are the
-arguments passed to the debugee.
-
-For example
-
-```sh
-spray tests/assets/print-args.bin Hello World
-```
-
-starts a debugging session with the executable `print-args.bin`
-this executable the additional arguments `Hello` and `World`
-(note that you need to run `make` in `tests/assets` to build
-`print-args.bin`).
-
 Run `spray --help` to see all parameters that are available on the command line.
-
 
