@@ -1,7 +1,7 @@
 CC = clang
 CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
 CPPFLAGS = -MMD -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/hashmap.c
-LDFLAGS = -ldwarf -lchicken
+LDFLAGS = -ldwarf -lchicken -lzstd -lz
 
 BUILD_DIR = build
 SOURCE_DIR = src
@@ -23,12 +23,12 @@ run: all
 	./$(BINARY) $(args)
 
 $(BINARY): $(OBJECTS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $(BINARY)
+	$(CC) $(CFLAGS) $(OBJECTS) -o $(BINARY) $(LDFLAGS)
 
 -include $(DEPS)
 
 # Wow, seems like CHICKEN is quite strict ...
-$(BUILD_DIR)/source_files.o: CFLAGS += -Wno-unused-parameter -Wno-strict-prototypes -Wno-pedantic -Wno-unused-but-set-variable -Wno-gnu-statement-expression-from-macro-expansion -Wno-unused-variable
+$(BUILD_DIR)/source_files.o: CFLAGS += -Wno-unused-parameter -Wno-strict-prototypes -Wno-pedantic -Wno-unused-but-set-variable -Wno-unused-variable
 $(BUILD_DIR)/source_files.o: CPPFLAGS += -I/usr/include/chicken
 $(BUILD_DIR)/source_files.o: $(SOURCE_DIR)/source_files.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
