@@ -117,3 +117,19 @@ addresses explicitly.
 
 Run `spray --help` to see all parameters that are available on the command line.
 
+## 🛠️Contributing
+
+All contributions are welcome. Before opening a pull request, please run
+the test suite locally to verify that your changes don't break any other
+features.
+
+If any of the tests fail because they are in conflict with the
+change you made, make sure to either improve your changes so that they
+pass the tests or to change the test in a way that again verifies correct
+behavior.
+
+It's possible that some of the tests fail due to off-by-one errors when
+making assertions about specific values found in the example binaries that
+are used in the tests. Refer to [this issue](https://github.com/d4ckard/spray/issues/2)
+for more details. You can ignore tests that fail for this reason only.
+
