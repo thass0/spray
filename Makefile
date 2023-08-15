@@ -8,7 +8,7 @@ SOURCE_DIR = src
 DEP = dependencies
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
 OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
-OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-colored.o
+OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-colored.o $(BUILD_DIR)/colorize.o
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -33,9 +33,11 @@ $(BUILD_DIR)/source_files.o: CPPFLAGS += -I/usr/include/chicken
 $(BUILD_DIR)/source_files.o: $(SOURCE_DIR)/source_files.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/print-colored.o: CPPFLAGS += -I/usr/include/chicken
-$(BUILD_DIR)/print-colored.o: $(SOURCE_DIR)/print-colored.scm | $(BUILD_DIR)
-	csc -c -embedded -output-file $(BUILD_DIR)/print-colored.o $<
+$(BUILD_DIR)/print-colored.o: $(SOURCE_DIR)/print-colored.scm $(BUILD_DIR)/colorize.o | $(BUILD_DIR)
+	csc -uses colorizer -c -embedded $(SOURCE_DIR)/print-colored.scm -o $@
+
+$(BUILD_DIR)/colorize.o: $(SOURCE_DIR)/colorize.scm | $(BUILD_DIR)
+	csc -unit colorizer -c -J $(SOURCE_DIR)/colorize.scm  -o $@
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
@@ -101,6 +103,7 @@ assets:
 	$(MAKE) -C tests/assets all
 
 clean:
+	$(RM) *.import.scm
 	$(RM) -r $(BUILD_DIR) $(TEST_BUILD_DIR) compile_commands.json
 	$(MAKE) -C tests/assets clean
 
