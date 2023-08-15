@@ -11,7 +11,6 @@
 #include "breakpoints.h"
 #include "history.h"
 #include "info.h"
-#include "source_files.h"
 
 typedef struct {
   const char *prog_name;     /* Tracee program name. */
@@ -19,7 +18,6 @@ typedef struct {
   Breakpoints *breakpoints;  /* Breakpoints. */
   DebugInfo *info;           /* Debug information about the tracee. */
   x86_addr load_address;     /* Load address. Set for PIEs, 0 otherwise. */
-  SourceFiles *files;        /* Cache of program source files read. */
   History history;           /* Command history of recent commands. */
 } Debugger;
 

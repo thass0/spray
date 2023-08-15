@@ -1,28 +1,7 @@
 #include "test_utils.h"
 
-#include "../src/source_files.h"
 #include "../src/breakpoints.h"
 #include "../src/debugger.h"
-
-TEST(storing_files_works) {
-  SourceFiles *source_files = init_source_files();
-  assert_ptr_not_null(source_files);
-
-  SourceLines lookup = { .filepath=SIMPLE_SRC };
-  assert_ptr_equal(NULL, hashmap_get(source_files, &lookup));
-
-  freopen("/dev/null", "w", stdout);
-  SprayResult res = print_source(source_files, SIMPLE_SRC, 2, 2);
-  assert_int(res, ==, SP_OK);
-  
-  /* Internally `print_source` will use this call to `hashmap_get`
-     to determine if it should read the file again. If this call
-     returns a non-null pointer, then the file won't be read again. */
-  assert_ptr_not_null(hashmap_get(source_files, &lookup));
-  free_source_files(source_files);
-  
-  return MUNIT_OK;
-}
 
 TEST(breakpoints_work) {
   Debugger dbg;
@@ -80,7 +59,6 @@ TEST(function_name_check_works) {
 
 
 MunitTest debugger_tests[] = {
-  REG_TEST(storing_files_works),
   REG_TEST(breakpoints_work),
   REG_TEST(file_line_check_works),
   REG_TEST(function_name_check_works),

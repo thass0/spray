@@ -3,6 +3,7 @@
 #include "magic.h"
 #include "ptrace.h"
 #include "registers.h"
+#include "print_source.h"
 
 #include "linenoise.h"
 
@@ -220,7 +221,7 @@ void print_current_source(Debugger dbg, bool is_user_breakpoint) {
       printf("\n");
     }
 
-    SprayResult res = print_source(dbg.files, filepath, pos->line, 3);
+    SprayResult res = print_source(filepath, pos->line, 3);
     if (res == SP_ERR) {
       internal_error("Failed to read source file %s. Can't print source",
                      filepath);
@@ -1314,17 +1315,16 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
         .info = info,
         /* `load_address` is initialized by `init_load_address`. */
         .load_address.value = 0,
-        .files = init_source_files(),
         .history = init_history(),
     };
     init_load_address(store);
+    init_print_source();
   }
 
   return 0;
 }
 
 SprayResult free_debugger(Debugger dbg) {
-  free_source_files(dbg.files);
   free_breakpoints(dbg.breakpoints);
   free_history(dbg.history);
   return free_debug_info(&dbg.info);

@@ -8,7 +8,7 @@ SOURCE_DIR = src
 DEP = dependencies
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
 OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
-OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-colored.o $(BUILD_DIR)/colorize.o
+OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/source-files.o $(BUILD_DIR)/colorize.o
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -28,13 +28,13 @@ $(BINARY): $(OBJECTS)
 -include $(DEPS)
 
 # Wow, seems like CHICKEN is quite strict ...
-$(BUILD_DIR)/source_files.o: CFLAGS += -Wno-unused-parameter -Wno-strict-prototypes -Wno-pedantic -Wno-unused-but-set-variable -Wno-unused-variable
-$(BUILD_DIR)/source_files.o: CPPFLAGS += -I/usr/include/chicken
-$(BUILD_DIR)/source_files.o: $(SOURCE_DIR)/source_files.c | $(BUILD_DIR)
+$(BUILD_DIR)/print_source.o: CFLAGS += -Wno-unused-parameter -Wno-strict-prototypes -Wno-pedantic -Wno-unused-but-set-variable -Wno-unused-variable
+$(BUILD_DIR)/print_source.o: CPPFLAGS += -I/usr/include/chicken
+$(BUILD_DIR)/print_source.o: $(SOURCE_DIR)/print_source.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/print-colored.o: $(SOURCE_DIR)/print-colored.scm $(BUILD_DIR)/colorize.o | $(BUILD_DIR)
-	csc -uses colorizer -c -embedded $(SOURCE_DIR)/print-colored.scm -o $@
+$(BUILD_DIR)/source-files.o: $(SOURCE_DIR)/source-files.scm $(BUILD_DIR)/colorize.o | $(BUILD_DIR)
+	csc -uses colorizer -c -embedded $(SOURCE_DIR)/source-files.scm -o $@
 
 $(BUILD_DIR)/colorize.o: $(SOURCE_DIR)/colorize.scm | $(BUILD_DIR)
 	csc -unit colorizer -c -J $(SOURCE_DIR)/colorize.scm  -o $@
