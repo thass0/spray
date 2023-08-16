@@ -83,7 +83,7 @@ unit: $(TEST_BINARY) assets
 	$(TEST_SCHEME_SCRIPT)
 
 integration: $(BINARY) assets
-	pytest
+	python -m pytest
 
 $(TEST_BINARY): $(TEST_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(TEST_OBJECTS) -o $(TEST_BINARY)
