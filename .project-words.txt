@@ -75,3 +75,5 @@ shstrtab
 fomit
 insts
 lchicken
+discoverability
+lzstd
