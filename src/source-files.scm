@@ -104,15 +104,19 @@
 	    0))))
   )  ; module source-files.
 
-(import (chicken foreign)
-	(chicken platform)
-	source-files)
+(import source-files)
 
-(define-external (print_source_extern (c-string filepath)
-				      (unsigned-int lineno)
-				      (unsigned-int n_context_lines)
-				      (bool use-color))
-  int
-  (print-source filepath lineno n_context_lines use-color))
-
-(return-to-host)
+(cond-expand
+  ;; FFI is not allowed in interpreted mode.
+  (compiling
+   (begin
+     (import (chicken foreign)
+	     (chicken platform))
+     (define-external (print_source_extern (c-string filepath)
+					   (unsigned-int lineno)
+					   (unsigned-int n_context_lines)
+					   (bool use-color))
+       int
+       (print-source filepath lineno n_context_lines use-color))
+     (return-to-host)))
+  (else ))
