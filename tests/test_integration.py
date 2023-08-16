@@ -301,18 +301,18 @@ How did we even get here? (backtrace)
   0x0000000000401138 add:4
 """, NO_FRAME_POINTER_BIN)
 
-
 class TestColors:
     def test_colored_comments(self):
         stdout = run_cmd('', COMMENTED_BIN, [], [])
         # `expect` contains all the escape codes that
         # will produce the right syntax highlighting.
         expect = """\
-\033[0m\033[0m    3\033[96m\033[0m\033[0m
-\033[0m    4    \033[96m  I start outside the text that's printed. \033[0m\033[96m*/\033[0m\033[0m
-\033[0m    5    \033[32mint\033[0m\033[0m \033[0m\033[0mmain\033[0m\033[0m(\033[0m\033[32mvoid\033[0m\033[0m)\033[0m\033[0m \033[0m\033[0m{\033[0m\033[0m
-\033[0m    6 -> \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"blah\\n"\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m  \033[0m\033[96m/*\033[0m\033[96m `blah` is a great placeholder! \033[0m\033[96m*/\033[0m\033[0m
-\033[0m    7    \033[0m  \033[0m\033[32mint\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m \033[0m\033[33m=\033[0m\033[0m \033[0m\033[34m7\033[0m\033[0m;\033[0m\033[0m  \033[0m\033[96m//\033[0m\033[96m This C++ style comment can contain this */ or that /*.\033[0m\033[0m
-\033[0m    8    \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"Some numbers: %d"\033[0m\033[0m,\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m
-\033[0m    9    \033[0m  \033[0m\033[96m/*\033[0m\033[96m (this comment ends outside the printed text)\033[0m\033[0m"""
+    4    \033[96m  I start outside the text that's printed.\033[0m
+    5    \033[96m  and I span more than one line. \033[0m\033[96m*/\033[0m
+    6    \033[32mint\033[0m\033[0m \033[0m\033[0mmain\033[0m\033[0m(\033[0m\033[32mvoid\033[0m\033[0m)\033[0m\033[0m \033[0m\033[0m{\033[0m\033[0m  \033[0m\033[96m/*\033[0m\033[96m blah! \033[0m\033[96m*/\033[0m
+    7 -> \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"blah\\n"\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m  \033[0m\033[96m//\033[0m\033[96m This C++ style comment can contain this */ or that /*.\033[0m
+    8    \033[0m  \033[0m\033[32mint\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m \033[0m\033[33m=\033[0m\033[0m \033[0m\033[34m7\033[0m\033[0m;\033[0m
+    9    \033[0m  \033[0m\033[96m/*\033[0m\033[96m This comment ends outside the printed text\033[0m
+   10    \033[96m     and spans multiple lines, too.\033[0m
+"""
         assert expect in stdout

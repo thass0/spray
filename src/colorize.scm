@@ -3,7 +3,6 @@
   (import scheme)
   (import (chicken base))
 
-  (define token-tag-newline 'tt-newline)
   (define token-tag-other 'tt-other)
   (define token-tag-keyword 'tt-keyword)
   (define token-tag-operator 'tt-operator)
@@ -52,7 +51,7 @@
 ;;; scanner although some modifications were made.
 
   (define literal-regex (regexp "^\"([^\"\\\\]|\\\\[\\s\\S])*\""))
-  (define whitespace-regex (regexp "^[\t\r ]*"))
+  (define whitespace-regex (regexp "^[\t\r\n ]*"))
   (define identifier-regex (regexp "^[a-zA-Z_][a-zA-Z_0-9]*"))
   (define hex-constant-regex (regexp "^0[xX][a-fA-F0-9]+(u|U|l|L)*"))
   (define octal-constant-regex (regexp "^0[0-7]+(u|U|l|L)*"))
@@ -69,9 +68,7 @@
   ;; `<filename>`/`"filename"` part of `#include`s.
   (define preproc-directive-regex
     (regexp "^(#[a-z_]+)([ \t]+[<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
-  ;; Comments must match anything except for newline characters
-  ;; so as to maintain the line numberings.
-  (define comment-text-regex (regexp "^(\\*(?!\\/)|[^*\n])*"))
+  (define comment-text-regex (regexp "^(\\*(?!\\/)|[^*])*"))
   (define line-comment-text-regex (regexp "^[^\n]*"))
   ;; Match anything that's not whitespace.
   ;; Used to recover from invalid pieces of syntax.
@@ -95,12 +92,15 @@
     ;; Take a string (C source code) and create a list of tokens
     ;; that represent which color each part of the string should be.
     (colorize
-     ;; Print the color tokens returned by `colorize`.
-     print-colored)
+     ;; Turn the given list of colored tokens into a string.
+     ;; The string contains ANSI escape codes to represent the
+     ;; colors if `use-color` is true.
+     colored->string)
 
   (import scheme)
   (import (chicken base))
   (import (chicken string))
+  (import traversal)
   (import (except (srfi-1) assoc member))
   (import (except (srfi-13) string->list string-fill! string-copy))
   (import format)		       ; `format`
@@ -127,8 +127,10 @@
   (define C++-comment '("//"))
 
 
-;;; Tokenize `code`.
-  (define (tokenize code)
+;;; Transform `code-lines` into a list of token
+;;; streams representing the color of each piece
+;;; of code in each line.
+  (define (colorize code-lines)
     ;; Does `given-str` start with any of the prefixes in `possible-prefixes`?
     (define (find-prefix given-str possible-prefixes)
       (find
@@ -159,17 +161,11 @@
     (define (starts-with-special-symbol? str)
       (prefix? str C-special-symbols))
 
-    ;; (define (starts-with-literal? str)
-    ;;   (if (string-search literal-regex str)
-    ;; 	  #t #f))
     (define (starts-with-literal? str)
       (regex-match? literal-regex str))
 
     (define (starts-with-whitespace? str)
       (regex-match? whitespace-regex str))
-
-    (define (starts-with-newline? str)
-      (string-prefix? "\n" str))
 
     (define (starts-with-identifier? str)
       (regex-match? identifier-regex str))
@@ -237,9 +233,6 @@
       (make-token-list (full-match whitespace-regex code)
 		       token-tag-whitespace))
 
-    (define (scan-newline code)
-      (make-token-list "\n" token-tag-newline))
-
     (define (scan-identifier code)
       ;; Check if `identifier` is the identifier of a type.
       (define (type-identifier? identifier)
@@ -302,8 +295,6 @@
 	(scan-literal code))
        ((starts-with-whitespace? code)
 	(scan-whitespace code))
-       ((starts-with-newline? code)
-	(scan-newline code))
        ((starts-with-identifier? code)
 	(scan-identifier code))
        ((starts-with-constant? code)
@@ -318,7 +309,12 @@
 ;;; Scan the next token in the code.
     (define scan
       (let ((mode 'normal-mode))
-	(lambda (code)
+	(lambda (code new-line?)
+	  ;; Implicitly end single-line comment.
+	  (if (and (eq? mode 'line-comment-mode)
+		   new-line?)
+	      (set! mode 'normal-mode))
+
 	  (cond
 	   ((string-null? code)
 	    '())
@@ -326,45 +322,35 @@
 	    (cond
 	     ((starts-with-comment? code)
 	      (begin
+		;; Begin block comment.
 		(set! mode 'comment-mode)
 		(scan-comment code)))
 	     ((starts-with-line-comment? code)
 	      (begin
+		;; Begin single-line comment.
 		(set! mode 'line-comment-mode)
 		(scan-line-comment code)))
 	     (else
 	      ;; Scan normal code.
 	      (scan-normal-mode code))))
 	   ((eq? mode 'comment-mode)
-	    (cond
-	     ((starts-with-newline? code)
-	      (scan-newline code))
-	     ((starts-with-uncomment? code)
-	      ;; End the comment
-	      (begin
-		(set! mode 'normal-mode)
-		(scan-uncomment code)))
-	     (else
-	      ;; Eat-up the block comment.
-	      (scan-comment-text code))))
+	    (if (starts-with-uncomment? code)
+		(begin
+		  ;; Explicitly end multi-line comment.
+		  (set! mode 'normal-mode)
+		  (scan-uncomment code))
+		;; Eat-up the block comment.
+		(scan-comment-text code)))
 	   ((eq? mode 'line-comment-mode)
-	    (cond
-	     ((starts-with-newline? code)
-	      ;; C++ style comments end after a newline. 
-	      (begin
-		(set! mode 'normal-mode)
-		(scan-newline code)))
-	     (else
-	      ;; Eat-up the line comment.
-	      (scan-line-comment-text code))))))))
+	    (scan-line-comment-text code))))))
 
 ;;; Return the next token in the code.
     (define next-token
       ;; Queue of tokens to be retured before scanning the next token.
       (let ((token-queue '()))
-	(lambda (code)
+	(lambda (code new-line?)
 	  (if (null? token-queue)
-	      (let ((new-tokens (scan code)))
+	      (let ((new-tokens (scan code new-line?)))
 		(if (null? new-tokens)
 		    (make-end-token)	; Signal that input is over.
 		    (begin
@@ -374,79 +360,99 @@
 		(set! token-queue (cdr token-queue))
 		this-token)))))
 
+;;; Return the rest of `str` after removing
+;;; `(string-length cutoff)` characters from its start.
+    (define (string-cutoff str cutoff)
+      (substring str (string-length cutoff) (string-length str)))
+
+;;; Colorize the given piece of code by splitting it into tokens.
+    (define (colorize-code code tokens new-line?)
+      (let ((token (next-token code new-line?)))
+	(if (end-token? token)
+	    (reverse tokens)
+	    (colorize-code
+	     (string-cutoff code (token-text token))
+	     (cons token tokens)
+	     ;; `new-line?` may only be set to true
+	     ;; by an external caller.
+	     #f))))
+
 ;;; Sometimes comments begin outside of the given piece of
 ;;; source code. Then there is a trailing `*/` somewhere at
 ;;; the start. This procedure includes anything up to that `*/`
 ;;; in the comment.
-    (define (extend-comment tokens)
-      (define (cons-comment comment-tokens comment-text)
-	(let ((token (if (not (null? comment-tokens))
-			 (car comment-tokens)
-			 (make-token "" token-tag-other)))) ; Any token tag except newline.
-	  (if (eq? (token-tag token) token-tag-newline)
-	      (cons
-	       (make-token comment-text
-			   token-tag-comment-text)
-	       comment-tokens)
-	      ;; Merge `comment-text` into the current comment text token.
-	      (cons
-	       (make-token (conc (token-text token) comment-text)
-			   token-tag-comment-text)
-	       (if (null? comment-tokens)
-		   '()
-		   (cdr comment-tokens))))))
-      (define (extend-comment-iter comment-extension comment-text rest-tokens)
-	(let ((token (car rest-tokens)))
-	  (cond ((eq? (token-tag token) token-tag-trailing-uncomment)
-		 (append (reverse
-			  (cons-comment comment-extension
-					comment-text))
-			 rest-tokens))
-		((eq? (token-tag token) token-tag-newline)
-		 ;; Copy this newline into the extensoin. The comment
-		 ;; text collected up to this point must be added to
-		 ;; the comment extension.
-		 (extend-comment-iter
-		  (cons
-		   token		; The newline token.
-		   (cons-comment comment-extension comment-text))
-		  ""
-		  (cdr rest-tokens)))
+    (define (wrap-leading-comment token-lines)
+      (define (lead-comment? token-lines)
+	(find
+	 (lambda (tag)
+	   (eq? tag token-tag-trailing-uncomment))
+	 (map token-tag (flatten token-lines))))
+
+      (define (make-lead-end tokens)
+	(cons 'lead-comment-end tokens))
+
+      (define (make-lead-line token)
+	(cons 'lead-comment-line token))
+
+      (define (lead-end? lead-line)
+	(and (pair? lead-line)
+	     (eq? (car lead-line) 'lead-comment-end)))
+
+      (define (lead-tokens lead-line)
+	(if (and (pair? lead-line)
+		 (or (eq? (car lead-line)
+			  'lead-comment-end)
+		     (eq? (car lead-line)
+			  'lead-comment-line)))
+	    (cdr lead-line)
+	    (error "lead-line-tokens, not a lead comment line"
+		   lead-line)))
+
+      (define (wrap-leading-comment-line line)
+	(let tokens-loop ((ext-str "")
+			  (rest-tokens line))
+	  (cond ((null? rest-tokens)
+		 (make-lead-line
+		  (make-token-list ext-str token-tag-comment-text)))
+		((eq? (token-tag (car rest-tokens))
+		      token-tag-trailing-uncomment)
+		 (make-lead-end
+		  (cons (make-token ext-str token-tag-comment-text)
+			rest-tokens)))
 		(else
-		 ;; Add this token's text to the comment.
-		 (extend-comment-iter comment-extension
-				      (conc comment-text
-					    (token-text token))
-				      (cdr rest-tokens))))))
-      (let ((trailing
-	     (find
-	      (lambda (token)
-		(eq? (token-tag token)
-		     token-tag-trailing-uncomment))
-	      tokens)))
-	(if trailing
-	    (extend-comment-iter '() "" tokens)
-	    tokens)))
+		 (tokens-loop
+		  (conc ext-str (token-text (car rest-tokens)))
+		  (cdr rest-tokens))))))
 
-;;; Return the rest of `str` after removing
-;;; `(string-length cutoff)` characters from its start.
-    (define (string-rest str cutoff)
-      (substring str (string-length cutoff) (string-length str)))
+      (if (lead-comment? token-lines)
+	  (let lines-loop ((ext-lines '())
+			   (rest-lines token-lines))
+	    ;; Don't have to check if `rest-lines` is null
+	    ;; because `wrap-leading-comment-line` will return a
+	    ;; pair before `rest-lines` ends if `lead-comment?`
+	    ;; was true.
+	    (let ((lead-line
+		   (wrap-leading-comment-line (car rest-lines))))
+	      (if (lead-end? lead-line)
+		  (append
+		   (reverse
+		    (cons (lead-tokens lead-line)
+			  ext-lines))
+		   (cdr rest-lines))
+		  (lines-loop
+		   (cons (lead-tokens lead-line)
+			 ext-lines)
+		   (cdr rest-lines)))))
+	  token-lines))
 
-    ;; Tokenize the code.
-    (define (tokenize-iter code tokens)
-      (let ((token (next-token code)))
-	(if (end-token? token)
-	    (reverse tokens)
-	    (tokenize-iter
-	     (string-rest code (token-text token))
-	     (cons token tokens)))))
-    (extend-comment
-     (tokenize-iter code '())))
+    (wrap-leading-comment
+     (map
+      (lambda (code-line)
+	(colorize-code code-line '() #t))
+      code-lines))
+    )  ; End procedure colorize.
 
-
-;;; Print and color `tokens`.
-  (define (print-colored tokens start-lineno active-lineno use-color)
+  (define (colored->string token-lines start-lineno active-lineno use-color)
     (define (def-color color)
       (string-append "\033[" color "m"))
 
@@ -475,9 +481,10 @@
 	    ((comment-tag? tag) comment-color)
 	    (else no-color)))
 
-    (define (before-color tag)
+    (define (before-color token)
       (if use-color
-	  (tag-before-color tag)
+	  (tag-before-color
+	   (token-tag token))
 	  nothing))
 
     (define (after-color)
@@ -485,64 +492,50 @@
 	  no-color
 	  nothing))
 
-    (define (default-line-init token) "")
+    (define (format-token token)
+      (conc (before-color token)
+	    (token-text token)
+	    (after-color)))
 
-    (define format-token
-      (let ((line-init default-line-init)
-	    (lineno start-lineno))
-	(lambda (token)
-	  (define (before-token!)
-	    (let ((before-line line-init))
-	      (set! line-init default-line-init)
-	      (conc (before-line token)
-		    (before-color (token-tag token)))))
-
-	  (define (after-token!)
-	    (define (highlight-active-line token)
-	      (define (visible-content? token)
-		(and
-		 (not (eq? token-tag-newline (token-tag token)))
-		 (not (string-null? (token-text token)))))
-	      (cond ((= lineno active-lineno)
-		     " -> ")
-		    ((visible-content? token) ; Only add whitespace to align this line
-		     "    ")	  ; if there is visible content on it.
-		    (else
-		     "")))
-	    (if (eq? (token-tag token) token-tag-newline)
-		(set! line-init
-		  (lambda (next-token)
-		    (let ((lineno-str
-			   (conc (format #f " ~4d" lineno)
-				 (highlight-active-line next-token))))
-		      (set! lineno (+ lineno 1))
-		      lineno-str))))
-	    (after-color))
-
-	  (conc (before-token!)
-		(token-text token)
-		(after-token!)))))
-
+    (define (accumulate-strings strs)
+      (foldr conc "" strs))
 
     (define (format-tokens tokens)
-      ;; Line numbers are added to the output *after* each newline
-      ;; token. Since we want a line number on on on the first line
-      ;; too, this newline token is added to the start of the tokens.
-      (define (init-tokens token)
-	(cons (make-token "" token-tag-newline)
-	      tokens))
-      (define (format-token-iter tokens output)
-	(if (null? tokens)
-	    output
-	    (format-token-iter
-	     (cdr tokens)
-	     (conc output
-		   (format-token (car tokens))))))
-      (format-token-iter (init-tokens tokens) ""))
+      (accumulate-strings
+       (map format-token tokens)))
 
-    (display (format-tokens tokens)))
+;;; Check if `tokens` contains any non-whitespace text.
+    (define (visible-content? tokens)
+      (find
+       (lambda (token-text-chars)
+	 (not (null?
+	       (filter
+		(lambda (char)
+		  (not (char-whitespace? char)))
+		token-text-chars))))
+       (map (lambda (token)
+	      (string->list (token-text token)))
+	    tokens)))
 
-  ;; Simple alias. `tokenize` is a better name for the actual
-  ;; job that's performed, but from the outside `colorize` is
-  ;; easier to understand.
-  (define colorize tokenize))
+    (define (format-lineno tokens offset)
+      (let ((current-lineno (+ offset start-lineno)))
+	(define (highlight-active-lineno)
+	  (cond ((= current-lineno active-lineno)
+		 " -> ")
+		((visible-content? tokens)
+		 "    ")
+		(else
+		 "")))
+
+	(conc (format #f " ~4d" current-lineno)
+	      (highlight-active-lineno))))
+    
+    (accumulate-strings
+     (map-indexed
+      (lambda (token-line idx)
+	(conc
+	 (format-lineno token-line idx)
+	 (format-tokens token-line)
+	 "\n"))
+      token-lines)))  ; End procedure colored->string.
+  )  ; End module colorizer.
