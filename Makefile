@@ -8,7 +8,7 @@ SOURCE_DIR = src
 DEP = dependencies
 SOURCES = $(wildcard $(SOURCE_DIR)/*.c)
 OBJECTS = $(patsubst $(SOURCE_DIR)/%.c, $(BUILD_DIR)/%.o, $(SOURCES))
-OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/source-files.o $(BUILD_DIR)/colorize.o
+OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-source.o $(BUILD_DIR)/tokenize.o $(BUILD_DIR)/c-syntax.o
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
@@ -33,11 +33,14 @@ $(BUILD_DIR)/print_source.o: CPPFLAGS += -I/usr/include/chicken
 $(BUILD_DIR)/print_source.o: $(SOURCE_DIR)/print_source.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/source-files.o: $(SOURCE_DIR)/source-files.scm $(BUILD_DIR)/colorize.o | $(BUILD_DIR)
-	csc -uses colorizer -c -embedded $(SOURCE_DIR)/source-files.scm -o $@
+$(BUILD_DIR)/print-source.o: $(SOURCE_DIR)/print-source.scm $(BUILD_DIR)/tokenize.o | $(BUILD_DIR)
+	csc -uses tokenizer -c -embedded $(SOURCE_DIR)/print-source.scm -o $@
 
-$(BUILD_DIR)/colorize.o: $(SOURCE_DIR)/colorize.scm | $(BUILD_DIR)
-	csc -unit colorizer -c -J $(SOURCE_DIR)/colorize.scm  -o $@
+$(BUILD_DIR)/tokenize.o: $(SOURCE_DIR)/tokenize.scm $(BUILD_DIR)/c-syntax.o | $(BUILD_DIR)
+	csc -uses c-syntax -unit tokenizer -c -J $(SOURCE_DIR)/tokenize.scm  -o $@
+
+$(BUILD_DIR)/c-syntax.o: $(SOURCE_DIR)/c-syntax.scm | $(BUILD_DIR)
+	csc -unit c-syntax -c -J $(SOURCE_DIR)/c-syntax.scm  -o $@
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
@@ -73,14 +76,14 @@ TEST_OBJECTS += $(patsubst $(TEST_SOURCE_DIR)/%.c, $(TEST_BUILD_DIR)/%.o, $(TEST
 TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
-TEST_SCHEME_SCRIPT = tests/colorize.scm
 
 test: unit integration
 
 unit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
 unit: $(TEST_BINARY) assets
 	./$(TEST_BINARY) $(args)
-	$(TEST_SCHEME_SCRIPT)
+	csi -s tests/tokenize.scm
+	csi -s tests/c-types.scm
 
 integration: $(BINARY) assets
 	python -m pytest

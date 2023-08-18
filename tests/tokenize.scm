@@ -1,12 +1,8 @@
-#! /bin/sh
-#|
-exec csi -s "$0" "$@"
-|#
+(load "src/tokenize.scm")
 
-(load "src/colorize.scm")
 (import test
 	c-regex
-	colorizer)
+	tokenizer)
 
 (test-group "(test-regex)"
   (test-group "(test-literal-regex)"
@@ -115,37 +111,39 @@ exec csi -s "$0" "$@"
   ;; End of test-group (test-regex).
   )
 
-(test-group "(test-colorize)"
+(test-group "(test-tokenize)"
   (test "basic code example"
-	(colorize (list "int main(void) {" "    int i = 0;" "    for (; i < 91; i++) {" "        printf(\"Blah: %d\" i);" "    }"))
+	(tokenize (list "int main(void) {" "    int i = 0;" "    for (; i < 91; i++) {" "        printf(\"Blah: %d\" i);" "    }"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "main") (tt-special-symbol . "(") (tt-type . "void") (tt-special-symbol . ")") (tt-whitespace . " ") (tt-special-symbol . "{")) ((tt-whitespace . "    ") (tt-type . "int") (tt-whitespace . " ") (tt-identifier . "i") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "0") (tt-special-symbol . ";")) ((tt-whitespace . "    ") (tt-keyword . "for") (tt-whitespace . " ") (tt-special-symbol . "(") (tt-special-symbol . ";") (tt-whitespace . " ") (tt-identifier . "i") (tt-whitespace . " ") (tt-operator . "<") (tt-whitespace . " ") (tt-constant . "91") (tt-special-symbol . ";") (tt-whitespace . " ") (tt-identifier . "i") (tt-operator . "++") (tt-special-symbol . ")") (tt-whitespace . " ") (tt-special-symbol . "{")) ((tt-whitespace . "        ") (tt-identifier . "printf") (tt-special-symbol . "(") (tt-literal . "\"Blah: %d\"") (tt-whitespace . " ") (tt-identifier . "i") (tt-special-symbol . ")") (tt-special-symbol . ";")) ((tt-whitespace . "    ") (tt-special-symbol . "}"))))
 
   (test "error recovery at whitespace"
-	(colorize  (list "int Äpfel = (6 + 4) * 9;"))
+	(tokenize  (list "int Äpfel = (6 + 4) * 9;"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-other . "Äpfel") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-special-symbol . "(") (tt-constant . "6") (tt-whitespace . " ") (tt-operator . "+") (tt-whitespace . " ") (tt-constant . "4") (tt-special-symbol . ")") (tt-whitespace . " ") (tt-operator . "*") (tt-whitespace . " ") (tt-constant . "9") (tt-special-symbol . ";"))))
 
   (test "single C-style comments"
-	(colorize (list "int main(void) {" "    /* blah */" "    printf(\"blah\");" "}"))
+	(tokenize (list "int main(void) {" "    /* blah */" "    printf(\"blah\");" "}"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "main") (tt-special-symbol . "(") (tt-type . "void") (tt-special-symbol . ")") (tt-whitespace . " ") (tt-special-symbol . "{")) ((tt-whitespace . "    ") (tt-comment . "/*") (tt-comment-text . " blah ") (tt-uncomment . "*/")) ((tt-whitespace . "    ") (tt-identifier . "printf") (tt-special-symbol . "(") (tt-literal . "\"blah\"") (tt-special-symbol . ")") (tt-special-symbol . ";")) ((tt-special-symbol . "}"))))
 
   (test "multi-line C-style comments"
-	(colorize (list "int a = 2;" "/*blah" "asdf */" "int b = 4;"))
+	(tokenize (list "int a = 2;" "/*blah" "asdf */" "int b = 4;"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "a") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "2") (tt-special-symbol . ";")) ((tt-comment . "/*") (tt-comment-text . "blah")) ((tt-comment-text . "asdf ") (tt-uncomment . "*/")) ((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "b") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "4") (tt-special-symbol . ";"))))
 
   (test "multi-line C-style comment without end"
-	(colorize (list "int blah = 5;" "/* I don't end," "But this is still me"))
+	(tokenize (list "int blah = 5;" "/* I don't end," "But this is still me"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "blah") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "5") (tt-special-symbol . ";")) ((tt-comment . "/*") (tt-comment-text . " I don't end,")) ((tt-comment-text . "But this is still me"))))
 
   (test "C-style comment without beginning wraps to start"
-	(colorize (list "int main(void) */ {int a = 0;"))
+	(tokenize (list "int main(void) */ {int a = 0;"))
 	'(((tt-comment-text . "int main(void) ") (tt-trailing-uncomment . "*/") (tt-whitespace . " ") (tt-special-symbol . "{") (tt-type . "int") (tt-whitespace . " ") (tt-identifier . "a") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "0") (tt-special-symbol . ";"))))
 
   (test "code can be commented-out"
-	(colorize (list "int" "a" "=" "2;" " */ /* another comment */"))
+	(tokenize (list "int" "a" "=" "2;" " */ /* another comment */"))
 	'(((tt-comment-text . "int")) ((tt-comment-text . "a")) ((tt-comment-text . "=")) ((tt-comment-text . "2;")) ((tt-comment-text . " ") (tt-trailing-uncomment . "*/") (tt-whitespace . " ") (tt-comment . "/*") (tt-comment-text . " another comment ") (tt-uncomment . "*/"))))
 
   (test "C++ style comments can contain block comments"
-	(colorize (list "int a = 7;  // This C++ style comment can contain this */ or that /*.""// It even continues on the next line!"))
+	(tokenize (list "int a = 7;  // This C++ style comment can contain this */ or that /*.""// It even continues on the next line!"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "a") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "7") (tt-special-symbol . ";") (tt-whitespace . "  ") (tt-comment . "//") (tt-comment-text . " This C++ style comment can contain this */ or that /*.")) ((tt-comment . "//") (tt-comment-text . " It even continues on the next line!"))))
-  ;; End test-group (test-colorize).
+  ;; End test-group (test-tokenize).
   )
+
+(test-exit)

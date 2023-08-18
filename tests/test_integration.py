@@ -12,6 +12,7 @@ NO_FRAME_POINTER_BIN = 'tests/assets/no-frame-pointer-nested-functions.bin'
 MULTI_FILE_BIN = 'tests/assets/multi-file.bin'
 PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
 COMMENTED_BIN = 'tests/assets/commented.bin'
+CUSTOM_TYPES_BIN = 'tests/assets/custom-types.bin'
 
 
 def random_string() -> str:
@@ -309,10 +310,36 @@ class TestColors:
         expect = """\
     4    \033[96m  I start outside the text that's printed.\033[0m
     5    \033[96m  and I span more than one line. \033[0m\033[96m*/\033[0m
-    6    \033[32mint\033[0m\033[0m \033[0m\033[0mmain\033[0m\033[0m(\033[0m\033[32mvoid\033[0m\033[0m)\033[0m\033[0m \033[0m\033[0m{\033[0m\033[0m  \033[0m\033[96m/*\033[0m\033[96m blah! \033[0m\033[96m*/\033[0m
-    7 -> \033[0m  \033[0m\033[0mprintf\033[0m\033[0m(\033[0m\033[31m"blah\\n"\033[0m\033[0m)\033[0m\033[0m;\033[0m\033[0m  \033[0m\033[96m//\033[0m\033[96m This C++ style comment can contain this */ or that /*.\033[0m
-    8    \033[0m  \033[0m\033[32mint\033[0m\033[0m \033[0m\033[0ma\033[0m\033[0m \033[0m\033[33m=\033[0m\033[0m \033[0m\033[34m7\033[0m\033[0m;\033[0m
-    9    \033[0m  \033[0m\033[96m/*\033[0m\033[96m This comment ends outside the printed text\033[0m
+    6    \033[32mint\033[0m \033[0mmain\033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m{\033[0m  \033[0m\033[96m/*\033[0m\033[96m blah! \033[0m\033[96m*/\033[0m
+    7 ->   \033[0mprintf\033[0m(\033[0m\033[31m"blah\\n"\033[0m)\033[0m;\033[0m  \033[0m\033[96m//\033[0m\033[96m This C++ style comment can contain this */ or that /*.\033[0m
+    8      \033[0m\033[32mint\033[0m \033[0ma\033[0m \033[0m\033[33m=\033[0m \033[0m\033[34m7\033[0m;\033[0m
+    9      \033[0m\033[96m/*\033[0m\033[96m This comment ends outside the printed text\033[0m
    10    \033[96m     and spans multiple lines, too.\033[0m
+"""
+        assert expect in stdout
+
+    def test_colored_custom_types(self):
+        stdout = run_cmd('break print_rat\nc\nn\nn', CUSTOM_TYPES_BIN, [], [])
+        expect = """\
+    6    }\033[0m;\033[0m
+    7
+    8    \033[32mvoid\033[0m \033[0mprint_rat\033[0m(\033[0m\033[35mstruct\033[0m \033[0m\033[32mRational\033[0m \033[0mrat\033[0m)\033[0m \033[0m{\033[0m
+    9 ->   \033[0mprintf\033[0m(\033[0m\033[31m"%d / %d\\n"\033[0m,\033[0m \033[0mrat\033[0m\033[33m.\033[0mnumer\033[0m,\033[0m \033[0mrat\033[0m\033[33m.\033[0mdenom\033[0m)\033[0m;\033[0m
+   10    }\033[0m
+   11
+   12    \033[32mint\033[0m \033[0mmain\033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m{\033[0m
+    7
+    8    \033[32mvoid\033[0m \033[0mprint_rat\033[0m(\033[0m\033[35mstruct\033[0m \033[0m\033[32mRational\033[0m \033[0mrat\033[0m)\033[0m \033[0m{\033[0m
+    9      \033[0mprintf\033[0m(\033[0m\033[31m"%d / %d\\n"\033[0m,\033[0m \033[0mrat\033[0m\033[33m.\033[0mnumer\033[0m,\033[0m \033[0mrat\033[0m\033[33m.\033[0mdenom\033[0m)\033[0m;\033[0m
+   10 -> }\033[0m
+   11
+   12    \033[32mint\033[0m \033[0mmain\033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m{\033[0m
+   13      \033[0m\033[35mstruct\033[0m \033[0m\033[32mRational\033[0m \033[0mrat\033[0m \033[0m\033[33m=\033[0m \033[0m(\033[0m\033[35mstruct\033[0m \033[0m\033[32mRational\033[0m)\033[0m \033[0m{\033[0m \033[0m\033[34m5\033[0m,\033[0m \033[0m\033[34m3\033[0m \033[0m}\033[0m;\033[0m
+   14      \033[0mrat\033[0m\033[33m.\033[0mnumer\033[0m \033[0m\033[33m=\033[0m \033[0m\033[34m9\033[0m;\033[0m
+   15      \033[0mprintf\033[0m(\033[0m\033[31m"The numerator is: %d\\n"\033[0m,\033[0m \033[0mrat\033[0m\033[33m.\033[0mnumer\033[0m)\033[0m;\033[0m
+   16      \033[0mprint_rat\033[0m(\033[0mrat\033[0m)\033[0m;\033[0m
+   17 ->   \033[0m\033[35mreturn\033[0m \033[0m\033[34m0\033[0m;\033[0m
+   18    }\033[0m
+   19
 """
         assert expect in stdout

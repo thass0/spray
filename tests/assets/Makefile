@@ -8,7 +8,8 @@ NESTED = nested_functions.c
 MULTI_FILE = multi-file/file1.c multi-file/file2.c
 PRINT_ARGS = print_args.c
 COMMENTED = commented.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin
+CUSTOM_TYPES = custom_types.c
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin
 
 all: $(TARGETS)
 
@@ -29,6 +30,8 @@ multi-file.bin: $(MULTI_FILE)
 print-args.bin: $(PRINT_ARGS)
 	$(CC) $(CFLAGS) $< -o $@
 commented.bin: $(COMMENTED)
+	$(CC) $(CFLAGS) $< -o $@
+custom-types.bin: $(CUSTOM_TYPES)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:
