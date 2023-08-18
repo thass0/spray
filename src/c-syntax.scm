@@ -89,7 +89,7 @@
   ;; A preprocessor directive. Optionally also matches the
   ;; `<filename>`/`"filename"` part of `#include`s.
   (define preproc-directive-regex
-    (regexp "^(#[a-z_]+)([ \t]+[<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
+    (regexp "^(#[a-z_]+)([ \t]*)([<\"]([^>\"\\\\]|\\\\[\\s\\S])*[>\"])?"))
   (define comment-text-regex (regexp "^(\\*(?!\\/)|[^*])*"))
   (define line-comment-text-regex (regexp "^[^\n]*"))
   ;; Match anything that's not whitespace.

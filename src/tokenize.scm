@@ -162,14 +162,25 @@
        token-tag-constant))
 
     (define (scan-preproc code)
-      (let ((match (regex-matches preproc-directive-regex code)))
-	(if (caddr match)
-	    (list (make-token (cadr match)
-			      token-tag-preproc-directive)
-		  (make-token (caddr match)
-			      token-tag-include-filepath))
-	    (make-token-list (cadr match)
-			     token-tag-preproc-directive))))
+      (define (include-match? matches)
+	(and (equal? "#include"
+		     (cadr matches))
+	     (cadddr matches)))
+
+      (let ((matches (regex-matches preproc-directive-regex code)))
+	(if (include-match? matches)
+	    (let ((directive  (cadr matches))
+		  (whitespace (caddr matches))
+		  (filepath   (cadddr matches)))
+	      (list (make-token directive
+				token-tag-preproc-directive)
+		    (make-token whitespace
+				token-tag-whitespace)
+		    (make-token filepath
+				token-tag-include-filepath)))
+	    (let ((directive (cadr matches)))
+	      (make-token-list directive
+			       token-tag-preproc-directive)))))
 
     (define (scan-any code)
       (make-token-list (full-match any-regex code)

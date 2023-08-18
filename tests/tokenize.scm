@@ -143,6 +143,11 @@
   (test "C++ style comments can contain block comments"
 	(tokenize (list "int a = 7;  // This C++ style comment can contain this */ or that /*.""// It even continues on the next line!"))
 	'(((tt-type . "int") (tt-whitespace . " ") (tt-identifier . "a") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-constant . "7") (tt-special-symbol . ";") (tt-whitespace . "  ") (tt-comment . "//") (tt-comment-text . " This C++ style comment can contain this */ or that /*.")) ((tt-comment . "//") (tt-comment-text . " It even continues on the next line!"))))
+
+  (test "retrieve include paths"
+	(tokenize (list "#include<stdio.h>" "#include\"debugger.h\"" "#include <stdio.h>" "#include \"debugger.h\""))
+	'(((tt-preproc . "#include") (tt-whitespace . "") (tt-include-filepath . "<stdio.h>")) ((tt-preproc . "#include") (tt-whitespace . "") (tt-include-filepath . "\"debugger.h\"")) ((tt-preproc . "#include") (tt-whitespace . " ") (tt-include-filepath . "<stdio.h>")) ((tt-preproc . "#include") (tt-whitespace . " ") (tt-include-filepath . "\"debugger.h\"")))
+	)
   ;; End test-group (test-tokenize).
   )
 
