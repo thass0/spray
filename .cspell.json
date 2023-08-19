@@ -9,6 +9,6 @@
     }
   ],
   "dictionaries": ["project-words"],
-  "files": ["**/Makefile", "**/*.{md, txt}", "**/*.{c, cpp, rs, py, scm}", "**/*.{json, yml, yaml, toml}"],
+  "files": ["**/Makefile", "**/*.{md, txt}", "**/*.{c, scm, py}", "**/*.{json, yml, yaml, toml}"],
   "ignorePaths": ["**/build", "/dependencies", "**/.*", "/.project-words.txt"]
 }

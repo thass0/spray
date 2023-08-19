@@ -201,7 +201,7 @@ Hit breakpoint at address 0x000000000040113a in tests/assets/nested_functions.c
         # Breakpoints in different files that the
         # entrypoint work, too.
         assert_ends_with('break file2.c:7\nc', """\
-Hit breakpoint at address 0x00000000004011b0 in tests/assets/multi-file/file2.c
+in tests/assets/multi-file/file2.c
     4      if (n < 2) {
     5        return n;
     6      } else {
@@ -214,7 +214,7 @@ Hit breakpoint at address 0x00000000004011b0 in tests/assets/multi-file/file2.c
         # Breaking on an empty line falls through
         # to the next line with code on it.
         assert_ends_with('break file2.c:1\nc', """\
-Hit breakpoint at address 0x0000000000401190 in tests/assets/multi-file/file2.c
+in tests/assets/multi-file/file2.c
     1    #include "file2.h"
     2
     3 -> int file2_compute_something(int n) {
@@ -225,7 +225,6 @@ Hit breakpoint at address 0x0000000000401190 in tests/assets/multi-file/file2.c
 
     def test_breakpoints_delete(self):
         assert_ends_with('break file2.c:4\nc\ndelete file2.c:4\nc', """\
-Hit breakpoint at address 0x000000000040119b in tests/assets/multi-file/file2.c
     1    #include "file2.h"
     2
     3    int file2_compute_something(int n) {
@@ -341,5 +340,44 @@ class TestColors:
    17 ->   \033[0m\033[35mreturn\033[0m \033[0m\033[34m0\033[0m;\033[0m
    18    }\033[0m
    19
+"""
+        assert expect in stdout
+
+    def test_colored_custom_types_in_other_file(self):
+        stdout = run_cmd('n\nn\ns\nbreak file1.c:19\nc', MULTI_FILE_BIN, [], [])
+        expect = """\
+   11    }\033[0m
+   12
+   13    \033[32mint\033[0m \033[0mmain\033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m{\033[0m
+   14 ->   \033[0m\033[32mint\033[0m \033[0mnum1\033[0m \033[0m\033[33m=\033[0m \033[0mfile1_compute_something\033[0m(\033[0m\033[34m3\033[0m)\033[0m;\033[0m
+   15      \033[0m\033[32mint\033[0m \033[0mnum2\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_compute_something\033[0m(\033[0mnum1\033[0m)\033[0m;\033[0m
+   16      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m(\033[0mnum1\033[0m \033[0m\033[33m+\033[0m \033[0mnum2\033[0m)\033[0m;\033[0m
+   17      \033[0m\033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m \033[0mblah\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_init_blah\033[0m(\033[0m\033[34m4\033[0m)\033[0m;\033[0m
+   12
+   13    \033[32mint\033[0m \033[0mmain\033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m{\033[0m
+   14      \033[0m\033[32mint\033[0m \033[0mnum1\033[0m \033[0m\033[33m=\033[0m \033[0mfile1_compute_something\033[0m(\033[0m\033[34m3\033[0m)\033[0m;\033[0m
+   15 ->   \033[0m\033[32mint\033[0m \033[0mnum2\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_compute_something\033[0m(\033[0mnum1\033[0m)\033[0m;\033[0m
+   16      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m(\033[0mnum1\033[0m \033[0m\033[33m+\033[0m \033[0mnum2\033[0m)\033[0m;\033[0m
+   17      \033[0m\033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m \033[0mblah\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_init_blah\033[0m(\033[0m\033[34m4\033[0m)\033[0m;\033[0m
+   18      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0mblah\033[0m;\033[0m
+   14      \033[0m\033[32mint\033[0m \033[0mnum1\033[0m \033[0m\033[33m=\033[0m \033[0mfile1_compute_something\033[0m(\033[0m\033[34m3\033[0m)\033[0m;\033[0m
+   15      \033[0m\033[32mint\033[0m \033[0mnum2\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_compute_something\033[0m(\033[0mnum1\033[0m)\033[0m;\033[0m
+   16      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m(\033[0mnum1\033[0m \033[0m\033[33m+\033[0m \033[0mnum2\033[0m)\033[0m;\033[0m
+   17 ->   \033[0m\033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m \033[0mblah\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_init_blah\033[0m(\033[0m\033[34m4\033[0m)\033[0m;\033[0m
+   18      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0mblah\033[0m;\033[0m
+   19      \033[0m\033[35mreturn\033[0m \033[0m\033[34m0\033[0m;\033[0m
+   20    }\033[0m
+    9      \033[0m}\033[0m
+   10    }\033[0m
+   11
+   12 -> \033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m \033[0mfile2_init_blah\033[0m(\033[0m\033[32mint\033[0m \033[0mx\033[0m)\033[0m \033[0m{\033[0m
+   13      \033[0m\033[35mreturn\033[0m \033[0m(\033[0m\033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m)\033[0m \033[0m{\033[0m \033[0mx\033[0m \033[0m}\033[0m;\033[0m
+   14    }\033[0m
+Hit breakpoint at address 0x0000000000401194 in tests/assets/multi-file/file1.c
+   16      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0m(\033[0mnum1\033[0m \033[0m\033[33m+\033[0m \033[0mnum2\033[0m)\033[0m;\033[0m
+   17      \033[0m\033[35mstruct\033[0m \033[0m\033[32mBlah\033[0m \033[0mblah\033[0m \033[0m\033[33m=\033[0m \033[0mfile2_init_blah\033[0m(\033[0m\033[34m4\033[0m)\033[0m;\033[0m
+   18      \033[0m(\033[0m\033[32mvoid\033[0m)\033[0m \033[0mblah\033[0m;\033[0m
+   19 ->   \033[0m\033[35mreturn\033[0m \033[0m\033[34m0\033[0m;\033[0m
+   20    }\033[0m
 """
         assert expect in stdout

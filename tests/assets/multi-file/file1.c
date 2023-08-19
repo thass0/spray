@@ -14,5 +14,7 @@ int main(void) {
   int num1 = file1_compute_something(3);
   int num2 = file2_compute_something(num1);
   (void) (num1 + num2);
+  struct Blah blah = file2_init_blah(4);
+  (void) blah;
   return 0;
 }

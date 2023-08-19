@@ -251,7 +251,7 @@
 
 ;;; Return the next token in the code.
     (define next-token
-      ;; Queue of tokens to be retured before scanning the next token.
+      ;; Queue of tokens to be returned before scanning the next token.
       (let ((token-queue '()))
 	(lambda (code new-line?)
 	  (if (null? token-queue)

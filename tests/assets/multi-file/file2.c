@@ -8,3 +8,7 @@ int file2_compute_something(int n) {
            + file2_compute_something(n - 2);
   }
 }
+
+struct Blah file2_init_blah(int x) {
+  return (struct Blah) { x };
+}

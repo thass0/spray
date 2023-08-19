@@ -152,7 +152,7 @@
   ;;
   ;; This tells us that every time we see the any of the keywords
   ;; struct, union or enum, we just  need to check if the next token
-  ;; is an identifer or a opening bracket. If it's an identifer, we
+  ;; is an identifier or a opening bracket. If it's an identifier, we
   ;; can store that as the name of a type. Otherwise the type
   ;; being declared is anonymous, so we can ignore it.
 
@@ -165,7 +165,7 @@
 	       (equal? keyword "enum")
 	       (equal? keyword "union")))))
 
-;;; Store the identifer of the first type specification
+;;; Store the identifier of the first type specification
 ;;; found in `tokens` in `env`.
   (define (store-type-spec! env tokens)
     (let loop ((tokens tokens))
@@ -203,8 +203,8 @@
 		   (cons tokens keyword-tokens)
 		   keyword-tokens))))))
 
-  (define (make-types-env token-lines)
-    (let ((env (list '*env*)))
+  (define (make-types-env token-lines . token-lines-lst)
+    (define (extend-types-env env token-lines)
       (for-each
        (lambda (tokens)
 	 (let ((token (car tokens)))
@@ -213,12 +213,21 @@
 		 ((equal? (token-text token)
 			  "typedef")
 		  (store-typedef! env tokens)))))
-       (filter-keywords (flatten token-lines)))
+       (filter-keywords (flatten token-lines))))
+    (let ((env (list '*env*)))
+      (extend-types-env env token-lines)
+      (for-each
+       (lambda (token-lines)
+	 (extend-types-env env token-lines))
+       token-lines-lst)
       env))
 
+  (define (types-env? env)
+    (and (pair? env)
+	 (eq? '*env* (car env))))
+
   (define (is-type-in-env? env type)
-    (if (and (pair? env)
-	     (eq? (car env) '*env*))
+    (if (types-env? env)
 	(find (lambda (type-identifier)
 		(equal? type-identifier type))
 	      (cdr env))
