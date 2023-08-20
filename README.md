@@ -32,7 +32,7 @@ local debugging workflow that I find myself doing the most of.
 - [ ] Interacting with variables (printing, setting, etc.)
 - [ ] Backtraces based on DWARF info
 - [ ] Command modularity
-- [ ] Improved signal handling
+- [ ] Improved separation of the debugger and the debuggee in the command line.
 
 ## 💿️ Installation
 
