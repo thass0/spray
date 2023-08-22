@@ -47,7 +47,7 @@
       (prefix? str C-uncomment))
 
     (define (starts-with-keyword? str)
-      (prefix? str C-keywords))
+      (regex-match? keyword-regex str))
 
     (define (starts-with-operator? str)
       (prefix? str C-operators))

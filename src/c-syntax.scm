@@ -95,6 +95,10 @@
   ;; Match anything that's not whitespace.
   ;; Used to recover from invalid pieces of syntax.
   (define any-regex (regexp "^[^ \n\t\r]*"))
+  ;; Check that the given string starts with a keyword and
+  ;; that the keyword is terminated by whitespace (i.e.
+  ;; the given string doesn't continue with more characters).
+  (define keyword-regex (regexp "^(case|default|if|else|switch|while|do|for|goto|continue|break|return|struct|union|enum|typedef|extern|static|register|auto|const|volatile|restrict)[\n\t ]"))
 
 ;;; Does `str` match `regex`?
   (define (regex-match? regex str)

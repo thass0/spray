@@ -5,6 +5,16 @@
 	tokenizer)
 
 (test-group "(test-regex)"
+  (test-group "(test-keyword-regex)"
+    (test-assert "keyword with space at end is accepted"
+      (regex-match? keyword-regex "break "))
+    (test-assert "keyword with tab at end is accepted"
+      (regex-match? keyword-regex "extern\t"))
+    (test-assert "identifier starting with keyword is rejected"
+      (not (regex-match? keyword-regex "breakpoints ")))
+    (test-assert "other identifier starting with keyword is rejected"
+      (not (regex-match? keyword-regex "return_value"))))
+
   (test-group "(test-literal-regex)"
     (test "match a string made up of only a string literal"
 	  "\"blah\""
@@ -148,6 +158,10 @@
 	(tokenize (list "#include<stdio.h>" "#include\"debugger.h\"" "#include <stdio.h>" "#include \"debugger.h\""))
 	'(((tt-preproc . "#include") (tt-whitespace . "") (tt-include-filepath . "<stdio.h>")) ((tt-preproc . "#include") (tt-whitespace . "") (tt-include-filepath . "\"debugger.h\"")) ((tt-preproc . "#include") (tt-whitespace . " ") (tt-include-filepath . "<stdio.h>")) ((tt-preproc . "#include") (tt-whitespace . " ") (tt-include-filepath . "\"debugger.h\"")))
 	)
+  (test "don't split identifier starting with keyword"
+	(tokenize (list "struct breakpoints { int a; };" "struct breakpoints bp = { 5 };"))
+	'(((tt-keyword . "struct") (tt-whitespace . " ") (tt-identifier . "breakpoints") (tt-whitespace . " ") (tt-special-symbol . "{") (tt-whitespace . " ") (tt-type . "int") (tt-whitespace . " ") (tt-identifier . "a") (tt-special-symbol . ";") (tt-whitespace . " ") (tt-special-symbol . "}") (tt-special-symbol . ";")) ((tt-keyword . "struct") (tt-whitespace . " ") (tt-identifier . "breakpoints") (tt-whitespace . " ") (tt-identifier . "bp") (tt-whitespace . " ") (tt-operator . "=") (tt-whitespace . " ") (tt-special-symbol . "{") (tt-whitespace . " ") (tt-constant . "5") (tt-whitespace . " ") (tt-special-symbol . "}") (tt-special-symbol . ";"))))
+
   ;; End test-group (test-tokenize).
   )
 
