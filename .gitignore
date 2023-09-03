@@ -6,3 +6,4 @@ compile_commands.json
 **/*.bin
 *~
 *.import.scm
+/libdwarf-code/
