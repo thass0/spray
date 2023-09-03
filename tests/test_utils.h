@@ -15,6 +15,8 @@
 #define MULTI_FILE_BIN "tests/assets/multi-file.bin"
 #define PRINT_ARGS_SRC "tests/assets/print_args.c"
 #define PRINT_ARGS_BIN "tests/assets/print-args.bin"
+#define RECURRING_VARIABLES_SRC "tests/assets/recurring_variables.c"
+#define RECURRING_VARIABLES_BIN "tests/assets/recurring-variables.bin"
 
 // Create a test
 #define TEST(name) \

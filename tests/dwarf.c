@@ -8,6 +8,7 @@
 
 #include <limits.h>
 #include <stdlib.h>
+#include <dwarf.h>
 
 enum {
   RAND_DATA_BUF_SIZE = 32,
@@ -72,15 +73,16 @@ TEST(iterating_lines_works)  {
 
 bool callback__test_search(Dwarf_Debug dbg,
                            Dwarf_Die die,
-                           const void *const search_for,
-                           void *const search_findings
+                           SearchFor search_for,
+                           SearchFindings search_findings
 ) {  
-  unused(search_findings);
   assert(dbg != NULL);
   assert(die != NULL);
 
-  const char *const fn_name = (char *) search_for;
+  const char *const fn_name = (char *) search_for.data;
   if (sd_is_subprog_with_name(dbg, die, fn_name)) {
+    unsigned *level = (unsigned *) search_findings.data;
+    *level = search_for.level;
     return true;
   } else {
     return false;
@@ -100,12 +102,14 @@ TEST(search_returns_the_correct_result) {
                             NULL);
   assert_int(res, ==, DW_DLV_NO_ENTRY);
 
+  unsigned found_at_level = -1;	/* Not a valid level. */
   res = sd_search_dwarf_dbg(dbg,
                             &error,
                             callback__test_search,
                             "main",  // <- This does exist.
-                            NULL);
+                            &found_at_level);
   assert_int(res, ==, DW_DLV_OK);
+  assert_int(found_at_level, ==, 1);
 
   dwarf_finish(dbg);
 
@@ -190,6 +194,104 @@ TEST(sd_line_entry_at_works) {
   return MUNIT_OK;
 }
 
+/* Assert that the first location description in the location list for
+   the variable `name` in `func` has the given values. */
+#define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_) \
+  {									\
+    SdLoclist loclist = {0};						\
+    SprayResult res = sd_init_loclist(dbg, (pc), (name), &loclist);	\
+    assert_int(res, ==, SP_OK);						\
+    assert_int(loclist.ranges[0].lowpc.value, ==, (lowpc_));		\
+    assert_int(loclist.ranges[0].highpc.value, ==, (highpc_));		\
+    assert_int(loclist.exprs[0].operations[0].opcode, ==, (opcode_));	\
+    assert_int(loclist.exprs[0].operations[0].operand1, ==, (op1));	\
+    assert_int(loclist.exprs[0].operations[0].operand2, ==, (op2));	\
+    assert_int(loclist.exprs[0].operations[0].operand3, ==, (op3));	\
+    del_loclist(&loclist);						\
+  }
+
+TEST(finding_variable_locations_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(SIMPLE_64BIT_BIN, &error);
+  assert_ptr_not_null(dbg);
+
+  dbg_addr main_addr = {0x401163}; /* Address from the binary's `main`. */
+  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0);
+
+  dwarf_finish(dbg);
+  return MUNIT_OK;
+}
+
+TEST(finding_locations_by_scope_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(RECURRING_VARIABLES_BIN, &error);
+  assert_ptr_not_null(dbg);
+
+  dbg_addr main_addr = {0x401182}; /* Some address in the binary's `main`. */
+  dbg_addr blah_addr = {0x401132}; /* Some address in the `blah` function. */
+
+  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0);
+  ASSERT_LOCDESC("b", main_addr, DW_OP_fbreg, -24, 0, 0, 0, 0);
+  ASSERT_LOCDESC("c", main_addr, DW_OP_fbreg, -32, 0, 0, 0, 0);
+
+  ASSERT_LOCDESC("a", blah_addr, DW_OP_addr, 4202512, 0, 0, 0, 0);
+  ASSERT_LOCDESC("b", blah_addr, DW_OP_fbreg, -16, 0, 0, 0, 0);
+  ASSERT_LOCDESC("c", blah_addr, DW_OP_fbreg, -24, 0, 0, 0, 0);
+  dwarf_finish(dbg);
+
+  return MUNIT_OK;
+}
+
+TEST(manual_check_locexpr_output) {
+  SdExpression first = {0};
+  first.n_operations = 2;
+  first.operations = calloc(first.n_operations, sizeof(SdOperation));
+  first.operations[0] = (SdOperation) {
+    .opcode = DW_OP_fbreg,	/* Has one operand. */
+    .operands = {13, 0, 0},
+  };
+  first.operations[1] = (SdOperation) {
+    .opcode = DW_OP_const_type,	/* Has three operands. */
+    .operands = {14, 15, 16},
+  };
+
+  SdExpression second = {0};
+  second.n_operations = 1;
+  second.operations = calloc(second.n_operations, sizeof(SdOperation));
+  second.operations[0] =  (SdOperation) {
+    .opcode = DW_OP_deref_type,	/* Has two operands. */
+    .operands = {123, 456},
+  };
+
+  SdLoclist loclist = {0};
+  loclist.n_exprs = 2;
+  loclist.exprs = calloc(loclist.n_exprs, sizeof(SdExpression));
+  loclist.exprs[0] = first;
+  loclist.exprs[1] = second;
+
+  loclist.ranges = calloc(loclist.n_exprs, sizeof(SdLocRange));
+  loclist.ranges[0] = (SdLocRange) {
+    .meaningful = true,
+    .lowpc = {78},
+    .highpc = {910},
+  };
+  loclist.ranges[1] = (SdLocRange) {
+    .meaningful = true,
+    .lowpc = {11},
+    .highpc = {12},
+  };
+
+  /* TODO: Replace this test with an integration test,
+     that captures the output that's emitted here and
+     checks that the output is correct. */
+
+  printf("\n");			/* Initial newline for easier inspection. */
+  print_loclist(loclist);
+  del_loclist(&loclist);
+
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
     REG_TEST(get_line_entry_from_pc_works),
     REG_TEST(iterating_lines_works),
@@ -197,4 +299,8 @@ MunitTest dwarf_tests[] = {
     REG_TEST(get_effective_function_start_works),
     REG_TEST(get_filepath_from_pc_works),
     REG_TEST(sd_line_entry_at_works),
-    {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}};
+    REG_TEST(finding_variable_locations_works),
+    REG_TEST(finding_locations_by_scope_works),
+    REG_TEST(manual_check_locexpr_output),
+    {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}
+};

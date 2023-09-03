@@ -8,10 +8,25 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <math.h>		/* For `log10`, `fabs` and `floor` to compute the number of digits. */
+
+
+/* NOTE: The function prefix `sd_` stands for 'Spray DWARF' and
+   is used for all of  Spray's functions that interface with
+   DWARF debug information (through libdwarf). */
 
 #ifndef UNIT_TESTS
+typedef struct SearchFor {
+  unsigned level;   /* Level in the DIE tree. */
+  const void *data; /* Custom data used as context while searching. */
+} SearchFor;
+
+typedef struct SearchFindings {
+  void *data;			/* Custom data collected while searching */
+} SearchFindings;
+
 /* This type is defined in `spray_dwarf.h` if `UNIT_TESTS` is defined. */
-typedef bool (*SearchCallback)(Dwarf_Debug, Dwarf_Die, const void *const, void *const);
+typedef bool (*SearchCallback)(Dwarf_Debug, Dwarf_Die, SearchFor, SearchFindings);
 #endif  // UNIT_TESTS
 
 /* Only used for debugging (and tests). */
@@ -68,19 +83,34 @@ Dwarf_Debug sd_dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   }
 }
 
-/* NOTE: The return value of `search_dwarf_die` and `search_dwarf_dbg`
+/* NOTE: The return values of `search_dwarf_die` and `search_dwarf_dbg`
    only signals the outcome of the libdwarf calls. Therefore the return
    value `DW_DLV_OK` doesn't mean that the search was successful in that
-   we found something. It only means that there wasn't a error with DWARF. */
+   we found something. It only means that there wasn't a error with DWARF.
+   `search_findings` should be used to signal the outcome of the search instead.
+   On the other hand, if the return value is not `DW_DLV_OK`, the search was
+   never successful. E.g. if nothing was found, `DW_DLV_NO_ENTRY` is returned. */
 
-int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const error,
-  int is_info, int in_level,
-  SearchCallback search_callback,
-  const void *const search_for, void *const search_findings
+int sd_search_dwarf_die(Dwarf_Debug dbg,
+			Dwarf_Die in_die,
+			Dwarf_Error *const error,
+			int is_info,
+			unsigned level,
+			SearchCallback search_callback,
+			const void *search_for_data,
+			void  *search_findings_data
 ) {  
   int res = DW_DLV_OK;
   Dwarf_Die cur_die = in_die;
   Dwarf_Die child_die = NULL;
+
+  SearchFor search_for = {
+    .level = level,		/* Current level of recursion. */
+    .data = search_for_data,
+  };
+  SearchFindings search_findings = {
+    .data = search_findings_data,
+  };
 
   /* Search self. */
   bool in_die_found = search_callback(dbg, in_die, search_for, search_findings);
@@ -96,10 +126,15 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
     if (res == DW_DLV_ERROR) {
       return DW_DLV_ERROR;
     } else if (res == DW_DLV_OK) {
-      /* We found a child: recurse! */
-      res = sd_search_dwarf_die(dbg, child_die, error,
-        is_info, in_level + 1,
-        search_callback, search_for, search_findings);
+      /* We found a child. Go down another level of recursion! */
+      res = sd_search_dwarf_die(dbg,
+				child_die,
+				error,
+				is_info,
+				level + 1,
+				search_callback,
+				search_for_data,
+				search_findings_data);
   
       dwarf_dealloc(dbg, child_die, DW_DLA_DIE);
       child_die = NULL;
@@ -137,16 +172,14 @@ int sd_search_dwarf_die(Dwarf_Debug dbg, Dwarf_Die in_die, Dwarf_Error *const er
   }
 }
 
-/* Search the `Dwarf_Debug` instance for `search_for`. For each DIE
-   `search_callback` is called and passed `search_for` and `search_findings`
-   in that order. It checks if `search_for` is found in the DIE and stores
-   the findins in `search_findings`.
-   `search_callback` returns `true` if `search_for` has been found. */
-int sd_search_dwarf_dbg(
-  Dwarf_Debug dbg, Dwarf_Error *const error,
-  SearchCallback search_callback,
-  const void *const search_for, void *const search_findings
-) {
+/* Search the `Dwarf_Debug` instance. For each DIE `search_callback` is called
+   and passed instances of `SearchFor` and `SearchFindings`. Any time `search_callback`
+   returns `true`, the search ends. If it returns `false`, the search goes on. */
+int sd_search_dwarf_dbg(Dwarf_Debug dbg,
+			Dwarf_Error *const error,
+			SearchCallback search_callback,
+			const void *search_for_data,
+			void *search_findings_data) {
   Dwarf_Half version_stamp = 0;  /* Store version number (2 - 5). */
   Dwarf_Unsigned abbrev_offset = 0; /* .debug_abbrev offset from CU just read. */
   Dwarf_Half address_size = 0;  /* CU address size (4 or 8). */
@@ -213,8 +246,14 @@ int sd_search_dwarf_dbg(
       return DW_DLV_NO_ENTRY;
     }
 
-    res = sd_search_dwarf_die(dbg, cu_die, error, is_info, 0,
-      search_callback, search_for, search_findings);
+    res = sd_search_dwarf_die(dbg,
+			      cu_die,
+			      error,
+			      is_info,
+			      0,
+			      search_callback,
+			      search_for_data,
+			      search_findings_data);
 
     dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
     cu_die = NULL;
@@ -227,9 +266,10 @@ int sd_search_dwarf_dbg(
   }
 }
 
-int sd_get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
-  Dwarf_Addr *lowpc, Dwarf_Addr *highpc
-) {
+int sd_get_high_and_low_pc(Dwarf_Die die,
+			   Dwarf_Error *error,
+			   Dwarf_Addr *lowpc,
+			   Dwarf_Addr *highpc) {
   int res = 0;
 
   Dwarf_Addr lowpc_buf;
@@ -265,20 +305,28 @@ int sd_get_high_and_low_pc(Dwarf_Die die, Dwarf_Error *const error,
   return res;
 }
 
-/* Switches `pc_in_die` to `true` if it finds that `pc` lies
-   between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE. */
+/* Sets `pc_in_die` to `true` if it finds that `pc` lies
+   between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE.
+
+   The libdwarf error code of the internal calls is returned.
+
+   `pc_in_die` stays untouched on error. */
 int sd_check_pc_in_die(Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc, bool *pc_in_die) {
   int res = DW_DLV_OK;
 
   Dwarf_Addr lowpc, highpc;
   res = sd_get_high_and_low_pc(die, error, &lowpc, &highpc);
+
   if (res != DW_DLV_OK) {
     return res;
   } else if (lowpc <= pc && pc <= highpc) {
     *pc_in_die = true;
+    return DW_DLV_OK;
+  } else {
+    /* `pc` is not in the DIE's range. */
+    *pc_in_die = false;
+    return DW_DLV_OK;
   }
-
-  return DW_DLV_OK;
 }
 
 bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
@@ -306,11 +354,12 @@ bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
    function name corresponding to the PC.
    Allocated memory for the function name of it returns
    `true`. This memory must be released by the caller. */
-bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  char **fn_name = (char **) search_findings;
+bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg,
+				       Dwarf_Die die,
+				       SearchFor search_for,
+				       SearchFindings search_findings) {
+  Dwarf_Addr *pc = (Dwarf_Addr *) search_for.data;
+  char **fn_name = (char **) search_findings.data;
 
   if (sd_has_tag(dbg, die, DW_TAG_subprogram)) {
     int res = DW_DLV_OK;
@@ -332,7 +381,6 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
       /* Found PC in this DIE. */
       Dwarf_Half attrnum = DW_AT_name;
       char *attr_buf;
-
       res = dwarf_die_text(die, attrnum,
         &attr_buf, &error);
 
@@ -506,7 +554,7 @@ char *sd_get_filepath(Dwarf_Debug dbg, Dwarf_Die die) {
   ) {
     char *file_name = NULL;
     char *dir_name = NULL;
-    /* Get file and dir name for CU DIE. */
+    /* Get file and directory names for CU DIE. */
     res = dwarf_diename(die, &file_name, &error);
     if (res != DW_DLV_OK) {
       if (res == DW_DLV_ERROR) {
@@ -546,11 +594,12 @@ char *sd_get_filepath(Dwarf_Debug dbg, Dwarf_Die die) {
   }
 }
 
-bool callback__find_filepath_by_pc(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  Dwarf_Addr *pc = (Dwarf_Addr *) search_for;
-  char **filepath = (char **) search_findings;
+bool callback__find_filepath_by_pc(Dwarf_Debug dbg,
+				   Dwarf_Die die,
+				   SearchFor search_for,
+				   SearchFindings search_findings) {
+  Dwarf_Addr *pc = (Dwarf_Addr *) search_for.data;
+  char **filepath = (char **) search_findings.data;
 
   int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
@@ -595,6 +644,890 @@ char *sd_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc) {
     return filepath;
   }
 }
+
+/* While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
+   keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
+   PC we are looking for.
+   Once we find another DIE with a PC range, we update the search
+   findings depending on whether or not the PC is still in this range.
+   Only if the given PC is currently in the range of the DIEs, do we consider
+   looking for the variable or formal parameter. Otherwise, we are not in the
+   right scope. */
+
+typedef struct VarLocSearchFor {
+  dbg_addr pc;
+  bool use_scope;		/* Don't try to find the variable in the scope
+				   of `func_name` if this is set to `false`. */
+  const char *var_name;
+} VarLocSearchFor;
+
+typedef struct VarLocSearchFindings {
+  bool in_scope;
+  unsigned scope_level;
+  Dwarf_Attribute attr;
+} VarLocSearchFindings;
+
+/* Search callback used in combination with `sd_search_dwarf_die` that
+   retrieves the location attribute of a `DW_TAG_variable` DIE with a
+   given variable name. */
+bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
+					      Dwarf_Die die,
+					      SearchFor search_for,
+					      SearchFindings search_findings) {
+  int res = DW_DLV_OK;
+  Dwarf_Error error = NULL;
+
+  VarLocSearchFor *var_search_for = (VarLocSearchFor *) search_for.data;
+  VarLocSearchFindings *var_search_findings = (VarLocSearchFindings *) search_findings.data;
+
+  /* Do we need to keep track of the current scope? */
+  if (var_search_for->use_scope) {
+
+    if (!(search_for.level > var_search_findings->scope_level)) {
+      /* Any scope is only active as long as the current level is deeper
+	 (higher value) than that of the scope's subprogram DIE. Otherwise,
+	 the current DIE is either above or next to the scope. */
+      var_search_findings->in_scope = false;      
+    }
+
+    /* Update the active scope, if this DIE is a subprogram. */
+    if (sd_has_tag(dbg, die, DW_TAG_subprogram)) {
+      Dwarf_Addr pc = var_search_for->pc.value;
+
+      res = sd_check_pc_in_die(die,
+			       &error,
+			       pc,
+			       &var_search_findings->in_scope);
+      if (res == DW_DLV_OK) {
+	if (var_search_findings->in_scope) {
+	  /* Update the level only if the scope is active. */
+	  var_search_findings->scope_level = search_for.level;	  
+	}
+      } else {
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	}
+      }
+
+      /* A subprogram DIE won't be a variable, so just return. */
+      return false;
+    }    
+  }
+
+  /* If the scope is used we must be in scope to look for a variable.
+     Otherwise, if the scope is ignored, it doesn't matter if we're in scope. */
+  if (!var_search_for->use_scope
+      || (var_search_for->use_scope && var_search_findings->in_scope)) {
+
+    bool correct_tag = sd_has_tag(dbg, die, DW_TAG_variable)
+      || sd_has_tag(dbg, die, DW_TAG_formal_parameter);
+
+    bool location_attr = sd_has_at(dbg, die, DW_AT_location);
+
+    /* Is the given DIE a `DW_TAG_variable` and does it contain the `DW_AT_location` attribute? */
+    if (correct_tag && location_attr) {
+      const char *var_name = var_search_for->var_name;
+      Dwarf_Attribute *attr = &var_search_findings->attr;
+
+      int res = DW_DLV_OK;
+      Dwarf_Error error = NULL;
+
+      char *die_var_name = NULL;  /* Don't free the string returned by `dwarf_diename`. */
+      res = dwarf_diename(die, &die_var_name, &error);
+
+      if (res == DW_DLV_OK && strcmp(var_name, die_var_name) == 0) {
+	res = dwarf_attr(die, DW_AT_location, attr, &error);
+
+	if (res != DW_DLV_OK) {
+	  if (res == DW_DLV_ERROR) {
+	    dwarf_dealloc_error(dbg, error);
+	  }
+	  return false;
+	} else {
+	  /* `attr` is now set to the location attribute of the
+	     `DW_TAG_variable` DIE with the given name. */
+	  return true;
+	}	      
+      } else {
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	}
+	/* This is a `DW_TAG_variable` DIE but it
+	   doesn't have the given variable name. */
+	return false;      
+      }
+    } else {
+      /* DIE was wrong tag or wrong attributes. */
+      return false;
+    }
+  } else {
+    /* Not in scope. */
+    return false;
+  }
+}
+
+/* Return the `DW_AT_location` attribute from the
+   DIE of the variable with the given name. */
+Dwarf_Attribute sd_location_from_variable_name(Dwarf_Debug dbg,
+					       dbg_addr pc,
+					       const char *var_name) {
+  assert(dbg != NULL);
+  assert(var_name != NULL);
+  Dwarf_Error error = NULL;
+
+  VarLocSearchFor search_for = {
+    .pc = pc,
+    .var_name = var_name,
+    .use_scope = true,
+  };
+
+  VarLocSearchFindings search_findings = {
+    .in_scope = false,
+    .attr = NULL,
+  };
+
+  int res = sd_search_dwarf_dbg(dbg,
+				&error,
+				callback__find_location_by_variable_name,
+				&search_for,
+				&search_findings);
+
+  if (res == DW_DLV_ERROR) {
+    dwarf_dealloc_error(dbg, error);
+    return NULL;
+  } else if (res == DW_DLV_NO_ENTRY) {
+    /* Try again, this time ignoring the scope. Thereby, the first
+       global variable with the given name is chosen. */
+    search_for.use_scope = false;
+    res = sd_search_dwarf_dbg(dbg,
+			      &error,
+			      callback__find_location_by_variable_name,
+			      &search_for,
+			      &search_findings);
+
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      return NULL;
+    } else {
+      return search_findings.attr;
+    }
+  } else {
+    return search_findings.attr;
+  }
+}
+
+#ifndef UNIT_TESTS
+
+typedef Dwarf_Small SdOperator;
+typedef Dwarf_Unsigned SdOperand;
+
+/* A single operation in a DWARF expression. */
+typedef struct SdOperation {
+  SdOperator opcode;
+  /* The operands 1-3 can be addressed either as single
+     struct members or as elements in an array. */
+  union {
+    struct {
+      SdOperand operand1;
+      SdOperand operand2;
+      SdOperand operand3;
+    };
+    SdOperand operands[3];
+  };
+} SdOperation;
+
+/* A DWARF expression used for locexprs. */
+typedef struct SdExpression {
+  size_t n_operations;
+  SdOperation *operations;
+} SdExpression;
+
+#endif  // UNIT_TESTS
+
+/* Initialize an `SdExpression` from the given location description entry.
+   Returns a regular libdwarf error code. `error` must be handled if a libdwarf
+   error is returned. `expr_dest` is only changed on success. */
+int sd_init_loc_expression(Dwarf_Locdesc_c locdesc_entry,
+			   size_t locexpr_op_count,
+			   SdExpression *expr_dest,
+			   Dwarf_Error *error) {
+  assert(locdesc_entry != NULL);
+  assert(expr_dest != NULL);
+  assert(error != NULL);
+
+  int res = DW_DLV_OK;
+
+  size_t n_operations = locexpr_op_count;
+  SdOperation *operations = calloc(n_operations, sizeof(SdOperation));
+  assert(operations != NULL);
+
+  for (size_t i = 0; i < n_operations; i++) {
+    /* Byte offset of the operator in the entire expression. It's
+       suggested to use this to validate the correctness of branching
+       operations. I image that you'd check if this value reflects the
+       expected offset after performing a branch. */
+    Dwarf_Unsigned offset_for_branch = 0;
+    SdOperation *op = operations + i;
+
+    res = dwarf_get_location_op_value_c(locdesc_entry,
+					i,
+					&op->opcode,
+					&op->operand1,
+					&op->operand2,
+					&op->operand3,
+					&offset_for_branch,
+					error);
+    if (res != DW_DLV_OK) {
+      free(operations);
+      return res;
+    }
+  }
+
+  /* All location expressions were read successfully. */
+  expr_dest->n_operations = n_operations;
+  expr_dest->operations = operations;
+
+  return DW_DLV_OK;
+}
+
+/* Free the memory associated with the given DWARF expression. */
+void del_expression(SdExpression *expr) {
+  if (expr != NULL) {
+    free(expr->operations);
+    expr->operations = NULL;
+    expr->n_operations = 0;
+  }
+}
+
+/* Return a string describing the given DWARF expression opcode. */
+const char *sd_what_operator(SdOperator opcode) {
+  static const char *operator_names[256] = {
+    [DW_OP_addr] = "DW_OP_addr",		/* Constant address.  */
+    [DW_OP_deref] = "DW_OP_deref",
+    [DW_OP_const1u] = "DW_OP_const1u",	/* Unsigned 1-byte constant.  */
+    [DW_OP_const1s] = "DW_OP_const1s",	/* Signed 1-byte constant.  */
+    [DW_OP_const2u] = "DW_OP_const2u",	/* Unsigned 2-byte constant.  */
+    [DW_OP_const2s] = "DW_OP_const2s",	/* Signed 2-byte constant.  */
+    [DW_OP_const4u] = "DW_OP_const4u",	/* Unsigned 4-byte constant.  */
+    [DW_OP_const4s] = "DW_OP_const4s",	/* Signed 4-byte constant.  */
+    [DW_OP_const8u] = "DW_OP_const4u",	/* Unsigned 8-byte constant.  */
+    [DW_OP_const8s] = "DW_OP_const8s",	/* Signed 8-byte constant.  */
+    [DW_OP_constu] = "DW_OP_constu",	/* Unsigned LEB128 constant.  */
+    [DW_OP_consts] = "DW_OP_consts",	/* Signed LEB128 constant.  */
+    [DW_OP_dup] = "DW_OP_dup",
+    [DW_OP_drop] = "DW_OP_drop",
+    [DW_OP_over] = "DW_OP_over",
+    [DW_OP_pick] = "DW_OP_pick",		/* 1-byte stack index.  */
+    [DW_OP_swap] = "DW_OP_swap",
+    [DW_OP_rot] = "DW_OP_rot",
+    [DW_OP_xderef] = "DW_OP_xderef",
+    [DW_OP_abs] = "DW_OP_abs",
+    [DW_OP_and] = "DW_OP_and",
+    [DW_OP_div] = "DW_OP_div",
+    [DW_OP_minus] = "DW_OP_minus",
+    [DW_OP_mod] = "DW_OP_mod",
+    [DW_OP_mul] = "DW_OP_mul",
+    [DW_OP_neg] = "DW_OP_neg",
+    [DW_OP_not] = "DW_OP_not",
+    [DW_OP_or] = "DW_OP_or",
+    [DW_OP_plus] = "DW_OP_plus",
+    [DW_OP_plus_uconst] = "DW_OP_plus_uconst",	/* Unsigned LEB128 addend.  */
+    [DW_OP_shl] = "DW_OP_shl",
+    [DW_OP_shr] = "DW_OP_shr",
+    [DW_OP_shra] = "DW_OP_shra",
+    [DW_OP_xor] = "DW_OP_xor",
+    [DW_OP_bra] = "DW_OP_bra",		/* Signed 2-byte constant.  */
+    [DW_OP_eq] = "DW_OP_eq",
+    [DW_OP_ge] = "DW_OP_ge",
+    [DW_OP_gt] = "DW_OP_gt",
+    [DW_OP_le] = "DW_OP_le",
+    [DW_OP_lt] = "DW_OP_lt",
+    [DW_OP_ne] = "DW_OP_ne",
+    [DW_OP_skip] = "DW_OP_skip",		/* Signed 2-byte constant.  */
+    [DW_OP_lit0] = "DW_OP_lit0",		/* Literal 0.  */
+    [DW_OP_lit1] = "DW_OP_lit1",		/* Literal 1.  */
+    [DW_OP_lit2] = "DW_OP_lit2",		/* Literal 2.  */
+    [DW_OP_lit3] = "DW_OP_lit3",		/* Literal 3.  */
+    [DW_OP_lit4] = "DW_OP_lit4",		/* Literal 4.  */
+    [DW_OP_lit5] = "DW_OP_lit5",		/* Literal 5.  */
+    [DW_OP_lit6] = "DW_OP_lit6",		/* Literal 6.  */
+    [DW_OP_lit7] = "DW_OP_lit7",		/* Literal 7.  */
+    [DW_OP_lit8] = "DW_OP_lit8",		/* Literal 8.  */
+    [DW_OP_lit9] = "DW_OP_lit9",		/* Literal 9.  */
+    [DW_OP_lit10] = "DW_OP_lit_10",		/* Literal 10.  */
+    [DW_OP_lit11] = "DW_OP_lit11",		/* Literal 11.  */
+    [DW_OP_lit12] = "DW_OP_lit12",		/* Literal 12.  */
+    [DW_OP_lit13] = "DW_OP_lit13",		/* Literal 13.  */
+    [DW_OP_lit14] = "DW_OP_lit14",		/* Literal 14.  */
+    [DW_OP_lit15] = "DW_OP_lit15",		/* Literal 15.  */
+    [DW_OP_lit16] = "DW_OP_lit16",		/* Literal 16.  */
+    [DW_OP_lit17] = "DW_OP_lit17",		/* Literal 17.  */
+    [DW_OP_lit18] = "DW_OP_lit18",		/* Literal 18.  */
+    [DW_OP_lit19] = "DW_OP_lit19",		/* Literal 19.  */
+    [DW_OP_lit20] = "DW_OP_lit20",		/* Literal 20.  */
+    [DW_OP_lit21] = "DW_OP_lit21",		/* Literal 21.  */
+    [DW_OP_lit22] = "DW_OP_lit22",		/* Literal 22.  */
+    [DW_OP_lit23] = "DW_OP_lit23",		/* Literal 23.  */
+    [DW_OP_lit24] = "DW_OP_lit24",		/* Literal 24.  */
+    [DW_OP_lit25] = "DW_OP_lit25",		/* Literal 25.  */
+    [DW_OP_lit26] = "DW_OP_lit26",		/* Literal 26.  */
+    [DW_OP_lit27] = "DW_OP_lit27",		/* Literal 27.  */
+    [DW_OP_lit28] = "DW_OP_lit28",		/* Literal 28.  */
+    [DW_OP_lit29] = "DW_OP_lit29",		/* Literal 29.  */
+    [DW_OP_lit30] = "DW_OP_lit30",		/* Literal 30.  */
+    [DW_OP_lit31] = "DW_OP_lit31",		/* Literal 31.  */
+    [DW_OP_reg0] = "DW_OP_reg0",		/* Register 0.  */
+    [DW_OP_reg1] = "DW_OP_reg1",		/* Register 1.  */
+    [DW_OP_reg2] = "DW_OP_reg2",		/* Register 2.  */
+    [DW_OP_reg3] = "DW_OP_reg3",		/* Register 3.  */
+    [DW_OP_reg4] = "DW_OP_reg4",		/* Register 4.  */
+    [DW_OP_reg5] = "DW_OP_reg5",		/* Register 5.  */
+    [DW_OP_reg6] = "DW_OP_reg6",		/* Register 6.  */
+    [DW_OP_reg7] = "DW_OP_reg7",		/* Register 7.  */
+    [DW_OP_reg8] = "DW_OP_reg8",		/* Register 8.  */
+    [DW_OP_reg9] = "DW_OP_reg9",		/* Register 9.  */
+    [DW_OP_reg10] = "DW_OP_reg10",		/* Register 10.  */
+    [DW_OP_reg11] = "DW_OP_reg11",		/* Register 11.  */
+    [DW_OP_reg12] = "DW_OP_reg12",		/* Register 12.  */
+    [DW_OP_reg13] = "DW_OP_reg13",		/* Register 13.  */
+    [DW_OP_reg14] = "DW_OP_reg14",		/* Register 14.  */
+    [DW_OP_reg15] = "DW_OP_reg15",		/* Register 15.  */
+    [DW_OP_reg16] = "DW_OP_reg16",		/* Register 16.  */
+    [DW_OP_reg17] = "DW_OP_reg17",		/* Register 17.  */
+    [DW_OP_reg18] = "DW_OP_reg18",		/* Register 18.  */
+    [DW_OP_reg19] = "DW_OP_reg19",		/* Register 19.  */
+    [DW_OP_reg20] = "DW_OP_reg20",		/* Register 20.  */
+    [DW_OP_reg21] = "DW_OP_reg21",		/* Register 21.  */
+    [DW_OP_reg22] = "DW_OP_reg22",		/* Register 22.  */
+    [DW_OP_reg23] = "DW_OP_reg23",		/* Register 24.  */
+    [DW_OP_reg24] = "DW_OP_reg24",		/* Register 24.  */
+    [DW_OP_reg25] = "DW_OP_reg25",		/* Register 25.  */
+    [DW_OP_reg26] = "DW_OP_reg26",		/* Register 26.  */
+    [DW_OP_reg27] = "DW_OP_reg27",		/* Register 27.  */
+    [DW_OP_reg28] = "DW_OP_reg28",		/* Register 28.  */
+    [DW_OP_reg29] = "DW_OP_reg29",		/* Register 29.  */
+    [DW_OP_reg30] = "DW_OP_reg30",		/* Register 30.  */
+    [DW_OP_reg31] = "DW_OP_reg31",		/* Register 31.  */
+    [DW_OP_breg0] = "DW_OP_breg0",		/* Base register 0.  */
+    [DW_OP_breg1] = "DW_OP_breg1",		/* Base register 1.  */
+    [DW_OP_breg2] = "DW_OP_breg2",		/* Base register 2.  */
+    [DW_OP_breg3] = "DW_OP_breg3",		/* Base register 3.  */
+    [DW_OP_breg4] = "DW_OP_breg4",		/* Base register 4.  */
+    [DW_OP_breg5] = "DW_OP_breg5",		/* Base register 5.  */
+    [DW_OP_breg6] = "DW_OP_breg6",		/* Base register 6.  */
+    [DW_OP_breg7] = "DW_OP_breg7",		/* Base register 7.  */
+    [DW_OP_breg8] = "DW_OP_breg8",		/* Base register 8.  */
+    [DW_OP_breg9] = "DW_OP_breg9",		/* Base register 9.  */
+    [DW_OP_breg10] = "DW_OP_breg10",	/* Base register 10.  */
+    [DW_OP_breg11] = "DW_OP_breg11",	/* Base register 11.  */
+    [DW_OP_breg12] = "DW_OP_breg12",	/* Base register 12.  */
+    [DW_OP_breg13] = "DW_OP_breg13",	/* Base register 13.  */
+    [DW_OP_breg14] = "DW_OP_breg14",	/* Base register 14.  */
+    [DW_OP_breg15] = "DW_OP_breg15",	/* Base register 15.  */
+    [DW_OP_breg16] = "DW_OP_breg16",	/* Base register 16.  */
+    [DW_OP_breg17] = "DW_OP_breg17",	/* Base register 17.  */
+    [DW_OP_breg18] = "DW_OP_breg18",	/* Base register 18.  */
+    [DW_OP_breg19] = "DW_OP_breg19",	/* Base register 19.  */
+    [DW_OP_breg20] = "DW_OP_breg20",	/* Base register 20.  */
+    [DW_OP_breg21] = "DW_OP_breg21",	/* Base register 21.  */
+    [DW_OP_breg22] = "DW_OP_breg22",	/* Base register 22.  */
+    [DW_OP_breg23] = "DW_OP_breg23",	/* Base register 23.  */
+    [DW_OP_breg24] = "DW_OP_breg24",	/* Base register 24.  */
+    [DW_OP_breg25] = "DW_OP_breg25",	/* Base register 25.  */
+    [DW_OP_breg26] = "DW_OP_breg26",	/* Base register 26.  */
+    [DW_OP_breg27] = "DW_OP_breg27",	/* Base register 27.  */
+    [DW_OP_breg28] = "DW_OP_breg28",	/* Base register 28.  */
+    [DW_OP_breg29] = "DW_OP_breg29",	/* Base register 29.  */
+    [DW_OP_breg30] = "DW_OP_breg30",	/* Base register 30.  */
+    [DW_OP_breg31] = "DW_OP_breg31",	/* Base register 31.  */
+    [DW_OP_regx] = "DW_OP_regx",		/* Unsigned LEB128 register.  */
+    [DW_OP_fbreg] = "DW_OP_fbreg",		/* Signed LEB128 offset.  */
+    [DW_OP_bregx] = "DW_OP_bregx",		/* ULEB128 register followed by SLEB128 off. */
+    [DW_OP_piece] = "DW_OP_piece",		/* ULEB128 size of piece addressed. */
+    [DW_OP_deref_size] = "DW_OP_deref_size",	/* 1-byte size of data retrieved.  */
+    [DW_OP_xderef_size] = "DW_OP_xderef_size",	/* 1-byte size of data retrieved.  */
+    [DW_OP_nop] = "DW_OP_nop",
+    [DW_OP_push_object_address] = "DW_OP_push_object_address",
+    [DW_OP_call2] = "DW_OP_call2",
+    [DW_OP_call4] = "DW_OP_call4",
+    [DW_OP_call_ref] = "DW_OP_call_ref",
+    [DW_OP_form_tls_address] = "DW_OP_form_tls_address", /* TLS offset to address in current thread */
+    [DW_OP_call_frame_cfa] = "DW_OP_call_frame_cfa", /* CFA as determined by CFI.  */
+    [DW_OP_bit_piece] = "DW_OP_bit_piece",	/* ULEB128 size and ULEB128 offset in bits.  */
+    [DW_OP_implicit_value] = "DW_OP_implicit_value", /* DW_FORM_block follows opcode.  */
+    [DW_OP_stack_value] = "DW_OP_stack_value",	 /* No operands, special like [DW_OP_piece.  */
+
+    [DW_OP_implicit_pointer] = "DW_OP_implicit_pointer",
+    [DW_OP_addrx] = "DW_OP_addrx",
+    [DW_OP_constx] = "DW_OP_constx",
+    [DW_OP_entry_value] = "DW_OP_entry_value",
+    [DW_OP_const_type] = "DW_OP_const_type",
+    [DW_OP_regval_type] = "DW_OP_regval_type",
+    [DW_OP_deref_type] = "DW_OP_deref_type",
+    [DW_OP_xderef_type] = "DW_OP_xderef_type",
+    [DW_OP_convert] = "DW_OP_convert",
+    [DW_OP_reinterpret] = "DW_OP_reinterpret",
+
+    /* GNU extensions.  */
+    [DW_OP_GNU_push_tls_address] = "DW_OP_GNU_push_tls_address",
+    [DW_OP_GNU_uninit] = "DW_OP_GNU_uninit",
+    [DW_OP_GNU_encoded_addr] = "DW_OP_GNU_encoded_addr",
+    [DW_OP_GNU_implicit_pointer] = "DW_OP_GNU_implicit_pointer",
+    [DW_OP_GNU_entry_value] = "DW_OP_GNU_entry_value",
+    [DW_OP_GNU_const_type] = "DW_OP_GNU_const_type",
+    [DW_OP_GNU_regval_type] = "DW_OP_GNU_regval_type",
+    [DW_OP_GNU_deref_type] = "DW_OP_GNU_deref_type",
+    [DW_OP_GNU_convert] = "DW_OP_GNU_convert",
+    [DW_OP_GNU_reinterpret] = "DW_OP_GNU_reinterpret",
+    [DW_OP_GNU_parameter_ref] = "DW_OP_GNU_parameter_ref",
+
+    /* GNU Debug Fission extensions.  */
+    [DW_OP_GNU_addr_index] = "DW_OP_GNU_addr_index",
+    [DW_OP_GNU_const_index] = "DW_OP_GNU_const_index",
+
+    [DW_OP_GNU_variable_value] = "DW_OP_GNU_variable_value",
+
+    /* The start of the implementation-defined range is used by `DW_OP_GNU_push_tls_address` already. */
+    /* [DW_OP_lo_user] = "DW_OP_lo_user", */	/* Implementation-defined range start.  */
+    [DW_OP_hi_user] = "DW_OP_hi_user",	/* Implementation-defined range end.  */
+
+    /* Unused values. See `/usr/include/dwarf.h` for the values of the opcodes. */
+    /* 169 is the last DWARF opcode. The implementation-defined range starts at 224. */
+    [170 ... 223] = "<invalid opcode>",
+    /* After `DW_OP_GNU_push_tls_address`, the implementation-defined range is unused
+       except for the indices from 240 to 253. */
+    [225 ... 239] = "<unused implementation-defined opcode>",
+    [254] = "<unused implementation-defined opcode>",
+  };
+
+  return operator_names[opcode];
+}
+
+uint8_t sd_n_operands(SdOperator opcode) {
+  /* The information about the number of operands the
+     different opcodes have comes from section 2.5 of
+     the DWARF 5 standard. */
+
+  static uint8_t n_operands[256] = {
+    [DW_OP_addr] = 1,		/* Constant address.  */
+    [DW_OP_deref] = 0,
+    [DW_OP_const1u] = 1,	/* Unsigned 1-byte constant.  */
+    [DW_OP_const1s] = 1,	/* Signed 1-byte constant.  */
+    [DW_OP_const2u] = 1,	/* Unsigned 2-byte constant.  */
+    [DW_OP_const2s] = 1,	/* Signed 2-byte constant.  */
+    [DW_OP_const4u] = 1,	/* Unsigned 4-byte constant.  */
+    [DW_OP_const4s] = 1,	/* Signed 4-byte constant.  */
+    [DW_OP_const8u] = 1,	/* Unsigned 8-byte constant.  */
+    [DW_OP_const8s] = 1,	/* Signed 8-byte constant.  */
+    [DW_OP_constu] = 1,	/* Unsigned LEB128 constant.  */
+    [DW_OP_consts] = 1,	/* Signed LEB128 constant.  */
+    [DW_OP_dup] = 0,
+    [DW_OP_drop] = 0,
+    [DW_OP_over] = 0,
+    [DW_OP_pick] = 1,		/* 1-byte stack index.  */
+    [DW_OP_swap] = 0,
+    [DW_OP_rot] = 0,
+    [DW_OP_xderef] = 0,
+    [DW_OP_abs] = 0,
+    [DW_OP_and] = 0,
+    [DW_OP_div] = 0,
+    [DW_OP_minus] = 0,
+    [DW_OP_mod] = 0,
+    [DW_OP_mul] = 0,
+    [DW_OP_neg] = 0,
+    [DW_OP_not] = 0,
+    [DW_OP_or] = 0,
+    [DW_OP_plus] = 0,
+    [DW_OP_plus_uconst] = 1,	/* Unsigned LEB128 addend.  */
+    [DW_OP_shl] = 0,
+    [DW_OP_shr] = 0,
+    [DW_OP_shra] = 0,
+    [DW_OP_xor] = 0,
+    [DW_OP_bra] = 1,		/* Signed 2-byte constant.  */
+    [DW_OP_eq] = 0,
+    [DW_OP_ge] = 0,
+    [DW_OP_gt] = 0,
+    [DW_OP_le] = 0,
+    [DW_OP_lt] = 0,
+    [DW_OP_ne] = 0,
+    [DW_OP_skip] = 1,		/* Signed 2-byte constant.  */
+    /* The literals encode the unsigned integer values from 0 through 31, inclusive.
+       While not mentioned explicitly, the only option that make sense here is that
+       they have 0 operands. */
+    [DW_OP_lit0] = 0,		/* Literal 0.  */
+    [DW_OP_lit1] = 0,		/* Literal 1.  */
+    [DW_OP_lit2] = 0,		/* Literal 2.  */
+    [DW_OP_lit3] = 0,		/* Literal 3.  */
+    [DW_OP_lit4] = 0,		/* Literal 4.  */
+    [DW_OP_lit5] = 0,		/* Literal 5.  */
+    [DW_OP_lit6] = 0,		/* Literal 6.  */
+    [DW_OP_lit7] = 0,		/* Literal 7.  */
+    [DW_OP_lit8] = 0,		/* Literal 8.  */
+    [DW_OP_lit9] = 0,		/* Literal 9.  */
+    [DW_OP_lit10] = 0,		/* Literal 10.  */
+    [DW_OP_lit11] = 0,		/* Literal 11.  */
+    [DW_OP_lit12] = 0,		/* Literal 12.  */
+    [DW_OP_lit13] = 0,		/* Literal 13.  */
+    [DW_OP_lit14] = 0,		/* Literal 14.  */
+    [DW_OP_lit15] = 0,		/* Literal 15.  */
+    [DW_OP_lit16] = 0,		/* Literal 16.  */
+    [DW_OP_lit17] = 0,		/* Literal 17.  */
+    [DW_OP_lit18] = 0,		/* Literal 18.  */
+    [DW_OP_lit19] = 0,		/* Literal 19.  */
+    [DW_OP_lit20] = 0,		/* Literal 20.  */
+    [DW_OP_lit21] = 0,		/* Literal 21.  */
+    [DW_OP_lit22] = 0,		/* Literal 22.  */
+    [DW_OP_lit23] = 0,		/* Literal 23.  */
+    [DW_OP_lit24] = 0,		/* Literal 24.  */
+    [DW_OP_lit25] = 0,		/* Literal 25.  */
+    [DW_OP_lit26] = 0,		/* Literal 26.  */
+    [DW_OP_lit27] = 0,		/* Literal 27.  */
+    [DW_OP_lit28] = 0,		/* Literal 28.  */
+    [DW_OP_lit29] = 0,		/* Literal 29.  */
+    [DW_OP_lit30] = 0,		/* Literal 30.  */
+    [DW_OP_lit31] = 0,		/* Literal 31.  */
+    [DW_OP_reg0] = 0,		/* Register 0.  */
+    [DW_OP_reg1] = 0,		/* Register 1.  */
+    [DW_OP_reg2] = 0,		/* Register 2.  */
+    [DW_OP_reg3] = 0,		/* Register 3.  */
+    [DW_OP_reg4] = 0,		/* Register 4.  */
+    [DW_OP_reg5] = 0,		/* Register 5.  */
+    [DW_OP_reg6] = 0,		/* Register 6.  */
+    [DW_OP_reg7] = 0,		/* Register 7.  */
+    [DW_OP_reg8] = 0,		/* Register 8.  */
+    [DW_OP_reg9] = 0,		/* Register 9.  */
+    [DW_OP_reg10] = 0,		/* Register 10.  */
+    [DW_OP_reg11] = 0,		/* Register 11.  */
+    [DW_OP_reg12] = 0,		/* Register 12.  */
+    [DW_OP_reg13] = 0,		/* Register 13.  */
+    [DW_OP_reg14] = 0,		/* Register 14.  */
+    [DW_OP_reg15] = 0,		/* Register 15.  */
+    [DW_OP_reg16] = 0,		/* Register 16.  */
+    [DW_OP_reg17] = 0,		/* Register 17.  */
+    [DW_OP_reg18] = 0,		/* Register 18.  */
+    [DW_OP_reg19] = 0,		/* Register 19.  */
+    [DW_OP_reg20] = 0,		/* Register 20.  */
+    [DW_OP_reg21] = 0,		/* Register 21.  */
+    [DW_OP_reg22] = 0,		/* Register 22.  */
+    [DW_OP_reg23] = 0,		/* Register 24.  */
+    [DW_OP_reg24] = 0,		/* Register 24.  */
+    [DW_OP_reg25] = 0,		/* Register 25.  */
+    [DW_OP_reg26] = 0,		/* Register 26.  */
+    [DW_OP_reg27] = 0,		/* Register 27.  */
+    [DW_OP_reg28] = 0,		/* Register 28.  */
+    [DW_OP_reg29] = 0,		/* Register 29.  */
+    [DW_OP_reg30] = 0,		/* Register 30.  */
+    [DW_OP_reg31] = 0,		/* Register 31.  */
+    [DW_OP_breg0] = 1,		/* Base register 0.  */
+    [DW_OP_breg1] = 1,		/* Base register 1.  */
+    [DW_OP_breg2] = 1,		/* Base register 2.  */
+    [DW_OP_breg3] = 1,		/* Base register 3.  */
+    [DW_OP_breg4] = 1,		/* Base register 4.  */
+    [DW_OP_breg5] = 1,		/* Base register 5.  */
+    [DW_OP_breg6] = 1,		/* Base register 6.  */
+    [DW_OP_breg7] = 1,		/* Base register 7.  */
+    [DW_OP_breg8] = 1,		/* Base register 8.  */
+    [DW_OP_breg9] = 1,		/* Base register 9.  */
+    [DW_OP_breg10] = 1,	/* Base register 10.  */
+    [DW_OP_breg11] = 1,	/* Base register 11.  */
+    [DW_OP_breg12] = 1,	/* Base register 12.  */
+    [DW_OP_breg13] = 1,	/* Base register 13.  */
+    [DW_OP_breg14] = 1,	/* Base register 14.  */
+    [DW_OP_breg15] = 1,	/* Base register 15.  */
+    [DW_OP_breg16] = 1,	/* Base register 16.  */
+    [DW_OP_breg17] = 1,	/* Base register 17.  */
+    [DW_OP_breg18] = 1,	/* Base register 18.  */
+    [DW_OP_breg19] = 1,	/* Base register 19.  */
+    [DW_OP_breg20] = 1,	/* Base register 20.  */
+    [DW_OP_breg21] = 1,	/* Base register 21.  */
+    [DW_OP_breg22] = 1,	/* Base register 22.  */
+    [DW_OP_breg23] = 1,	/* Base register 23.  */
+    [DW_OP_breg24] = 1,	/* Base register 24.  */
+    [DW_OP_breg25] = 1,	/* Base register 25.  */
+    [DW_OP_breg26] = 1,	/* Base register 26.  */
+    [DW_OP_breg27] = 1,	/* Base register 27.  */
+    [DW_OP_breg28] = 1,	/* Base register 28.  */
+    [DW_OP_breg29] = 1,	/* Base register 29.  */
+    [DW_OP_breg30] = 1,	/* Base register 30.  */
+    [DW_OP_breg31] = 1,	/* Base register 31.  */
+    [DW_OP_regx] = 1,		/* Unsigned LEB128 register.  */
+    [DW_OP_fbreg] = 1,		/* Signed LEB128 offset.  */
+    [DW_OP_bregx] = 2,		/* ULEB128 register followed by SLEB128 off. */
+    [DW_OP_piece] = 1,		/* ULEB128 size of piece addressed. */
+    [DW_OP_deref_size] = 1,	/* 1-byte size of data retrieved.  */
+    [DW_OP_xderef_size] = 1,	/* 1-byte size of data retrieved.  */
+    [DW_OP_nop] = 0,
+    [DW_OP_push_object_address] = 0,
+    [DW_OP_call2] = 1,
+    [DW_OP_call4] = 1,
+    [DW_OP_call_ref] = 1,
+    [DW_OP_form_tls_address] = 0, /* TLS offset to address in current thread */
+    [DW_OP_call_frame_cfa] = 0, /* CFA as determined by CFI.  */
+    [DW_OP_bit_piece] = 2,	/* ULEB128 size and ULEB128 offset in bits.  */
+    [DW_OP_implicit_value] = 2, /* DW_FORM_block follows opcode.  */
+    [DW_OP_stack_value] = 0,	 /* No operands, special like [DW_OP_piece.  */
+
+    [DW_OP_implicit_pointer] = 2,
+    [DW_OP_addrx] = 1,
+    [DW_OP_constx] = 1,
+    [DW_OP_entry_value] = 2,
+    [DW_OP_const_type] = 3,
+    [DW_OP_regval_type] = 2,
+    [DW_OP_deref_type] = 2,
+    [DW_OP_xderef_type] = 2,
+    [DW_OP_convert] = 1,
+    [DW_OP_reinterpret] = 1,
+
+    /* TODO: Due to lack of documentation, the GNU extensions are not supported for now.
+       Instead three is used, such that all possible operands are displayed. */
+    [170 ... 223] = 3,			   /* Unused range. */
+    [DW_OP_lo_user ... DW_OP_hi_user] = 3,	/* Implementation-defined range.  */
+  };
+
+    return n_operands[opcode];
+}
+
+x86_addr dwarf_addr_to_addr(Dwarf_Addr addr) {
+  return (x86_addr) { addr };
+}
+
+#ifndef UNIT_TESTS
+
+typedef struct SdLocRange {
+  bool meaningful;  /* Libdwarf returns all types of location descriptions through
+		       location list entries. The range specified by this struct are
+		       only meaningful for bounded location descriptions. */
+  /* The addresses here are regular DWARF-internal addresses. Initial confusion was
+     caused by another step of DWARF-related address indirection.
+     TODO: Use the `dbg_addr` type here. */
+  x86_addr lowpc;		/* Inclusive lower bound. */
+  x86_addr highpc;		/* Exclusive upper bound. */
+} SdLocRange;
+
+#endif  // UNIT_TESTS
+
+void sd_init_loc_range(Dwarf_Bool debug_addr_missing,
+		       Dwarf_Addr lowpc,
+		       Dwarf_Addr highpc,
+		       SdLocRange *range_dest) {
+  bool invalid_range_values = dwarf_bool_to_bool(debug_addr_missing);
+  if (invalid_range_values || (lowpc == 0 && highpc == 0)) {
+    /* The range is meaningless in one of the following three cases:
+     1. `debug_addr_missing is true, so `lowpc` and `highpc` are invalid.
+     2. `lowpc` and `highpc` are both 0 because they were not set by the function call.
+     3. `lowpc` and `highpc` were both set to 0 because there is no range for the
+        current location description. (It seems that this is how libdwarf generally
+	indicates that a location description isn't bounded by any range.) */
+    *range_dest = (SdLocRange) {
+      .meaningful = false,
+      .lowpc = {0},
+      .highpc = {0},
+    };
+  } else {
+    *range_dest = (SdLocRange) {
+      .meaningful = true,
+      .lowpc = dwarf_addr_to_addr(lowpc),
+      .highpc = dwarf_addr_to_addr(highpc),
+    };
+  }
+}
+
+SprayResult sd_init_loclist(Dwarf_Debug dbg,
+			    dbg_addr pc,
+			    const char *var_name,
+			    SdLoclist *loclist) {
+  assert(dbg != NULL);
+  assert(var_name != NULL);
+  assert(loclist != NULL);
+
+  /* The location attribute that we want to evaluate.
+     TODO: `dwarf_get_form_class` can be used to check if
+     a given attribute is suited as a location expression. */
+  Dwarf_Attribute attr = sd_location_from_variable_name(dbg, pc, var_name);
+
+  if (attr == NULL) {
+    return SP_ERR;
+  } else {
+    Dwarf_Error error = NULL;
+
+    /* Pointer to the start of the loclist created by `dwarf_get_loclist_c`. */
+    Dwarf_Loc_Head_c loclist_head = NULL;
+    /* Number of records in the loclist pointed to by `loclist_head`.
+       This number is 1 if the loclist  represents a location expression. */
+    Dwarf_Unsigned loclist_count = 0;
+
+    int res = dwarf_get_loclist_c(attr, &loclist_head, &loclist_count, &error);
+
+    if (res != DW_DLV_OK) {
+      /* Always free memory associated with `loclist_head`. */
+      dwarf_dealloc_loc_head_c(loclist_head);
+      loclist_head = NULL;
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      return SP_ERR;
+    } else {
+      SdExpression *exprs = calloc(loclist_count, sizeof(SdExpression));
+      assert(exprs != NULL);
+      SdLocRange *ranges = calloc(loclist_count, sizeof(SdLocRange));
+      assert(ranges != NULL);
+      
+      for (Dwarf_Unsigned i = 0; i < loclist_count; i++) {
+	Dwarf_Small _lle_value = 0; /* DW_LLE value if applicable (TODO: find out what this is) */
+	/* On success, the first and second operand of the expression respectively.
+	   Only applies if the expression has a first or second operand).
+	   TODO: This is weird, since the libdwarf docs call these variables `raw[low|hi]pc`.
+	   Check if the description above is correct by comparing it to the output of
+	   `dwarf_get_location_op_value_c`.*/
+	Dwarf_Unsigned _raw_first_op = 0;
+	Dwarf_Unsigned _raw_second_op = 0;
+	/* Set to true if some required data is missing. Without this data, the cooked values are invalid. */
+	Dwarf_Bool debug_addr_missing = false;
+	/* The lower (inclusive) and upper (exclusive) bound for a bounded location description
+	   in the location list. They represent the range of PC values in which the current
+	   location description is active. Location lists contain other entries besides location
+	   descriptions. Those include **base addresses**. Those entries should be used as the base
+	   address to the lower and upper PC bounds. Base address entries are only needed in CUs where
+	   the machine code is split over non-continuous regions (see bullet 'Base address' of section
+	   2.6.2 of the DWARF 5 standard). */
+	Dwarf_Addr low_pc = 0;
+	Dwarf_Addr high_pc = 0;
+	/* Number of operations in the expression */
+	Dwarf_Unsigned locexpr_op_count = 0;
+	/* Pointer to a specific location description. It points to the location description at the current index. */
+	Dwarf_Locdesc_c locdesc_entry = NULL;
+	/* The applicable DW_LKIND value for the location description (TODO: What is this?) */
+	Dwarf_Small _locdesc_lkind = 0;
+	/* Offset of the expression in the applicable section (?) */
+	Dwarf_Unsigned _expression_offset = 0;
+	/* Offset of the location description or zero for simple location expressions. */
+	Dwarf_Unsigned _locdesc_offset = 0;
+	res = dwarf_get_locdesc_entry_d(loclist_head,
+					i,
+					&_lle_value,
+					&_raw_first_op,
+					&_raw_second_op,
+					&debug_addr_missing,
+					&low_pc,
+					&high_pc,
+					&locexpr_op_count,
+					&locdesc_entry,
+					&_locdesc_lkind,
+					&_expression_offset,
+					&_locdesc_offset,
+					&error);
+	if (res != DW_DLV_OK) {
+	  dwarf_dealloc_loc_head_c(loclist_head);
+	  if (res == DW_DLV_ERROR) {
+	    dwarf_dealloc_error(dbg, error);
+	  }
+	  return SP_ERR;
+	} else {
+	  sd_init_loc_range(debug_addr_missing, low_pc, high_pc, &ranges[i]);
+
+	  /* Read the location description entry at the current.
+	     TODO: It seems that libdwarf returns only DWARF expressions in `locdesc_entry`
+	     since all other possible entries seem to be returned in other variables, but
+	     I cannot be sure. Check up on this again. */
+	    res = sd_init_loc_expression(locdesc_entry,
+					 locexpr_op_count,
+					 &exprs[i],
+					 &error);
+
+	  if (res != DW_DLV_OK) {
+	    if (res == DW_DLV_ERROR) {
+	      dwarf_dealloc_error(dbg, error);
+	    }
+
+	    dwarf_dealloc_loc_head_c(loclist_head);
+
+	    for (size_t j = 0; j <= i; j++) {
+	      del_expression(&exprs[i]);
+	    }
+	    free(exprs);
+
+	    return SP_ERR;	    
+	  }
+	}
+      }
+      loclist->exprs = exprs;
+      loclist->ranges = ranges;
+      loclist->n_exprs = loclist_count;
+
+      return SP_OK;
+    }
+  }
+}
+
+void del_loclist(SdLoclist *loclist) {
+  if (loclist != NULL) {
+    for (size_t i = 0; i < loclist->n_exprs; i++) {
+      del_expression(&loclist->exprs[i]);
+    }
+    free(loclist->exprs);
+    free(loclist->ranges);
+    loclist->exprs = NULL;
+    loclist->ranges = NULL;
+    loclist->n_exprs = 0;
+  }
+}
+
+/* Calculate the number of digits in the given number. */
+unsigned n_digits(double num) {
+  if (num == 0) {
+    return 1;			/* Zero has one digit when written out. */
+  } else {
+    return ((unsigned) floor(log10(fabs(num)))) + 1;    
+  }
+}
+
+/* Print n space characters to standard out. */
+void indent_by(unsigned n_spaces) {
+  for (unsigned i = 0; i < n_spaces; i++) {
+    printf(" ");
+  }
+}
+
+void print_loclist(SdLoclist loclist) {
+  for (size_t i = 0; i < loclist.n_exprs; i++) {
+    SdExpression *expr = &loclist.exprs[i];
+    SdLocRange *range = &loclist.ranges[i];
+
+    printf("%lu ", i);		/* Print the location list entry index. */
+    unsigned n_index_chars = n_digits((double) i) + 1;
+
+    unsigned n_range_chars = 0;
+    if (range->meaningful) {
+      /* Print the active range for the following entry if it's meaningful. */
+      printf("PC: [0x%lx, 0x%lx) ", range->lowpc.value, range->highpc.value);
+      n_range_chars = n_digits(range->lowpc.value) + n_digits(range->highpc.value) + 13;
+    }
+
+    for (size_t j = 0; j < expr->n_operations; j++) {
+      if (j > 0) {
+	/* Indent all subsequent expressions to the level of the first one. */
+	indent_by(n_index_chars + n_range_chars);	
+      }
+
+      SdOperation *op = &expr->operations[j];
+      printf("%s", sd_what_operator(op->opcode));
+
+      /* Print all operands required by the operator. */
+      for (uint8_t k = 0; k < sd_n_operands(op->opcode); k++) {
+	if (k == 0) {
+	  printf(":");
+	}
+
+	printf(" %lld", op->operands[k]);
+      }
+
+      printf("\n");
+    }
+  }
+}
+
 
 bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
   assert(dbg != NULL);
@@ -645,16 +1578,14 @@ typedef struct {
 
 enum { FILEPATHS_ALLOC=8 };
 
-bool callback__get_filepaths(
-  Dwarf_Debug dbg, Dwarf_Die cu_die,
-  const void *const search_for, void *const search_findings
-) {  
-  assert(search_findings != NULL);
+bool callback__get_filepaths(Dwarf_Debug dbg,
+			     Dwarf_Die cu_die,
+			     SearchFor search_for,
+			     SearchFindings search_findings) {  
   unused(search_for);
 
-
   if (sd_has_tag(dbg, cu_die, DW_TAG_compile_unit)) {
-    Filepaths *filepaths = (Filepaths *) search_findings;
+    Filepaths *filepaths = (Filepaths *) search_findings.data;
 
     char *this_filepath = sd_get_filepath(dbg, cu_die);  
     /* Important: if `this_filepath` is `NULL` and is still
@@ -704,15 +1635,12 @@ char **sd_get_filepaths(Dwarf_Debug dbg) {
   }
 }
 
-bool callback__get_srclines(
-  Dwarf_Debug dbg, Dwarf_Die cu_die,
-  const void *const search_for, void *const search_findings
-) {
-  assert(search_for != NULL);
-  assert(search_findings != NULL);
-
-  const char *filepath = (const char *) search_for;
-  LineTable *line_table = (LineTable *) search_findings;
+bool callback__get_srclines(Dwarf_Debug dbg,
+			    Dwarf_Die cu_die,
+			    SearchFor search_for,
+			    SearchFindings search_findings) {
+  const char *filepath = (const char *) search_for.data;
+  LineTable *line_table = (LineTable *) search_findings.data;
   
   int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
@@ -966,11 +1894,12 @@ typedef struct {
 /* Search callback that looks for a DIE describing the
    subprogram with the name `search_for` and stores the
    attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
-bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg, Dwarf_Die die,
-  const void *const search_for, void *const search_findings
-) {
-  const char *fn_name = (const char *) search_for;
-  SubprogAttr *attr = (SubprogAttr *) search_findings;
+bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg,
+						 Dwarf_Die die,
+						 SearchFor search_for,
+						 SearchFindings search_findings) {
+  const char *fn_name = (const char *) search_for.data;
+  SubprogAttr *attr = (SubprogAttr *) search_findings.data;
 
   if (sd_is_subprog_with_name(dbg, die, fn_name)) {
     int res = 0;

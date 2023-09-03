@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -std=gnu11
+CFLAGS = -fsanitize=address -g -Werror -Wall -Wextra -pedantic-errors -Wno-gnu-designator -std=gnu11
 CPPFLAGS = -MMD -I$(SOURCE_DIR) -I$(DEP)/linenoise -I$(DEP)/hashmap.c
 LDFLAGS = -ldwarf -lchicken -lzstd -lz
 
@@ -77,14 +77,21 @@ TEST_OBJECTS += $(TEST_BUILD_DIR)/munit.o
 TEST_DEPS = $(TEST_OBJECTS:%.o=%.d)
 TEST_BINARY = $(TEST_BUILD_DIR)/test
 
+# Run all tests.
 test: unit integration
 
-unit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
-unit: $(TEST_BINARY) assets
+# Run C and Scheme unit tests.
+unit: cunit schemeunit
+
+cunit: CPPFLAGS += -I$(TEST_SOURCE_DIR) -I$(DEP)/munit
+cunit: $(TEST_BINARY) assets
 	./$(TEST_BINARY) $(args)
+
+schemeunit: assets
 	csi -s tests/tokenize.scm
 	csi -s tests/c-types.scm
 
+# Run integration tests.
 integration: $(BINARY) assets
 	python -m pytest
 
