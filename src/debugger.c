@@ -134,7 +134,7 @@ real_addr get_pc(pid_t pid) {
 /* Get the program counter and remove any offset which is
    added to the physical process counter in PIEs. The DWARF
    debug info doesn't know about this offset. */
-dbg_addr get_dwarf_pc(Debugger dbg) {
+dbg_addr get_dbg_pc(Debugger dbg) {
   real_addr real_pc = get_pc(dbg.pid);
   return real_to_dbg(dbg.load_address, real_pc);
 }
@@ -192,7 +192,7 @@ void print_as_relative(const char *filepath) {
 // If `is_user_breakpoint` is true, then a message is printed
 // giving the user information about their breakpoint.
 void print_current_source(Debugger dbg, bool is_user_breakpoint) {
-  dbg_addr pc = get_dwarf_pc(dbg);
+  dbg_addr pc = get_dbg_pc(dbg);
   const DebugSymbol *sym = sym_by_addr(pc, dbg.info);
 
   const Position *pos = sym_position(sym, dbg.info);
@@ -593,7 +593,7 @@ ExecResult step_out(Debugger dbg) {
 
 /* Single step instructions until the line number has changed. */
 ExecResult single_step_line(Debugger dbg) {
-  const Position *pos = addr_position(get_dwarf_pc(dbg), dbg.info);
+  const Position *pos = addr_position(get_dbg_pc(dbg), dbg.info);
   if (pos == NULL) {
     return exec_pc_line_not_found();
   }
@@ -612,7 +612,7 @@ ExecResult single_step_line(Debugger dbg) {
     n_instruction_steps ++;
 
     // Should (or can) we continue searching?
-    pos = addr_position(get_dwarf_pc(dbg), dbg.info);
+    pos = addr_position(get_dbg_pc(dbg), dbg.info);
     if (pos == NULL || n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
       return exec_step_target_not_found();
     }
@@ -627,7 +627,7 @@ ExecResult step_over(Debugger dbg) {
      subprogram except for the next line so that we stop right
      after executing the code in it. */
 
-  const DebugSymbol *func = sym_by_addr(get_dwarf_pc(dbg), dbg.info);
+  const DebugSymbol *func = sym_by_addr(get_dbg_pc(dbg), dbg.info);
   if (func == NULL) {
     return exec_function_not_found();
   }
@@ -838,7 +838,7 @@ void exec_command_step_over(Debugger dbg) {
 }
 
 void exec_command_backtrace(Debugger dbg) {
-  CallFrame *backtrace = init_backtrace(get_dwarf_pc(dbg), dbg.pid, dbg.info);
+  CallFrame *backtrace = init_backtrace(get_dbg_pc(dbg), dbg.load_address, dbg.pid, dbg.info);
   if (backtrace == NULL) {
     internal_error("Failed to determine backtrace");
   } else {

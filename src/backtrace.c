@@ -56,25 +56,31 @@ CallFrame *init_call_frame(CallFrame *caller,
   return frame;
 }
 
-/* Check if the first to instructions of the function belonging
-   to the given PC look like this:
+
+/* Check if the first two instructions of the function that contains
+   the given PC store frame pointer. They should look like follows:
+
     55       push   %rbp
     48 89 e5 mov    %rsp,%rbp
+
    This is the standard procedure to store the previous functions's
    frame pointer and then set the current function's frame pointer
    to the start of the frame (i.e. the stack pointer right at the
    start of the function). If this isn't found, it's likely that
    the compiler omitted the frame pointer so we should emit a warning. */
-// bool stores_frame_pointer(const ElfFile *elf, pid_t pid, real_addr pc) {
-bool stores_frame_pointer(dbg_addr pc, pid_t pid, DebugInfo *info) {
+
+bool stores_frame_pointer(dbg_addr pc,
+			  real_addr load_address,
+			  pid_t pid,
+			  DebugInfo *info) {
   const DebugSymbol *func = sym_by_addr(pc, info);
   if (func == NULL) {
     return false;
   }
 
   uint64_t inst_bytes = {0};
-  /* TODO: We need the load address here!  */
-  SprayResult mem_res = pt_read_memory(pid, (real_addr){sym_start_addr(func).value}, &inst_bytes);
+  real_addr func_start_addr = dbg_to_real(load_address, sym_start_addr(func));
+  SprayResult mem_res = pt_read_memory(pid, func_start_addr, &inst_bytes);
   if (mem_res == SP_ERR) {
     return false;
   }
@@ -89,18 +95,20 @@ bool stores_frame_pointer(dbg_addr pc, pid_t pid, DebugInfo *info) {
    Try compiling again with `-fno-omit-frame-pointer` if
    this doesn't work. */
 
-CallFrame *init_backtrace(dbg_addr pc, pid_t pid, DebugInfo *info) {
+CallFrame *init_backtrace(dbg_addr pc,
+			  real_addr load_address,
+			  pid_t pid,
+			  DebugInfo *info) {
   assert(info != NULL);
 
   // Get the saved base pointer of the caller.
   real_addr frame_pointer = {0};
-  SprayResult reg_res =
-      get_register_value(pid, rbp, &frame_pointer.value);
+  SprayResult reg_res = get_register_value(pid, rbp, &frame_pointer.value);
   if (reg_res == SP_ERR) {
     return NULL;
   }
 
-  if (!stores_frame_pointer(pc, pid, info)) {
+  if (!stores_frame_pointer(pc, load_address, pid, info)) {
     printf("WARN: it seems like this executable doesn't maintain a frame "
            "pointer.\n"
            "      This results in incorrect or incomplete backtraces.\n"
@@ -123,8 +131,7 @@ CallFrame *init_backtrace(dbg_addr pc, pid_t pid, DebugInfo *info) {
     }
 
     // Read the frame pointer of the next function.
-    SprayResult fp_res =
-        pt_read_memory(pid, frame_pointer, &frame_pointer.value);
+    SprayResult fp_res = pt_read_memory(pid, frame_pointer, &frame_pointer.value);
     if (fp_res == SP_ERR) {
       free_backtrace(call_frame);
       return NULL;
