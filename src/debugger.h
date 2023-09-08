@@ -17,7 +17,7 @@ typedef struct {
   pid_t pid;                 /* Tracee pid. */
   Breakpoints *breakpoints;  /* Breakpoints. */
   DebugInfo *info;           /* Debug information about the tracee. */
-  x86_addr load_address;     /* Load address. Set for PIEs, 0 otherwise. */
+  real_addr load_address;    /* Load address. Set for PIEs, 0 otherwise. */
   History history;           /* Command history of recent commands. */
 } Debugger;
 

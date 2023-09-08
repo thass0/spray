@@ -6,7 +6,7 @@
 #define _SPRAY_INFO_H_
 
 #include "breakpoints.h"
-#include "ptrace.h"
+#include "addr.h"
 
 #include <stdbool.h>
 
@@ -29,7 +29,7 @@ typedef struct DebugSymbol DebugSymbol;
 const DebugSymbol *sym_by_name(const char *name, DebugInfo *info);
 
 // Get a debug symbol by an address that belongs to it. Returns NULL on error.
-const DebugSymbol *sym_by_addr(x86_addr addr, DebugInfo *info);
+const DebugSymbol *sym_by_addr(dbg_addr addr, DebugInfo *info);
 
 // Get the name of the given symbol. Returns NULL if there is no name.
 const char *sym_name(const DebugSymbol *sym, const DebugInfo *info);
@@ -38,18 +38,19 @@ const char *sym_name(const DebugSymbol *sym, const DebugInfo *info);
 // of the given function starts. Returns `SP_ERR` and
 // leaves `addr` untouched if the symbol doesn't refer
 // to a function.
-SprayResult function_start_addr(const DebugSymbol *func, const DebugInfo *info,
-                                x86_addr *addr);
+SprayResult function_start_addr(const DebugSymbol *func,
+				const DebugInfo *info,
+                                dbg_addr *addr);
 
 // Get the start address (low PC) of the given symbol.
-x86_addr sym_start_addr(const DebugSymbol *sym);
+dbg_addr sym_start_addr(const DebugSymbol *sym);
 
 // Get the end address (high PC) of the given symbol.
-x86_addr sym_end_addr(const DebugSymbol *sym);
+dbg_addr sym_end_addr(const DebugSymbol *sym);
 
 // Get the address of the given symbol. Returns the same address
 // as `sym_start_addr` if the symbol was created from a name.
-x86_addr sym_addr(const DebugSymbol *sym);
+dbg_addr sym_addr(const DebugSymbol *sym);
 
 // Get the filepath of the source file that belongs to the symbol.
 // The string that's returned is owned and later deleted by `info`.
@@ -72,15 +73,15 @@ const Position *sym_position(const DebugSymbol *sym, const DebugInfo *info);
 
 // Return the position that belongs to the given address.
 // Returns NULL on error.
-const Position *addr_position(x86_addr addr, DebugInfo *info);
+const Position *addr_position(dbg_addr addr, DebugInfo *info);
 
 // Returns the function name that belongs to the given address.
 // Returns NULL on error.
-const char *addr_name(x86_addr addr, DebugInfo *info);
+const char *addr_name(dbg_addr addr, DebugInfo *info);
 
 // Returns the filepath that belongs to the given address.
 // Returns NULL on error.
-const char *addr_filepath(x86_addr addr, DebugInfo *info);
+const char *addr_filepath(dbg_addr addr, DebugInfo *info);
 
 /* The following function don't fit the regular scheme of
    this interface. They are currently required by might
@@ -89,8 +90,10 @@ const char *addr_filepath(x86_addr addr, DebugInfo *info);
 // Returns the address that belongs to the given filepath and line number.
 // `SP_ERR` is returned if no such address could be found and `addr`
 // stays untouched.
-SprayResult addr_at(const char *filepath, uint32_t lineno,
-                    const DebugInfo *info, x86_addr *addr);
+SprayResult addr_at(const char *filepath,
+		    uint32_t lineno,
+                    const DebugInfo *info,
+		    dbg_addr *addr);
 
 // Is this a dynamic executable which is relocated?
 bool is_dyn_exec(const DebugInfo *info);
@@ -99,8 +102,8 @@ bool is_dyn_exec(const DebugInfo *info);
 // On error `SP_ERR` is returned and nothing has to be deleted.
 SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       const DebugInfo *info,
-                                      x86_addr load_address,
+                                      real_addr load_address,
                                       Breakpoints *breakpoints,
-                                      x86_addr **to_del, size_t *n_to_del);
+                                      real_addr **to_del, size_t *n_to_del);
 
 #endif // _SPRAY_INFO_H_

@@ -8,7 +8,7 @@ TEST(breakpoints_work) {
   char *prog_argv[] = { SIMPLE_64BIT_BIN, NULL };
   assert_int(setup_debugger(prog_argv[0], prog_argv, &dbg), ==, 0);
 
-  x86_addr bp_addr1 = { 0x00401122 };
+  real_addr bp_addr1 = { 0x00401122 };
 
   enable_breakpoint(dbg.breakpoints, bp_addr1);
   assert_true(lookup_breakpoint(dbg.breakpoints, bp_addr1));

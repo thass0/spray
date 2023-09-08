@@ -22,7 +22,7 @@ struct DebugSymbol {
     // reading `addr`. If `has_addr` is false `addr`
     // doesn't have a meaningful value.
     bool has_addr;
-    x86_addr addr;
+    dbg_addr addr;
   };
 
   // Information about the part of the source
@@ -196,7 +196,7 @@ const DebugSymbol *sym_by_name(const char *name, DebugInfo *info) {
   return sym;
 }
 
-const DebugSymbol *sym_by_addr(x86_addr addr, DebugInfo *info) {
+const DebugSymbol *sym_by_addr(dbg_addr addr, DebugInfo *info) {
   if (info == NULL) {
     return NULL;
   }
@@ -221,39 +221,42 @@ const char *sym_name(const DebugSymbol *sym, const DebugInfo *info) {
   return se_symbol_name(sym->elf, info->elf);
 }
 
-SprayResult function_start_addr(const DebugSymbol *func, const DebugInfo *info,
-                                x86_addr *addr) {
+SprayResult function_start_addr(const DebugSymbol *func,
+				const DebugInfo *info,
+                                dbg_addr *addr) {
   if (func == NULL || info == NULL || addr == NULL) {
     return SP_ERR;
   } else {
     if (se_symbol_type(func->elf) == STT_FUNC) {
-      return sd_effective_start_addr(info->dbg, sym_start_addr(func),
-                                     sym_end_addr(func), addr);
+      return sd_effective_start_addr(info->dbg,
+				     sym_start_addr(func),
+                                     sym_end_addr(func),
+				     addr);
     } else {
       return SP_ERR;
     }
   }
 }
 
-x86_addr sym_start_addr(const DebugSymbol *sym) {
+dbg_addr sym_start_addr(const DebugSymbol *sym) {
   if (sym == NULL) {
-    return (x86_addr){0};
+    return (dbg_addr){0};
   } else {
     return se_symbol_start_addr(sym->elf);
   }
 }
 
-x86_addr sym_end_addr(const DebugSymbol *sym) {
+dbg_addr sym_end_addr(const DebugSymbol *sym) {
   if (sym == NULL) {
-    return (x86_addr){0};
+    return (dbg_addr){0};
   } else {
     return se_symbol_end_addr(sym->elf);
   }
 }
 
-x86_addr sym_addr(const DebugSymbol *sym) {
+dbg_addr sym_addr(const DebugSymbol *sym) {
   if (sym == NULL) {
-    return (x86_addr){0};
+    return (dbg_addr){0};
   } else {
     if (sym->has_addr) {
       return sym->addr;
@@ -323,7 +326,7 @@ const Position *sym_position(const DebugSymbol *sym, const DebugInfo *info) {
   }
 }
 
-const Position *addr_position(x86_addr addr, DebugInfo *info) {
+const Position *addr_position(dbg_addr addr, DebugInfo *info) {
   const DebugSymbol *addr_sym = sym_by_addr(addr, info);
   if (addr_sym == NULL) {
     return NULL;
@@ -332,7 +335,7 @@ const Position *addr_position(x86_addr addr, DebugInfo *info) {
   }
 }
 
-const char *addr_name(x86_addr addr, DebugInfo *info) {
+const char *addr_name(dbg_addr addr, DebugInfo *info) {
   const DebugSymbol *addr_sym = sym_by_addr(addr, info);
   if (addr_sym == NULL) {
     return NULL;
@@ -341,7 +344,7 @@ const char *addr_name(x86_addr addr, DebugInfo *info) {
   }
 }
 
-const char *addr_filepath(x86_addr addr, DebugInfo *info) {
+const char *addr_filepath(dbg_addr addr, DebugInfo *info) {
   const DebugSymbol *addr_sym = sym_by_addr(addr, info);
   if (addr_sym == NULL) {
     return NULL;
@@ -350,8 +353,10 @@ const char *addr_filepath(x86_addr addr, DebugInfo *info) {
   }
 }
 
-SprayResult addr_at(const char *filepath, uint32_t lineno,
-                    const DebugInfo *info, x86_addr *addr) {
+SprayResult addr_at(const char *filepath,
+		    uint32_t lineno,
+                    const DebugInfo *info,
+		    dbg_addr *addr) {
   if (filepath == NULL || info == NULL || addr == NULL) {
     return SP_ERR;
   } else {
@@ -382,8 +387,8 @@ bool is_dyn_exec(const DebugInfo *info) {
 typedef struct {
   size_t to_del_alloc;
   size_t to_del_idx;
-  x86_addr *to_del;
-  x86_addr load_address;
+  real_addr *to_del;
+  real_addr load_address;
   unsigned skip_line;
   Breakpoints *breakpoints;
 } CallbackData;
@@ -397,7 +402,7 @@ SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line,
 
   CallbackData *data = (CallbackData *)void_data;
 
-  x86_addr real_line_addr = {line->addr.value - data->load_address.value};
+  real_addr real_line_addr = {line->addr.value - data->load_address.value};
 
   if (data->skip_line != line->ln &&
       !lookup_breakpoint(data->breakpoints, real_line_addr)) {
@@ -406,7 +411,7 @@ SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line,
     if (data->to_del_idx >= data->to_del_alloc) {
       data->to_del_alloc += TO_DEL_ALLOC_SIZE;
       data->to_del =
-          realloc(data->to_del, sizeof(x86_addr) * data->to_del_alloc);
+          realloc(data->to_del, sizeof(real_addr) * data->to_del_alloc);
       assert(data->to_del != NULL);
     }
     data->to_del[data->to_del_idx++] = real_line_addr;
@@ -421,9 +426,9 @@ SprayResult callback__set_dwarf_line_breakpoint(LineEntry *line,
    delete all breakpoints. */
 SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       const DebugInfo *info,
-                                      x86_addr load_address,
+                                      real_addr load_address,
                                       Breakpoints *breakpoints,
-                                      x86_addr **to_del_ptr, size_t *n_to_del) {
+                                      real_addr **to_del_ptr, size_t *n_to_del) {
   if (func == NULL || info == NULL || breakpoints == NULL ||
       to_del_ptr == NULL || n_to_del == NULL) {
     return SP_ERR;
@@ -439,7 +444,7 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
   CallbackData data = {
       .to_del_alloc = TO_DEL_ALLOC_SIZE,
       .to_del_idx = 0,
-      .to_del = calloc(TO_DEL_ALLOC_SIZE, sizeof(x86_addr)),
+      .to_del = calloc(TO_DEL_ALLOC_SIZE, sizeof(real_addr)),
       .load_address = load_address,
       .skip_line = pos->line,
       .breakpoints = breakpoints,

@@ -13,13 +13,15 @@ enum { PTRACE_ERROR = -1 };
  * result of the read is -1 or there is an error.
  */
 
-SprayResult pt_read_memory(pid_t pid, x86_addr addr, x86_word *store) {
-  assert(store != NULL);
+SprayResult pt_read_memory(pid_t pid, real_addr addr, uint64_t *read) {
+  assert(read != NULL);
+
+  /* The `ptrace(2)` API requires that we manually set `errno` here. */
   errno = 0;
-  int64_t value = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+  uint64_t value = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
   if (errno == 0) {
     /* No error was raised. Return the result. */
-    *store = (x86_word) { value };
+    *read = value;
     return SP_OK;
   } else {
     /* `errno` now indicates the error. */
@@ -27,8 +29,8 @@ SprayResult pt_read_memory(pid_t pid, x86_addr addr, x86_word *store) {
   }
 }
 
-SprayResult pt_write_memory(pid_t pid, x86_addr addr, x86_word word) {
-  if (ptrace(PTRACE_POKEDATA, pid, addr, word) == PTRACE_ERROR) {
+SprayResult pt_write_memory(pid_t pid, real_addr addr, uint64_t write) {
+  if (ptrace(PTRACE_POKEDATA, pid, addr, write) == PTRACE_ERROR) {
     return SP_ERR;
   } else {
     return SP_OK;
@@ -86,12 +88,4 @@ SprayResult pt_get_signal_info(pid_t pid, siginfo_t *siginfo) {
   } else {
     return SP_OK;
   }
-}
-
-void print_addr(x86_addr addr) {
-  printf(HEX_FORMAT, addr.value);
-}
-
-void print_word(x86_word word) {
-  printf(HEX_FORMAT, word.value);
 }

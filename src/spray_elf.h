@@ -86,7 +86,7 @@ const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf);
 
 // Get the symbol table entry for the symbol that
 // belongs to the given instruction address.
-const Elf64_Sym *se_symbol_from_addr(x86_addr addr, const ElfFile *elf);
+const Elf64_Sym *se_symbol_from_addr(dbg_addr addr, const ElfFile *elf);
 
 // Access different fields in a symbol. The way information
 // is stored in the different members of a symbol is a bit
@@ -99,8 +99,8 @@ int se_symbol_visibility(const Elf64_Sym *sym);
 // Get start (low PC) and end (high PC) address of function symbol.
 // Return values are meaningless in this context if the symbol is
 // not a function.
-x86_addr se_symbol_start_addr(const Elf64_Sym *sym);
-x86_addr se_symbol_end_addr(const Elf64_Sym *sym);
+dbg_addr se_symbol_start_addr(const Elf64_Sym *sym);
+dbg_addr se_symbol_end_addr(const Elf64_Sym *sym);
 
 // Looks up the symbol name in the string table.
 const char *se_symbol_name(const Elf64_Sym *sym, const ElfFile *elf);

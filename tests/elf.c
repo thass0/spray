@@ -74,7 +74,7 @@ TEST(read_elf_symbol_table_entries) {
   assert_int(se_symbol_visibility(func2), ==, STV_DEFAULT);
 
   const Elf64_Sym *func1 =
-      se_symbol_from_addr((x86_addr){0x00401128}, &elf_file);
+      se_symbol_from_addr((dbg_addr){0x00401128}, &elf_file);
   assert_ptr_not_null(func1);
   assert_string_equal(se_symbol_name(func1, &elf_file),
                       "file1_compute_something");

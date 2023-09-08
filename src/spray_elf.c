@@ -391,9 +391,7 @@ const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf) {
   return NULL;
 }
 
-const Elf64_Sym *se_symbol_from_addr(x86_addr addr, const ElfFile *elf) {
-  assert(elf != NULL);
-
+const Elf64_Sym *se_symbol_from_addr(dbg_addr addr, const ElfFile *elf) {
   assert(elf != NULL);
 
   Elf64_Shdr *symtab_hdr = &elf->sect_table.headers[elf->sect_table.symtab_idx];
@@ -428,14 +426,14 @@ uint64_t symbol_value(const Elf64_Sym *sym) {
   return sym->st_value;
 }
 
-x86_addr se_symbol_start_addr(const Elf64_Sym *sym) {
+dbg_addr se_symbol_start_addr(const Elf64_Sym *sym) {
   assert(sym != NULL);
-  return (x86_addr){sym->st_value};
+  return (dbg_addr){sym->st_value};
 }
 
-x86_addr se_symbol_end_addr(const Elf64_Sym *sym) {
+dbg_addr se_symbol_end_addr(const Elf64_Sym *sym) {
   assert(sym != NULL);
-  return (x86_addr){// The symbol's size is the offset from the
+  return (dbg_addr){// The symbol's size is the offset from the
                     // start address if the symbol is a function.
                     sym->st_value + sym->st_size};
 }

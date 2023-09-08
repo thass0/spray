@@ -13,8 +13,8 @@
    `/usr/include/sys/user.h`. Hence, `x86_reg` can
    index both of them. */
 
-SprayResult get_register_value(pid_t pid, x86_reg reg, x86_word *store) {
-  assert(store != NULL);
+SprayResult get_register_value(pid_t pid, x86_reg reg, uint64_t *read) {
+  assert(read != NULL);
 
   struct user_regs_struct regs;  // Register buffer
   SprayResult res = pt_read_registers(pid, &regs);
@@ -22,19 +22,19 @@ SprayResult get_register_value(pid_t pid, x86_reg reg, x86_word *store) {
     return SP_ERR;
   } else {
     uint64_t *regs_as_array = (uint64_t*) &regs;
-    *store = (x86_word) { .value=regs_as_array[reg] };
+    *read = regs_as_array[reg];
     return SP_OK;
   }
 }
 
-SprayResult set_register_value(pid_t pid, x86_reg reg, x86_word word) {
+SprayResult set_register_value(pid_t pid, x86_reg reg, uint64_t write) {
   struct user_regs_struct regs;
   SprayResult res = pt_read_registers(pid, &regs);
   if (res ==  SP_ERR) {
     return SP_ERR;
   } else { 
     uint64_t *regs_as_array = (uint64_t*) &regs;
-    regs_as_array[reg] = word.value;
+    regs_as_array[reg] = write;
     return pt_write_registers(pid, &regs);
   }
 }
@@ -70,8 +70,8 @@ static inline bool translate_dwarf_regnum(uint8_t dwarf_regnum, x86_reg *store) 
  * Negative values for `dwarf_r` in `reg_descriptors` are used
  * to make those registers  inaccessible via a DWARF register number. */
 
-bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store) {
-  assert(store != NULL);
+bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *read) {
+  assert(read != NULL);
   
   x86_reg associated_reg;
 
@@ -79,7 +79,7 @@ bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store) {
     translate_dwarf_regnum(dwarf_regnum, &associated_reg);
 
   if (regnum_was_translated) {
-    SprayResult res = get_register_value(pid, associated_reg, store);
+    SprayResult res = get_register_value(pid, associated_reg, read);
     assert(res == SP_OK);
     return true;
   } else {

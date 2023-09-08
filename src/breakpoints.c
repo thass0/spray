@@ -7,7 +7,7 @@
 #include <string.h>
 
 typedef struct {
-  x86_addr addr;
+  real_addr addr;
   bool is_enabled;
   uint8_t orig_data;
 } Breakpoint;
@@ -47,13 +47,13 @@ void free_breakpoints(Breakpoints *breakpoints) {
   free(breakpoints);
 }
 
-bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr address) {
+bool lookup_breakpoint(Breakpoints *breakpoints, real_addr address) {
   assert(breakpoints != NULL);
 
   /* The only parameter that is relevant for the lookup
      is the address. */
   Breakpoint lookup = { .addr=address };
-  Breakpoint *check = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
+  const Breakpoint *check = hashmap_get(breakpoints->map, &lookup);
 
   /* Did we find an enabled breakpoint? */
   if (check != NULL && check->is_enabled) {
@@ -63,7 +63,7 @@ bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr address) {
   }
 }
 
-void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
+void enable_breakpoint(Breakpoints *breakpoints, real_addr addr) {
   assert(breakpoints != NULL);
 
   Breakpoint lookup = {
@@ -74,60 +74,71 @@ void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
     .orig_data=0,
   };
 
-  Breakpoint *enable = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
+  const Breakpoint *to_enable = hashmap_get(breakpoints->map, &lookup);
 
   /* Do we need to create the breakpoint first? */
-  if (enable == NULL) {
+  if (to_enable == NULL) {
     hashmap_set(breakpoints->map, &lookup);
-    enable = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
-    assert(enable != NULL);
+    to_enable = hashmap_get(breakpoints->map, &lookup);
+    assert(to_enable != NULL);
   }
 
-  /* Do we need to enable the breakpoint? We wouldn't want to
-     execute the following code if the breakpoint were already
-     enabled. If we did, we would loose the original data. */
-  if (!enable->is_enabled) {
-    // Read and return a word at `bp->addr` in the tracee's memory.
-    x86_word data = { 0 };
-    SprayResult res =
-      pt_read_memory(breakpoints->pid, enable->addr, &data);
-    unused(res);
-    // Save the original bottom byte.
-    enable->orig_data = (uint8_t) (data.value & BTM_BYTE_MASK);
-    // Set the new bottom byte to `int 3`.
-    // When the tracee raises this interrupt, it is sent a
-    // SIGTRAP. Receiving this signals stops it.
-    x86_word int3_data = { ((data.value & ~BTM_BYTE_MASK) | INT3) };
-    // Update the word in the tracee's memory.
-    pt_write_memory(breakpoints->pid, enable->addr, int3_data);
+  /* Only enable the breakpoint if it's currently disabled.
+     Re-activating an already active breakpoint would delete the
+     original instructions that were overwritten to insert the trap. */
+  if (!to_enable->is_enabled) {
+    Breakpoint enabled = {
+      .addr=to_enable->addr,
+      .is_enabled = true,
+      .orig_data = 0,
+    };
 
-    enable->is_enabled = true;
+    /* Read the word at `bp->addr` in the tracee's memory. */
+    uint64_t word = { 0 };
+    SprayResult res = pt_read_memory(breakpoints->pid, to_enable->addr, &word);
+    assert(res == SP_OK);
+
+    /* Save the original least significant byte. */
+    enabled.orig_data = (uint8_t) (word & BTM_BYTE_MASK);
+
+    /* Set the least significant bytes to the instruction `int 3`.
+       When this instruction is executed, the tracee raises an
+       interrupt and it is sent a trap signal. Receiving this
+       signal stops it. */
+    uint64_t int3_data = ((word & ~BTM_BYTE_MASK) | INT3);
+
+    /* Update the word in the tracee's memory. */
+    pt_write_memory(breakpoints->pid, to_enable->addr, int3_data);
+
+    hashmap_set(breakpoints->map, &enabled);
   }
 }
 
-void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
+void disable_breakpoint(Breakpoints *breakpoints, real_addr addr) {
   assert(breakpoints != NULL);
 
   Breakpoint lookup = { .addr=addr };
-  Breakpoint *disable = (Breakpoint *) hashmap_get(breakpoints->map, &lookup);
+  const Breakpoint *to_disable = hashmap_get(breakpoints->map, &lookup);
 
-  if (disable != NULL && disable->is_enabled) {
+  if (to_disable != NULL && to_disable->is_enabled) {
     // `ptrace` only operates on whole words, so we need
     // to read what's currently there first, then replace the
     // modified low byte and write it to the address.
 
-    x86_word modified_data = { 0 };
-    SprayResult res
-      = pt_read_memory(breakpoints->pid, disable->addr, &modified_data);
+    uint64_t modified_word = 0;
+    SprayResult res = pt_read_memory(breakpoints->pid, to_disable->addr, &modified_word);
     assert(res == SP_OK);
-    x86_word restored_data = { ((modified_data.value & ~BTM_BYTE_MASK) | disable->orig_data) };
-    pt_write_memory(breakpoints->pid, disable->addr, restored_data);
 
-    disable->is_enabled = false; 
+    uint64_t restored_word = ((modified_word & ~BTM_BYTE_MASK) | to_disable->orig_data);
+    pt_write_memory(breakpoints->pid, to_disable->addr, restored_word);
+
+    Breakpoint disabled = *to_disable;
+    disabled.is_enabled = false;
+    hashmap_set(breakpoints->map, &disabled);
   }
 }
 
-void delete_breakpoint(Breakpoints *breakpoints, x86_addr addr) {
+void delete_breakpoint(Breakpoints *breakpoints, real_addr addr) {
   assert(breakpoints != NULL);
 
   disable_breakpoint(breakpoints, addr);

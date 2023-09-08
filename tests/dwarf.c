@@ -20,7 +20,7 @@ TEST(get_line_entry_from_pc_works) {
   assert_ptr_not_null(dbg);
 
   {  /* Happy path. */
-    x86_addr pc = { 0x00401156 };
+    dbg_addr pc = { 0x00401156 };
     LineEntry line_entry = sd_line_entry_from_pc(dbg, pc);
     assert_true(line_entry.is_ok);
     assert_int(line_entry.ln, ==, 11);
@@ -30,7 +30,7 @@ TEST(get_line_entry_from_pc_works) {
     assert_ptr_not_null(strstr(line_entry.filepath, SIMPLE_SRC));
   }
   {  /* Sad path 😢. */
-    x86_addr pc = { 0xdeabbeef };
+    dbg_addr pc = { 0xdeabbeef };
     LineEntry line_entry = sd_line_entry_from_pc(dbg, pc);
     assert_false(line_entry.is_ok);
     assert_ptr_equal(line_entry.filepath, NULL);
@@ -118,7 +118,7 @@ TEST(search_returns_the_correct_result) {
 
 SprayResult test_get_effective_start_addr(Dwarf_Debug dbg,
                                           const DebugSymbol *sym,
-                                          x86_addr *dest) {
+                                          dbg_addr *dest) {
   return sd_effective_start_addr(dbg, sym_start_addr(sym), sym_end_addr(sym),
                                  dest);
 }
@@ -132,7 +132,7 @@ TEST(get_effective_function_start_works) {
   const DebugSymbol *sym = sym_by_name("main", info);
   assert_ptr_not_null(sym);
 
-  x86_addr main_start = { 0 };
+  dbg_addr main_start = { 0 };
   SprayResult res = test_get_effective_start_addr(dbg, sym, &main_start);
   assert_int(res, ==, SP_OK);
   LineEntry line_entry = sd_line_entry_from_pc(dbg, main_start);
@@ -142,7 +142,7 @@ TEST(get_effective_function_start_works) {
   
   /* `weird_sum` has a multi-line function declaration. */
   sym = sym_by_name("weird_sum", info);
-  x86_addr func_start = { 0 };
+  dbg_addr func_start = { 0 };
   res = test_get_effective_start_addr(dbg, sym, &func_start);
   assert_int(res, ==, SP_OK);
   line_entry = sd_line_entry_from_pc(dbg, func_start);
@@ -162,7 +162,7 @@ TEST(get_filepath_from_pc_works) {
   assert_ptr_not_null(dbg);
 
   {
-    x86_addr pc = { 0x00401156 };
+    dbg_addr pc = { 0x00401156 };
     char *filepath = sd_filepath_from_pc(dbg, pc);
     assert_ptr_not_null(filepath);
     char *expect_filepath = realpath(SIMPLE_SRC, NULL);
@@ -171,7 +171,7 @@ TEST(get_filepath_from_pc_works) {
     free(expect_filepath);
   }
   {  /* Sad path. */
-    x86_addr pc = { 0xdeadbeef };
+    dbg_addr pc = { 0xdeadbeef };
     char *no_filepath = sd_filepath_from_pc(dbg, pc);
     assert_ptr_equal(no_filepath, NULL);
   }

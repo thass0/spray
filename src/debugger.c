@@ -85,7 +85,7 @@ static inline void internal_error(const char *format, ...) {
   va_end(argp);
 }
 
-static inline void internal_memory_error(ErrorCode what, x86_addr addr) {
+static inline void internal_memory_error(ErrorCode what, real_addr addr) {
   printf("💢 Failed to %s (address ", error_messages[what]);
   print_addr(addr);
   printf(")\n");
@@ -108,7 +108,7 @@ static inline void command_unfinished_error(void) {
   printf("🤦 Trailing characters in command\n");
 }
 
-static inline void missing_source_error(x86_addr addr) {
+static inline void missing_source_error(dbg_addr addr) {
   printf("<No source info for PC ");
   print_addr(addr);
   printf(">\n");
@@ -119,43 +119,29 @@ static inline void missing_source_error(x86_addr addr) {
 // PC and Address Utilities
 // ========================
 
-/* NOTE: Breakpoints use *real addresses*. */
-
-/* Remove offset of position independet executables
-   from the given address to make it work with DWARF. */
-x86_addr real_to_dwarf(Debugger dbg, x86_addr real) {
-  return (x86_addr) { real.value - dbg.load_address.value };
-}
-
-/* Add the offset of position independent executables
-   to the given address. This turns an address from DWARF
-   info a real address. */
-x86_addr dwarf_to_real(x86_addr load_address, x86_addr dwarf) {
-  return (x86_addr) { dwarf.value + load_address.value };
-}
 
 /* Get the program counter. */
-x86_addr get_pc(pid_t pid) {
-  x86_addr store = { 0 };
-  SprayResult res = get_register_value(pid, rip, (x86_word *) &store);
+real_addr get_pc(pid_t pid) {
+  uint64_t store;
+  SprayResult res = get_register_value(pid, rip, &store);
   if (res == SP_OK) {
-    return store;
+    return (real_addr){ store };
   } else {
-    return (x86_addr) { 0 };
+    return (real_addr){ 0 };
   }
 }
 
 /* Get the program counter and remove any offset which is
    added to the physical process counter in PIEs. The DWARF
    debug info doesn't know about this offset. */
-x86_addr get_dwarf_pc(Debugger dbg) {
-  x86_addr real_pc = get_pc(dbg.pid);
-  return real_to_dwarf(dbg, real_pc);
+dbg_addr get_dwarf_pc(Debugger dbg) {
+  real_addr real_pc = get_pc(dbg.pid);
+  return real_to_dbg(dbg.load_address, real_pc);
 }
 
 /* Set the program counter. */
-void set_pc(pid_t pid, x86_addr pc) {
-  set_register_value(pid, rip, (x86_word) { pc.value });
+void set_pc(pid_t pid, real_addr pc) {
+  set_register_value(pid, rip, pc.value);
 }
 
 
@@ -206,7 +192,7 @@ void print_as_relative(const char *filepath) {
 // If `is_user_breakpoint` is true, then a message is printed
 // giving the user information about their breakpoint.
 void print_current_source(Debugger dbg, bool is_user_breakpoint) {
-  x86_addr pc = get_dwarf_pc(dbg);
+  dbg_addr pc = get_dwarf_pc(dbg);
   const DebugSymbol *sym = sym_by_addr(pc, dbg.info);
 
   const Position *pos = sym_position(sym, dbg.info);
@@ -446,7 +432,7 @@ ExecResult wait_for_signal(Debugger dbg);
 /* Execute the instruction at the breakpoints location
    and stop the tracee again. */
 ExecResult single_step_breakpoint(Debugger dbg) {
-  x86_addr pc_address = get_pc(dbg.pid);
+  real_addr pc_address = get_pc(dbg.pid);
 
   if (lookup_breakpoint(dbg.breakpoints, pc_address)) {
     /* Disable the breakpoint, run the original
@@ -483,8 +469,8 @@ void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
     siginfo.si_code == TRAP_BRKPT
   ) {
     /* Go back to real breakpoint address. */
-    x86_addr pc = get_pc(dbg.pid);
-    set_pc(dbg.pid, (x86_addr) {pc.value - 1});
+    real_addr pc = get_pc(dbg.pid);
+    set_pc(dbg.pid, (real_addr) {pc.value - 1});
   }
 }
 
@@ -564,18 +550,19 @@ ExecResult single_step_instruction(Debugger dbg) {
    not the breakpoint must be removed again after use.
    If it was to be removed,  the value of `return_address`
    is set to the address where the breakpoint was created. */
-bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr *return_address) {
+bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, real_addr *return_address) {
   assert(breakpoints != NULL);
   assert(return_address != NULL);
 
   /* The return address is stored 8 bytes after the
      start of the stack frame. This is where we want
      to set a breakpoint. */
-  x86_addr frame_pointer = { 0 };
-  SprayResult res = get_register_value(pid, rbp, (x86_word *) &frame_pointer);
+  uint64_t frame_pointer = 0;
+  SprayResult res = get_register_value(pid, rbp, &frame_pointer);
   assert(res == SP_OK);
-  x86_addr return_address_location = { frame_pointer.value + 8 };
-  pt_read_memory(pid, return_address_location, (x86_word *) return_address);
+
+  real_addr return_address_location = { frame_pointer + 8 };
+  pt_read_memory(pid, return_address_location, &return_address->value);
 
   bool remove_transient_breakpoint = false;
   if (!lookup_breakpoint(breakpoints, *return_address)) {
@@ -588,7 +575,7 @@ bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, x86_addr
 
 /* Step outside of the current function. */
 ExecResult step_out(Debugger dbg) {
-  x86_addr return_address = { 0 };
+  real_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
     dbg.breakpoints,
     dbg.pid,
@@ -645,7 +632,7 @@ ExecResult step_over(Debugger dbg) {
     return exec_function_not_found();
   }
 
-  x86_addr *to_del = NULL;
+  real_addr *to_del = NULL;
   size_t n_to_del = 0;
 
   SprayResult set_res = set_step_over_breakpoints(
@@ -654,7 +641,7 @@ ExecResult step_over(Debugger dbg) {
     return exec_set_breakpoints_failed();
   }
 
-  x86_addr return_address = { 0 };
+  real_addr return_address = { 0 };
   bool remove_internal_breakpoint = set_return_address_breakpoint(
     dbg.breakpoints,
     dbg.pid,
@@ -696,31 +683,31 @@ ExecResult step_over(Debugger dbg) {
    that the write operation was successful. */
 #define WRITE_READ_MSG "(read after write)"
 
-void exec_command_memory_read(pid_t pid, x86_addr addr) {
-  x86_word read = { 0 };
+void exec_command_memory_read(pid_t pid, real_addr addr) {
+  uint64_t read = { 0 };
   SprayResult res = pt_read_memory(pid, addr, &read);
   if (res == SP_OK) {
     printf(MEM_READ_INDENT);
-    print_word(read);
+    print_as_addr(read);
     printf("\n");
   } else {
     internal_memory_error(MEMORY_READ_ACTION, addr);
   }
 }
 
-void exec_command_memory_write(pid_t pid, x86_addr addr, x86_word word) {
+void exec_command_memory_write(pid_t pid, real_addr addr, uint64_t word) {
   SprayResult write_res = pt_write_memory(pid, addr, word);
   if (write_res == SP_ERR) {
     internal_memory_error(MEMORY_WRITE_ACTION, addr);
     return;
   }
 
-  /* Print readout of write result: */
-  x86_word stored = { 0 };
+  /* Print a readout of the write's result. */
+  uint64_t stored = 0;
   SprayResult read_res = pt_read_memory(pid, addr, &stored);
   if (read_res == SP_OK) {
     printf(MEM_READ_INDENT);
-    print_word(stored);
+    print_as_addr(stored);
     printf(" %s\n", WRITE_READ_MSG);
   } else {
     internal_memory_error(MEMORY_CONFIRM_READ_ACTION, addr);
@@ -728,34 +715,32 @@ void exec_command_memory_write(pid_t pid, x86_addr addr, x86_word word) {
 }
 
 void exec_command_register_read(pid_t pid, x86_reg reg, const char *restrict reg_name) {
-  x86_word reg_word = { 0 };
+  uint64_t reg_word = 0;
   SprayResult res = get_register_value(pid, reg, &reg_word);
   if (res == SP_OK) {
     printf("%8s ", reg_name);
-    print_word(reg_word);
+    print_as_addr(reg_word);
     printf("\n");
   } else {
     internal_register_error(REGISTER_READ_ACTION, reg);
   }
 }
 
-void exec_command_register_write(
-  pid_t pid,
-  x86_reg reg,
-  const char *restrict reg_name,
-  x86_word word
-) {
+void exec_command_register_write(pid_t pid,
+				 x86_reg reg,
+				 const char *restrict reg_name,
+				 uint64_t word) {
   SprayResult write_res = set_register_value(pid, reg, word);
   if (write_res == SP_ERR) {
     internal_register_error(REGISTER_WRITE_ACTION, reg);
   }
 
   /* Print readout of write result: */
-  x86_word written = { 0 };
+  uint64_t written = 0;
   SprayResult read_res = get_register_value(pid, reg, &written);
   if (read_res == SP_OK) {
     printf("%8s ", reg_name);
-    print_word(written);
+    print_as_addr(written);
     printf(" %s\n", WRITE_READ_MSG);
   } else {
     internal_register_error(REGISTER_CONFIRM_READ_ACTION, reg);
@@ -770,7 +755,7 @@ void exec_command_print(pid_t pid) {
   for (size_t i = 0; i < N_REGISTERS; i++) {
     reg_descriptor desc = reg_descriptors[i];
 
-    x86_word reg_word = { 0 };
+    uint64_t reg_word = 0;
     SprayResult res = get_register_value(pid, desc.r, &reg_word);
     if (res == SP_ERR) {
       free(buf);
@@ -778,13 +763,12 @@ void exec_command_print(pid_t pid) {
       return;
     }
 
-    snprintf(
-      buf + pos,
-      REGISTER_PRINT_LEN + 1,
-      "\t%8s " HEX_FORMAT,
-      desc.name,
-      reg_word.value
-    );
+    snprintf(buf + pos,
+	     REGISTER_PRINT_LEN + 1,
+	     "\t%8s " HEX_FORMAT,
+	     desc.name,
+	     reg_word);
+
     pos += REGISTER_PRINT_LEN;
 
     // Always put two registers on the same line.
@@ -800,12 +784,12 @@ void exec_command_print(pid_t pid) {
   free(buf);
 }
 
-void exec_command_break(Breakpoints *breakpoints, x86_addr addr) {
+void exec_command_break(Breakpoints *breakpoints, real_addr addr) {
   assert(breakpoints != NULL);
   enable_breakpoint(breakpoints, addr);
 }
 
-void exec_command_delete(Breakpoints *breakpoints, x86_addr addr) {
+void exec_command_delete(Breakpoints *breakpoints, real_addr addr) {
   assert(breakpoints != NULL);
   disable_breakpoint(breakpoints, addr);
 }
@@ -854,7 +838,7 @@ void exec_command_step_over(Debugger dbg) {
 }
 
 void exec_command_backtrace(Debugger dbg) {
-  CallFrame *backtrace = init_backtrace(get_pc(dbg.pid), dbg.pid, dbg.info);
+  CallFrame *backtrace = init_backtrace(get_dwarf_pc(dbg), dbg.pid, dbg.info);
   if (backtrace == NULL) {
     internal_error("Failed to determine backtrace");
   } else {
@@ -969,8 +953,8 @@ SprayResult parse_lineno(const char *line_str, unsigned *line_dest) {
 
 SprayResult parse_break_location(Debugger dbg,
                                  const char *location,
-                                 x86_addr *dest
-) {
+                                 dbg_addr *dest) {
+  assert(location != NULL);
   assert(dest != NULL);
 
   if (check_function_name(location) == SP_OK ){
@@ -1062,11 +1046,12 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       if (loc_str == NULL) {
         missing_error(BREAK_LOC);
       } else {
-        x86_addr addr = { 0 };
+        dbg_addr addr = { 0 };
         if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
-          if (!line_is_parsed(tokens, i))
-            break;
-          exec_command_break(dbg->breakpoints, addr);
+          if (!line_is_parsed(tokens, i)) {
+            break;	    
+	  }
+          exec_command_break(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
           invalid_error(BREAK_LOC);
         }
@@ -1076,11 +1061,11 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       if (loc_str == NULL) {
         missing_error(DELETE_LOC);
       } else {
-        x86_addr addr = { 0 };
+        dbg_addr addr = { 0 };
         if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
           if (!line_is_parsed(tokens, i))
             break;
-          exec_command_delete(dbg->breakpoints, addr);
+          exec_command_delete(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
           invalid_error(DELETE_LOC);
         }
@@ -1124,8 +1109,8 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
           if (value_str == NULL) {
             missing_error(REGISTER_WRITE_VALUE);
           } else {
-            x86_word word;
-            if (parse_base16(value_str, &word.value) == SP_OK) {
+            uint64_t word;
+            if (parse_base16(value_str, &word) == SP_OK) {
               if (!line_is_parsed(tokens, i)) break;
               exec_command_register_write(dbg->pid, reg, name, word);
             } else {
@@ -1138,12 +1123,12 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       }
     } else if (is_command(cmd, "m", "memory")) {
       const char *addr_str = get_next_token(tokens, &i);
-      x86_addr addr;
+      real_addr addr;
       if (addr_str == NULL) {
         missing_error(MEMORY_ADDR);
         break;
       } else {
-        x86_addr addr_buf;
+        real_addr addr_buf;
         if (parse_base16(addr_str, &addr_buf.value) == SP_OK) {
           addr = addr_buf;
         } else {
@@ -1164,8 +1149,8 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
         if (value_str == NULL) {
           missing_error(MEMORY_WRITE_VALUE);
         } else {
-          x86_word word;
-          if (parse_base16(value_str, &word.value) == SP_OK) {
+          uint64_t word;
+          if (parse_base16(value_str, &word) == SP_OK) {
             if (!line_is_parsed(tokens, i)) break;
             exec_command_memory_write(dbg->pid, addr, word);
           } else {
@@ -1255,7 +1240,7 @@ void init_load_address(Debugger *dbg) {
     fclose(proc_map);
     assert(nread != -1);
 
-    x86_addr load_address = { 0 };
+    real_addr load_address = { 0 };
     assert(parse_base16(addr, &load_address.value) == SP_OK);
 
     free(addr);
@@ -1263,7 +1248,7 @@ void init_load_address(Debugger *dbg) {
     // Now update the debugger instance on success.
     dbg->load_address = load_address;
   } else {
-    dbg->load_address = (x86_addr) { 0 };
+    dbg->load_address = (real_addr) { 0 };
   }
 }
 
@@ -1333,11 +1318,11 @@ SprayResult free_debugger(Debugger dbg) {
 void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
 
-  x86_addr start_main = { 0 };
+  dbg_addr start_main = { 0 };
   const DebugSymbol *main = sym_by_name("main", dbg.info);
   SprayResult found_start = function_start_addr(main, dbg.info, &start_main);
   if (found_start == SP_OK) {
-    enable_breakpoint(dbg.breakpoints, start_main);
+    enable_breakpoint(dbg.breakpoints, dbg_to_real(dbg.load_address, start_main));
     ExecResult exec_res = continue_execution(dbg);
     if (exec_res.type == SP_ERR) {
       print_exec_res(dbg, exec_res);

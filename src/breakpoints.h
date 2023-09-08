@@ -20,18 +20,18 @@ void free_breakpoints(Breakpoints *breakpoints);
    instruction is reached.
    Creates a new breakpoint at `addr` if it
    didn't exist before. */
-void enable_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+void enable_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 /* Disable a breakpoint, restoring the original instruction.
    Does nothing if there is no breakpoint at `addr`. */
-void disable_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+void disable_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 /* Delete the breakpoint at `addr` if there is one. */
-void delete_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+void delete_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 /* Return `true` if there is a breakpoint at `addr` and
    this breakpoint is enabled. Otherwise, if the breakpoint
    doesn't exist or is disabled, return `false`. */
-bool lookup_breakpoint(Breakpoints *breakpoints, x86_addr addr);
+bool lookup_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 #endif // _SPRAY_BREAKPOINTS_H_

@@ -516,7 +516,7 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry *line_entry,
       false; // `false` by default. Might be set by `sd_line_entry_from_pc`.
   line_entry->ln = lineno;
   line_entry->cl = colno;
-  line_entry->addr = (x86_addr) { addr };
+  line_entry->addr = (dbg_addr) { addr };
   line_entry->filepath = filepath;
 
   return DW_DLV_OK;
@@ -623,7 +623,7 @@ bool callback__find_filepath_by_pc(Dwarf_Debug dbg,
   }
 }
 
-char *sd_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+char *sd_filepath_from_pc(Dwarf_Debug dbg, dbg_addr pc) {
   assert(dbg != NULL);
   Dwarf_Error error = NULL;  
 
@@ -1289,8 +1289,8 @@ uint8_t sd_n_operands(SdOperator opcode) {
     return n_operands[opcode];
 }
 
-x86_addr dwarf_addr_to_addr(Dwarf_Addr addr) {
-  return (x86_addr) { addr };
+dbg_addr dwarf_addr_to_addr(Dwarf_Addr addr) {
+  return (dbg_addr) { addr };
 }
 
 #ifndef UNIT_TESTS
@@ -1299,11 +1299,8 @@ typedef struct SdLocRange {
   bool meaningful;  /* Libdwarf returns all types of location descriptions through
 		       location list entries. The range specified by this struct are
 		       only meaningful for bounded location descriptions. */
-  /* The addresses here are regular DWARF-internal addresses. Initial confusion was
-     caused by another step of DWARF-related address indirection.
-     TODO: Use the `dbg_addr` type here. */
-  x86_addr lowpc;		/* Inclusive lower bound. */
-  x86_addr highpc;		/* Exclusive upper bound. */
+  dbg_addr lowpc;		/* Inclusive lower bound. */
+  dbg_addr highpc;		/* Exclusive upper bound. */
 } SdLocRange;
 
 #endif  // UNIT_TESTS
@@ -1724,7 +1721,7 @@ LineTable sd_get_line_table(Dwarf_Debug dbg, const char *filepath) {
 /* Set `index_dest` to the line that
    contains the address of `PC`. */
 SprayResult get_line_table_index_of_pc(const LineTable line_table,
-                                      x86_addr pc,
+                                      dbg_addr pc,
                                       unsigned *index_dest
 ) {
   assert(index_dest != NULL);
@@ -1774,7 +1771,7 @@ SprayResult get_line_table_index_of_line(const LineTable line_table,
   }
 }
 
-LineEntry sd_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc) {
+LineEntry sd_line_entry_from_pc(Dwarf_Debug dbg, dbg_addr pc) {
   assert(dbg != NULL);
 
   char *filepath = sd_filepath_from_pc(dbg, pc);
@@ -1887,8 +1884,8 @@ typedef struct {
      whether or not they are set. The alternative of
      using e.g. `-1` as the unset value doesn't work. */
   bool is_set;
-  x86_addr lowpc;
-  x86_addr highpc;
+  dbg_addr lowpc;
+  dbg_addr highpc;
 } SubprogAttr;
 
 /* Search callback that looks for a DIE describing the
@@ -1914,8 +1911,8 @@ bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg,
       return false;
     }
 
-    attr->lowpc = (x86_addr) { lowpc };
-    attr->highpc = (x86_addr) { highpc };
+    attr->lowpc = (dbg_addr) { lowpc };
+    attr->highpc = (dbg_addr) { highpc };
     attr->is_set = true;
     return true;
   } else {
@@ -1993,9 +1990,10 @@ SprayResult sd_for_each_line_in_subprog(Dwarf_Debug dbg, const char *fn_name,
   return SP_OK;
 }
 
-SprayResult sd_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
-                                    x86_addr function_end,
-                                    x86_addr *function_start) {
+SprayResult sd_effective_start_addr(Dwarf_Debug dbg,
+				    dbg_addr prologue_start,
+                                    dbg_addr function_end,
+                                    dbg_addr *function_start) {
   assert(dbg != NULL);
   assert(function_start != NULL);
 

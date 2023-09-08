@@ -15,7 +15,7 @@ Dwarf_Debug sd_dwarf_init(const char *filepath, Dwarf_Error *error);
 
 /* Get the filepath of the file while the given PC is part of.
    The strings that's returned must be free' by the caller. */
-char *sd_filepath_from_pc(Dwarf_Debug dbg, x86_addr pc);
+char *sd_filepath_from_pc(Dwarf_Debug dbg, dbg_addr pc);
 
 typedef struct {
   bool is_ok;
@@ -26,14 +26,14 @@ typedef struct {
   bool is_exact;
   unsigned ln;
   unsigned cl;
-  x86_addr addr;
+  dbg_addr addr;
   // Don't free this string. It's owned by the `Dwarf_Debug` instance.
   char *filepath;
 } LineEntry;
 
 // Returns the line entry for th PC if the line entry contains
 // the address of PC. On error `is_ok` is set to false.
-LineEntry sd_line_entry_from_pc(Dwarf_Debug dbg, x86_addr pc);
+LineEntry sd_line_entry_from_pc(Dwarf_Debug dbg, dbg_addr pc);
 
 // Get the line entry at the given position.
 LineEntry sd_line_entry_at(Dwarf_Debug dbg, const char *filepath,
@@ -53,9 +53,10 @@ SprayResult sd_for_each_line_in_subprog(Dwarf_Debug dbg, const char *fn_name,
    functions to break only after the prologue.
    `prologue_start` is the same address as a subprogram's low PC
    and `function_end` is the same address as the high PC. */
-SprayResult sd_effective_start_addr(Dwarf_Debug dbg, x86_addr prologue_start,
-                                    x86_addr function_end,
-                                    x86_addr *function_start);
+SprayResult sd_effective_start_addr(Dwarf_Debug dbg,
+				    dbg_addr prologue_start,
+                                    dbg_addr function_end,
+                                    dbg_addr *function_start);
 
 
 /* Locations of variables */
@@ -116,8 +117,8 @@ const char *what_dwarf_result(int dwarf_res);
 /* Full definition of types internal to `SdLoclist`. */
 typedef struct SdLocRange {
   bool meaningful;
-  x86_addr lowpc;		/* Inclusive lower bound. */
-  x86_addr highpc;		/* Exclusive upper bound. */
+  real_addr lowpc;		/* Inclusive lower bound. */
+  real_addr highpc;		/* Exclusive upper bound. */
 } SdLocRange;
 
 typedef Dwarf_Small SdOperator;

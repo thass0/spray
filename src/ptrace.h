@@ -17,21 +17,10 @@
 #include <sys/user.h>
 
 #include "magic.h"
+#include "addr.h"
 
-/* Strong types to separate address and
- * word/data values from each other. */
-
-typedef struct { uint64_t value; } x86_word; 
-typedef struct { uint64_t value; } x86_addr;
-
-#define HEX_FORMAT "0x%016lx"
-
-void print_addr(x86_addr addr);
-
-void print_word(x86_word word);
-
-SprayResult pt_read_memory(pid_t pid, x86_addr addr, x86_word *store);
-SprayResult pt_write_memory(pid_t pid, x86_addr addr, x86_word word);
+SprayResult pt_read_memory(pid_t pid, real_addr addr, uint64_t *read);
+SprayResult pt_write_memory(pid_t pid, real_addr addr, uint64_t write);
 
 SprayResult pt_read_registers(pid_t pid, struct user_regs_struct *regs);
 SprayResult pt_write_registers(pid_t pid, struct user_regs_struct *regs);

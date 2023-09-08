@@ -8,8 +8,8 @@
 #include <stdio.h>
 
 typedef struct {
-  x86_addr pc;
-  x86_addr frame_pointer;
+  dbg_addr pc;
+  real_addr frame_pointer;
   struct {
     // If `has_lineno` is false, `lineno` is meaningless.
     // Always check `has_lineno` before using `lineno`.
@@ -24,8 +24,10 @@ struct CallFrame {
   CallLocation location;
 };
 
-CallFrame *init_call_frame(CallFrame *caller, x86_addr pc,
-                           x86_addr frame_pointer, DebugInfo *info) {
+CallFrame *init_call_frame(CallFrame *caller,
+			   dbg_addr pc,
+                           real_addr frame_pointer,
+			   DebugInfo *info) {
   const DebugSymbol *func_sym = sym_by_addr(pc, info);
 
   const char *func_name = NULL;
@@ -63,22 +65,23 @@ CallFrame *init_call_frame(CallFrame *caller, x86_addr pc,
    to the start of the frame (i.e. the stack pointer right at the
    start of the function). If this isn't found, it's likely that
    the compiler omitted the frame pointer so we should emit a warning. */
-// bool stores_frame_pointer(const ElfFile *elf, pid_t pid, x86_addr pc) {
-bool stores_frame_pointer(x86_addr pc, pid_t pid, DebugInfo *info) {
+// bool stores_frame_pointer(const ElfFile *elf, pid_t pid, real_addr pc) {
+bool stores_frame_pointer(dbg_addr pc, pid_t pid, DebugInfo *info) {
   const DebugSymbol *func = sym_by_addr(pc, info);
   if (func == NULL) {
     return false;
   }
 
-  x86_word insts = {0};
-  SprayResult mem_res = pt_read_memory(pid, sym_start_addr(func), &insts);
+  uint64_t inst_bytes = {0};
+  /* TODO: We need the load address here!  */
+  SprayResult mem_res = pt_read_memory(pid, (real_addr){sym_start_addr(func).value}, &inst_bytes);
   if (mem_res == SP_ERR) {
     return false;
   }
 
-  // Get the first four bytes only.
-  insts.value &= 0xffffffff;
-  return insts.value == 0xe5894855;
+  inst_bytes &= 0xffffffff;	/* Mask the least significant four bytes.
+				   Those are executed first. */
+  return inst_bytes == 0xe5894855;
 }
 
 /* NOTE: This is a naive approach to getting a backtrace
@@ -86,13 +89,13 @@ bool stores_frame_pointer(x86_addr pc, pid_t pid, DebugInfo *info) {
    Try compiling again with `-fno-omit-frame-pointer` if
    this doesn't work. */
 
-CallFrame *init_backtrace(x86_addr pc, pid_t pid, DebugInfo *info) {
+CallFrame *init_backtrace(dbg_addr pc, pid_t pid, DebugInfo *info) {
   assert(info != NULL);
 
   // Get the saved base pointer of the caller.
-  x86_addr frame_pointer = {0};
+  real_addr frame_pointer = {0};
   SprayResult reg_res =
-      get_register_value(pid, rbp, (x86_word *)&frame_pointer);
+      get_register_value(pid, rbp, &frame_pointer.value);
   if (reg_res == SP_ERR) {
     return NULL;
   }
@@ -111,8 +114,9 @@ CallFrame *init_backtrace(x86_addr pc, pid_t pid, DebugInfo *info) {
     // and use it as the PC of the next function.
     // NOTE: This operation must be performed *before* the
     // frame pointer is updated.
-    SprayResult ret_res = pt_read_memory(
-        pid, (x86_addr){frame_pointer.value + 8}, (x86_word *)&pc);
+    SprayResult ret_res = pt_read_memory(pid,
+					 (real_addr){frame_pointer.value + 8},
+					 &pc.value);
     if (ret_res == SP_ERR) {
       free_backtrace(call_frame);
       return NULL;
@@ -120,7 +124,7 @@ CallFrame *init_backtrace(x86_addr pc, pid_t pid, DebugInfo *info) {
 
     // Read the frame pointer of the next function.
     SprayResult fp_res =
-        pt_read_memory(pid, frame_pointer, (x86_word *)&frame_pointer);
+        pt_read_memory(pid, frame_pointer, &frame_pointer.value);
     if (fp_res == SP_ERR) {
       free_backtrace(call_frame);
       return NULL;

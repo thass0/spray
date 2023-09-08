@@ -55,19 +55,33 @@ static const reg_descriptor reg_descriptors[N_REGISTERS] = {
   { gs, 55, "gs" },
 };
 
-SprayResult get_register_value(pid_t pid, x86_reg reg, x86_word *store);
-SprayResult set_register_value(pid_t pid, x86_reg reg, x86_word word);
+/* Store the value of the register `reg` in `read`. */
+SprayResult get_register_value(pid_t pid, x86_reg reg, uint64_t *read);
 
-/* If `dwarf_regnum` refers to a known register, then
-   `true` is returned and `store` is set to the  content
-   of that register. Otherwise this function returns
-   `false` and `store` stays untouched. */
-bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, x86_word *store);
+/* Write the value in `write` to register `reg`. */
+SprayResult set_register_value(pid_t pid, x86_reg reg, uint64_t write);
 
+/*
+  Store the value of the register `dwarf_regnum` in `read`.
+
+  `true` is returned on success.
+
+  If the value of `dwarf_regnum` doesn't represent a valid
+  register, false is returned and `read` stays untouched.
+*/
+bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *read);
+
+/* Get the name of the register `reg` as a string. */
 const char *get_name_from_register(x86_reg reg);
-/* If `name` refers to a known register, then
-   `true` is returned and `store` is set to that register.
-   Otherwise this function returns `false` and `store` stays untouched. */
+
+/*
+  Store the register referred to by `name` in `store`.
+
+  `true` is returned on success.
+
+  If `name` is not a know register, then `false` is returned
+  and `store` remains untouched.
+*/
 bool get_register_from_name(const char *name, x86_reg *store);
 
 #endif  // _SPARY_REGISTERS_H_
