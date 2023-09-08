@@ -7,7 +7,7 @@
 
 #define unused(x) (void) (x);
 
-enum magic {
+enum magic_numbers {
   // `int 3` instruction code.
   INT3 = 0xcc,
   // Mask of lowest byte in number.

@@ -585,7 +585,7 @@ ExecResult step_out(Debugger dbg) {
   ExecResult exec_res = wait_for_signal(dbg);
 
   if (remove_internal_breakpoint) {
-    delete_breakpoint(dbg.breakpoints, return_address);
+    disable_breakpoint(dbg.breakpoints, return_address);
   }
 
   return exec_res;
@@ -652,12 +652,12 @@ ExecResult step_over(Debugger dbg) {
   ExecResult exec_res = wait_for_signal(dbg);
 
   for (size_t i = 0; i < n_to_del; i++) {
-    delete_breakpoint(dbg.breakpoints, to_del[i]);
+    disable_breakpoint(dbg.breakpoints, to_del[i]);
   }
   free(to_del);
 
   if (remove_internal_breakpoint) {
-    delete_breakpoint(
+    disable_breakpoint(
       dbg.breakpoints,
       return_address
     );

@@ -80,8 +80,11 @@ bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *read) {
 
   if (regnum_was_translated) {
     SprayResult res = get_register_value(pid, associated_reg, read);
-    assert(res == SP_OK);
-    return true;
+    if (res == SP_OK) {
+      return true;
+    } else {
+      return false;
+    }
   } else {
     return false;
   }

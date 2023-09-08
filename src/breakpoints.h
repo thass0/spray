@@ -15,19 +15,20 @@ Breakpoints *init_breakpoints(pid_t pid);
 void free_breakpoints(Breakpoints *breakpoints);
 
 /* Enable the given breakpoint by replacing the
-   instruction at `addr` with `int 3` (0xcc). This
-   will make the child receive a `SIGTRAP` once the
-   instruction is reached.
-   Creates a new breakpoint at `addr` if it
-   didn't exist before. */
-void enable_breakpoint(Breakpoints *breakpoints, real_addr addr);
+   instruction at `addr` with `int 3` (0xcc).
+
+   This will make the child receive a `SIGTRAP` once the
+   instruction at address `addr` is reached.
+
+   The tracee's memory stays untouched if an error is returned. */
+SprayResult enable_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 /* Disable a breakpoint, restoring the original instruction.
-   Does nothing if there is no breakpoint at `addr`. */
-void disable_breakpoint(Breakpoints *breakpoints, real_addr addr);
+   Does nothing if there is no breakpoint at `addr`.
 
-/* Delete the breakpoint at `addr` if there is one. */
-void delete_breakpoint(Breakpoints *breakpoints, real_addr addr);
+   On error, the tracee's memory stays untouched
+   and thus the breakpoints remains active. */
+SprayResult disable_breakpoint(Breakpoints *breakpoints, real_addr addr);
 
 /* Return `true` if there is a breakpoint at `addr` and
    this breakpoint is enabled. Otherwise, if the breakpoint
