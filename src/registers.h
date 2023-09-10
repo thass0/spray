@@ -61,6 +61,13 @@ SprayResult get_register_value(pid_t pid, x86_reg reg, uint64_t *read);
 /* Write the value in `write` to register `reg`. */
 SprayResult set_register_value(pid_t pid, x86_reg reg, uint64_t write);
 
+/* Translate the given DWARF register number into the associated x86 register.
+
+   Returns `true` if the register number could be translated.
+
+   Otherwise, `false` is returned. */
+bool dwarf_regnum_to_x86_reg(uint8_t dwarf_regnum, x86_reg *store);
+
 /*
   Store the value of the register `dwarf_regnum` in `read`.
 

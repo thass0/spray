@@ -6,6 +6,8 @@
 #define _SPRAY_SPRAY_DWARF_H_
 
 #include "ptrace.h"
+#include "spray_elf.h" /* `ElfFile` in `SdLocEvalCtx` */
+#include "registers.h" /* `x86_reg` in `SdLocation` */
 
 #include <libdwarf-0/libdwarf.h>
 #include <stdbool.h>
@@ -72,17 +74,74 @@ typedef struct SdLoclist {
   SdLocRange *ranges;
 } SdLoclist;
 
-/* Initialize a location list for the variable with the
-   given name. `pc` is used to choose the closest variable
-   if the variable name occurs more than once. */
+/* A DWARF DIE attribute that can be used in combination
+   with `sd_init_loclist` to initialize a new location list.
+
+   `sd_init_loc_attr` is the only way to initialize this struct,
+   because this function ensures that the form bounds are met. */
+typedef struct SdLocAttr {
+  Dwarf_Attribute attr;
+} SdLocAttr;
+
+SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
+			     Dwarf_Die die,
+			     Dwarf_Attribute attr,
+			     SdLocAttr *attr_dest);
+
+/* Get the location description attribute of the variable
+   with the given name. `pc` is used to choose the closest
+   variable if the variable name occurs more than once. */
+SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
+					   dbg_addr pc,
+					   const char *var_name,
+					   SdLocAttr *attr);
+  
+/* Initialize a location list from the location description attribute in `loc_attr`. */
 SprayResult sd_init_loclist(Dwarf_Debug dbg,
-			    dbg_addr pc,
-			    const char *var_name,
+			    SdLocAttr loc_attr,
                             SdLoclist *loclist);
+
 /* Delete the given location list. */
 void del_loclist(SdLoclist *loclist);
+
 /* Print the given location list. */
 void print_loclist(SdLoclist loclist);
+
+/* Contextual information used to evaluate
+   certain operations in location descriptions. */
+typedef struct SdLocEvalCtx {
+  pid_t pid;
+  dbg_addr pc;
+  const ElfFile *elf;
+  real_addr load_address;
+} SdLocEvalCtx;
+
+/* Location that's the result of evaluating a location list */
+typedef struct SdLocation {
+  enum {
+    LOC_ADDR,
+    LOC_REG,
+  } tag;
+  union {
+    real_addr addr;
+    x86_reg reg;
+  };
+  /* ... the pain in my heart of not being able to use tagged-enums in C. */
+} SdLocation;
+
+/* Create an address instance of `SdLocation`. */
+SdLocation sd_loc_addr(real_addr addr);
+SdLocation sd_loc_as_addr(uint64_t addr);
+
+/* Create a register instance of `SdLocation`. */
+SdLocation sd_loc_reg(x86_reg reg);
+
+/* Evaluate the given location list and return the
+   location that it describes currently. */
+SprayResult sd_eval_loclist(Dwarf_Debug dbg,
+			    SdLocEvalCtx ctx,
+			    SdLoclist loclist,
+			    SdLocation *location);
 
 #ifdef UNIT_TESTS
 

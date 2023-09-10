@@ -1,6 +1,7 @@
 #include "spray_dwarf.h"
 
 #include "magic.h"
+#include "registers.h"		/* For evaluating location expressions. */
 
 #include <dwarf.h>
 #include <stdlib.h>
@@ -348,12 +349,8 @@ bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
   return die_tag == tagnum;
 }
 
-/* Search callback which receives a `Dwarf_Addr*`
-   representing a PC value as search data and finds
-   a `char **` whose internal value represents the
-   function name corresponding to the PC.
-   Allocated memory for the function name of it returns
-   `true`. This memory must be released by the caller. */
+/* Used to find the name of the subprogram that contains a given PC.
+   Not in use right now. See `spray_elf.h` for the same functionality. */
 bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg,
 				       Dwarf_Die die,
 				       SearchFor search_for,
@@ -386,7 +383,7 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg,
 
       if (res == DW_DLV_OK) {
         size_t len = strlen(attr_buf);
-        *fn_name = (char *) realloc (*fn_name, len + 1);
+        *fn_name = realloc(*fn_name, len + 1);
         strcpy(*fn_name, attr_buf);
         return true;
       } else {
@@ -400,6 +397,37 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg,
     return false;
   }
 }
+
+/* Get the name of the subprogram that contains the given PC.
+
+   On success, a heap-allocated string is returned that should
+   be `free`d.
+
+   `NULL` is returned if there was an error, or if no subprogram
+   was found that contains the PC. */
+/* char *sd_get_subprog_name_from_pc(Dwarf_Debug dbg, dbg_addr _pc) { */
+/*   assert(dbg != NULL); */
+
+/*   Dwarf_Addr pc = _pc.value; */
+/*   char *fn_name = NULL; */
+
+/*   Dwarf_Error error = NULL; */
+
+/*   int res = sd_search_dwarf_dbg(dbg, */
+/* 				&error, */
+/* 				callback__find_subprog_name_by_pc, */
+/* 				&pc, */
+/* 				&fn_name); */
+
+/*   if (res != DW_DLV_OK) { */
+/*     if (res == DW_DLV_ERROR) { */
+/*       dwarf_dealloc_error(dbg, error); */
+/*     } */
+/*     return NULL; */
+/*   } else { */
+/*     return fn_name; */
+/*   } */
+/* } */
 
 /* NOTE: Acquiring a `Dwarf_Line_Context` is only possible
    if the given DIE is the compilation unit DIE. */
@@ -645,6 +673,186 @@ char *sd_filepath_from_pc(Dwarf_Debug dbg, dbg_addr pc) {
   }
 }
 
+bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(name != NULL);
+
+  int res = 0;
+  Dwarf_Error error;
+
+  Dwarf_Half die_tag = 0;
+  res = dwarf_tag(die,
+    &die_tag, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return false;
+  }
+
+  /* Is the given DIE about a function? */
+  if (die_tag == DW_TAG_subprogram) {
+    /* Check if the function name matches */
+    char *fn_name_buf = NULL;
+    res = dwarf_die_text(die, DW_AT_name,  
+      &fn_name_buf, &error);
+
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+        dwarf_dealloc_error(dbg, error);
+      }
+      return false;
+    }
+
+    /* Do the names match? */
+    if (strcmp(fn_name_buf, name) == 0) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    /* This DIE is not a subprogram. */
+    return false;
+  }
+}
+
+/* Check to see if the given attribute has a DWARF form
+   that can be used with `dwarf_get_loclist_c`. The libdwarf
+   docs for `dwarf_get_loclist_c` describe this procedure. */
+SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
+			     Dwarf_Die die,
+			     Dwarf_Attribute attr,
+			     SdLocAttr *attr_dest) {
+  int res = DW_DLV_OK;
+  Dwarf_Half version = 0;
+  Dwarf_Half offset_size = 0;
+
+  res = dwarf_get_version_of_die(die, &version, &offset_size);
+  if (res != DW_DLV_OK) {
+    return SP_ERR;
+  } else {
+    Dwarf_Error error = NULL;
+
+    Dwarf_Half form = 0;
+    res = dwarf_whatform(attr, &form, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      return SP_ERR;
+    }
+
+    Dwarf_Half num = 0;
+    res = dwarf_whatattr(attr, &num, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      return SP_ERR;
+    }
+
+    enum Dwarf_Form_Class class = dwarf_get_form_class(version,
+						       num,
+						       offset_size,
+						       form);
+    if (class == DW_FORM_CLASS_EXPRLOC
+	|| class == DW_FORM_CLASS_LOCLIST
+	|| class == DW_FORM_CLASS_LOCLISTSPTR
+	|| class == DW_FORM_CLASS_BLOCK) {
+      *attr_dest = (SdLocAttr) {
+	.attr=attr
+      };
+      return SP_OK;
+    } else {
+      return SP_ERR;
+    }
+  }
+}
+
+typedef struct LocAttrSearchFor {
+  const char *name;
+  Dwarf_Half attr_num;
+} LocAttrSearchFor;
+
+bool callback_find_subprog_loc_attr_by_subprog_name(Dwarf_Debug dbg,
+						    Dwarf_Die die,
+						    SearchFor search_for,
+						    SearchFindings search_findings) {
+  assert(dbg != NULL);
+
+  const LocAttrSearchFor *_search_for = search_for.data;
+  const char *subprog_name = _search_for->name;
+  Dwarf_Half attr_num = _search_for->attr_num;
+
+  if (sd_is_subprog_with_name(dbg, die, subprog_name)) {
+    int res = 0;
+    Dwarf_Error error;
+
+    Dwarf_Attribute attr = NULL;
+    res = dwarf_attr(die, attr_num, &attr, &error);
+
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      return false;
+    } else {
+      SdLocAttr *loc_attr = search_findings.data;
+      SprayResult res = sd_init_loc_attr(dbg,
+					 die,
+					 attr,
+					 loc_attr);
+      if (res == SP_OK) {
+	return true;
+      } else {
+	return false;
+      }
+    }
+  } else {
+    /* Not the right kind (`DW_TAG`) of DIE. */
+    return false;
+  }
+}
+
+/* Find any location attribute (`attr_num`) of a subprogram DIE with given name.
+
+   On success the location attribute is stored in `loc_dest` and `SP_OK` is returned.
+
+   `SP_ERR` is returned on error and `loc_dest` stays untouched. */
+SprayResult sd_get_subprog_loc_attr(Dwarf_Debug dbg,
+				    const char *subprog_name,
+				    Dwarf_Half attr_num,
+				    SdLocAttr *loc_dest) {
+  assert(dbg != NULL);
+  assert(subprog_name != NULL);
+
+  Dwarf_Error error = NULL;
+
+  LocAttrSearchFor search_for = {
+    .name = subprog_name,
+    .attr_num = attr_num,
+  };
+  SdLocAttr loc_attr = {NULL};
+
+  int res = sd_search_dwarf_dbg(dbg,
+				&error,
+				callback_find_subprog_loc_attr_by_subprog_name,
+				&search_for,
+				&loc_attr);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  } else {
+    *loc_dest = loc_attr;
+    return SP_OK;
+  }
+}
+
 /* While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
    keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
    PC we are looking for.
@@ -664,7 +872,7 @@ typedef struct VarLocSearchFor {
 typedef struct VarLocSearchFindings {
   bool in_scope;
   unsigned scope_level;
-  Dwarf_Attribute attr;
+  SdLocAttr attr;
 } VarLocSearchFindings;
 
 /* Search callback used in combination with `sd_search_dwarf_die` that
@@ -727,7 +935,6 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
     /* Is the given DIE a `DW_TAG_variable` and does it contain the `DW_AT_location` attribute? */
     if (correct_tag && location_attr) {
       const char *var_name = var_search_for->var_name;
-      Dwarf_Attribute *attr = &var_search_findings->attr;
 
       int res = DW_DLV_OK;
       Dwarf_Error error = NULL;
@@ -736,7 +943,9 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
       res = dwarf_diename(die, &die_var_name, &error);
 
       if (res == DW_DLV_OK && strcmp(var_name, die_var_name) == 0) {
-	res = dwarf_attr(die, DW_AT_location, attr, &error);
+	/* Retrieve the `location` attribute of this DIE. */
+	Dwarf_Attribute attr = NULL;
+	res = dwarf_attr(die, DW_AT_location, &attr, &error);
 
 	if (res != DW_DLV_OK) {
 	  if (res == DW_DLV_ERROR) {
@@ -744,9 +953,18 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 	  }
 	  return false;
 	} else {
-	  /* `attr` is now set to the location attribute of the
-	     `DW_TAG_variable` DIE with the given name. */
-	  return true;
+	  /* Ensure that the attribute we found has the right
+	     form, too. This should never fail for the `location`
+	     attribute of `variable` and `formal_parameter` DIEs. */
+	  SprayResult res = sd_init_loc_attr(dbg,
+					     die,
+					     attr,
+					     &var_search_findings->attr);
+	  if (res == SP_OK) {
+	    return true;
+	  } else {
+	    return false;
+	  }
 	}	      
       } else {
 	if (res == DW_DLV_ERROR) {
@@ -768,9 +986,10 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 
 /* Return the `DW_AT_location` attribute from the
    DIE of the variable with the given name. */
-Dwarf_Attribute sd_location_from_variable_name(Dwarf_Debug dbg,
-					       dbg_addr pc,
-					       const char *var_name) {
+SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
+					   dbg_addr pc,
+					   const char *var_name,
+					   SdLocAttr *attr) {
   assert(dbg != NULL);
   assert(var_name != NULL);
   Dwarf_Error error = NULL;
@@ -783,7 +1002,7 @@ Dwarf_Attribute sd_location_from_variable_name(Dwarf_Debug dbg,
 
   VarLocSearchFindings search_findings = {
     .in_scope = false,
-    .attr = NULL,
+    .attr = {0},
   };
 
   int res = sd_search_dwarf_dbg(dbg,
@@ -794,7 +1013,7 @@ Dwarf_Attribute sd_location_from_variable_name(Dwarf_Debug dbg,
 
   if (res == DW_DLV_ERROR) {
     dwarf_dealloc_error(dbg, error);
-    return NULL;
+    return SP_ERR;
   } else if (res == DW_DLV_NO_ENTRY) {
     /* Try again, this time ignoring the scope. Thereby, the first
        global variable with the given name is chosen. */
@@ -809,12 +1028,14 @@ Dwarf_Attribute sd_location_from_variable_name(Dwarf_Debug dbg,
       if (res == DW_DLV_ERROR) {
 	dwarf_dealloc_error(dbg, error);
       }
-      return NULL;
+      return SP_ERR;
     } else {
-      return search_findings.attr;
+      *attr = search_findings.attr;
+      return SP_OK;
     }
   } else {
-    return search_findings.attr;
+    *attr = search_findings.attr;
+    return SP_OK;
   }
 }
 
@@ -1280,7 +1501,7 @@ uint8_t sd_n_operands(SdOperator opcode) {
     [DW_OP_convert] = 1,
     [DW_OP_reinterpret] = 1,
 
-    /* TODO: Due to lack of documentation, the GNU extensions are not supported for now.
+    /* Due to lack of documentation, the GNU extensions are not supported for now.
        Instead three is used, such that all possible operands are displayed. */
     [170 ... 223] = 3,			   /* Unused range. */
     [DW_OP_lo_user ... DW_OP_hi_user] = 3,	/* Implementation-defined range.  */
@@ -1289,7 +1510,7 @@ uint8_t sd_n_operands(SdOperator opcode) {
     return n_operands[opcode];
 }
 
-dbg_addr dwarf_addr_to_addr(Dwarf_Addr addr) {
+dbg_addr dwarf_addr_to_dbg_addr(Dwarf_Addr addr) {
   return (dbg_addr) { addr };
 }
 
@@ -1325,136 +1546,145 @@ void sd_init_loc_range(Dwarf_Bool debug_addr_missing,
   } else {
     *range_dest = (SdLocRange) {
       .meaningful = true,
-      .lowpc = dwarf_addr_to_addr(lowpc),
-      .highpc = dwarf_addr_to_addr(highpc),
+      .lowpc = dwarf_addr_to_dbg_addr(lowpc),
+      .highpc = dwarf_addr_to_dbg_addr(highpc),
     };
   }
 }
 
+/* Is the location description associated with this
+   location description range active for the given PC?
+   Returns `false` for all meaningless range bounds. */
+bool is_active_range(SdLocRange range, dbg_addr _pc) {
+  if (!range.meaningful) {
+    return false;
+  } else {
+    uint64_t pc = _pc.value;
+    uint64_t lowpc = range.lowpc.value;
+    uint64_t highpc = range.highpc.value;
+
+    if (lowpc <= pc && pc < highpc) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
 SprayResult sd_init_loclist(Dwarf_Debug dbg,
-			    dbg_addr pc,
-			    const char *var_name,
+			    SdLocAttr loc_attr,
 			    SdLoclist *loclist) {
   assert(dbg != NULL);
-  assert(var_name != NULL);
   assert(loclist != NULL);
 
-  /* The location attribute that we want to evaluate.
-     TODO: `dwarf_get_form_class` can be used to check if
-     a given attribute is suited as a location expression. */
-  Dwarf_Attribute attr = sd_location_from_variable_name(dbg, pc, var_name);
+  Dwarf_Error error = NULL;
+  Dwarf_Attribute attr = loc_attr.attr;
 
-  if (attr == NULL) {
+  /* Pointer to the start of the loclist created by `dwarf_get_loclist_c`. */
+  Dwarf_Loc_Head_c loclist_head = NULL;
+  /* Number of records in the loclist pointed to by `loclist_head`.
+     This number is 1 if the loclist  represents a location expression. */
+  Dwarf_Unsigned loclist_count = 0;
+
+  int res = dwarf_get_loclist_c(attr, &loclist_head, &loclist_count, &error);
+
+  if (res != DW_DLV_OK) {
+    /* Always free memory associated with `loclist_head`. */
+    dwarf_dealloc_loc_head_c(loclist_head);
+    loclist_head = NULL;
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
     return SP_ERR;
   } else {
-    Dwarf_Error error = NULL;
-
-    /* Pointer to the start of the loclist created by `dwarf_get_loclist_c`. */
-    Dwarf_Loc_Head_c loclist_head = NULL;
-    /* Number of records in the loclist pointed to by `loclist_head`.
-       This number is 1 if the loclist  represents a location expression. */
-    Dwarf_Unsigned loclist_count = 0;
-
-    int res = dwarf_get_loclist_c(attr, &loclist_head, &loclist_count, &error);
-
-    if (res != DW_DLV_OK) {
-      /* Always free memory associated with `loclist_head`. */
-      dwarf_dealloc_loc_head_c(loclist_head);
-      loclist_head = NULL;
-      if (res == DW_DLV_ERROR) {
-	dwarf_dealloc_error(dbg, error);
-      }
-      return SP_ERR;
-    } else {
-      SdExpression *exprs = calloc(loclist_count, sizeof(SdExpression));
-      assert(exprs != NULL);
-      SdLocRange *ranges = calloc(loclist_count, sizeof(SdLocRange));
-      assert(ranges != NULL);
+    SdExpression *exprs = calloc(loclist_count, sizeof(SdExpression));
+    assert(exprs != NULL);
+    SdLocRange *ranges = calloc(loclist_count, sizeof(SdLocRange));
+    assert(ranges != NULL);
       
-      for (Dwarf_Unsigned i = 0; i < loclist_count; i++) {
-	Dwarf_Small _lle_value = 0; /* DW_LLE value if applicable (TODO: find out what this is) */
-	/* On success, the first and second operand of the expression respectively.
-	   Only applies if the expression has a first or second operand).
-	   TODO: This is weird, since the libdwarf docs call these variables `raw[low|hi]pc`.
-	   Check if the description above is correct by comparing it to the output of
-	   `dwarf_get_location_op_value_c`.*/
-	Dwarf_Unsigned _raw_first_op = 0;
-	Dwarf_Unsigned _raw_second_op = 0;
-	/* Set to true if some required data is missing. Without this data, the cooked values are invalid. */
-	Dwarf_Bool debug_addr_missing = false;
-	/* The lower (inclusive) and upper (exclusive) bound for a bounded location description
-	   in the location list. They represent the range of PC values in which the current
-	   location description is active. Location lists contain other entries besides location
-	   descriptions. Those include **base addresses**. Those entries should be used as the base
-	   address to the lower and upper PC bounds. Base address entries are only needed in CUs where
-	   the machine code is split over non-continuous regions (see bullet 'Base address' of section
-	   2.6.2 of the DWARF 5 standard). */
-	Dwarf_Addr low_pc = 0;
-	Dwarf_Addr high_pc = 0;
-	/* Number of operations in the expression */
-	Dwarf_Unsigned locexpr_op_count = 0;
-	/* Pointer to a specific location description. It points to the location description at the current index. */
-	Dwarf_Locdesc_c locdesc_entry = NULL;
-	/* The applicable DW_LKIND value for the location description (TODO: What is this?) */
-	Dwarf_Small _locdesc_lkind = 0;
-	/* Offset of the expression in the applicable section (?) */
-	Dwarf_Unsigned _expression_offset = 0;
-	/* Offset of the location description or zero for simple location expressions. */
-	Dwarf_Unsigned _locdesc_offset = 0;
-	res = dwarf_get_locdesc_entry_d(loclist_head,
-					i,
-					&_lle_value,
-					&_raw_first_op,
-					&_raw_second_op,
-					&debug_addr_missing,
-					&low_pc,
-					&high_pc,
-					&locexpr_op_count,
-					&locdesc_entry,
-					&_locdesc_lkind,
-					&_expression_offset,
-					&_locdesc_offset,
-					&error);
+    for (Dwarf_Unsigned i = 0; i < loclist_count; i++) {
+      Dwarf_Small _lle_value = 0; /* DW_LLE value if applicable (TODO: find out what this is) */
+      /* On success, the first and second operand of the expression respectively.
+	 Only applies if the expression has a first or second operand).
+	 TODO: This is weird, since the libdwarf docs call these variables `raw[low|hi]pc`.
+	 Check if the description above is correct by comparing it to the output of
+	 `dwarf_get_location_op_value_c`.*/
+      Dwarf_Unsigned _raw_first_op = 0;
+      Dwarf_Unsigned _raw_second_op = 0;
+      /* Set to true if some required data is missing. Without this data, the cooked values are invalid. */
+      Dwarf_Bool debug_addr_missing = false;
+      /* The lower (inclusive) and upper (exclusive) bound for a bounded location description
+	 in the location list. They represent the range of PC values in which the current
+	 location description is active. Location lists contain other entries besides location
+	 descriptions. Those include **base addresses**. Those entries should be used as the base
+	 address to the lower and upper PC bounds. Base address entries are only needed in CUs where
+	 the machine code is split over non-continuous regions (see bullet 'Base address' of section
+	 2.6.2 of the DWARF 5 standard). */
+      Dwarf_Addr low_pc = 0;
+      Dwarf_Addr high_pc = 0;
+      /* Number of operations in the expression */
+      Dwarf_Unsigned locexpr_op_count = 0;
+      /* Pointer to a specific location description. It points to the location description at the current index. */
+      Dwarf_Locdesc_c locdesc_entry = NULL;
+      /* The applicable DW_LKIND value for the location description (TODO: What is this?) */
+      Dwarf_Small _locdesc_lkind = 0;
+      /* Offset of the expression in the applicable section (?) */
+      Dwarf_Unsigned _expression_offset = 0;
+      /* Offset of the location description or zero for simple location expressions. */
+      Dwarf_Unsigned _locdesc_offset = 0;
+      res = dwarf_get_locdesc_entry_d(loclist_head,
+				      i,
+				      &_lle_value,
+				      &_raw_first_op,
+				      &_raw_second_op,
+				      &debug_addr_missing,
+				      &low_pc,
+				      &high_pc,
+				      &locexpr_op_count,
+				      &locdesc_entry,
+				      &_locdesc_lkind,
+				      &_expression_offset,
+				      &_locdesc_offset,
+				      &error);
+      if (res != DW_DLV_OK) {
+	dwarf_dealloc_loc_head_c(loclist_head);
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	}
+	return SP_ERR;
+      } else {
+	sd_init_loc_range(debug_addr_missing, low_pc, high_pc, &ranges[i]);
+
+	/* Read the location description entry at the current.
+	   TODO: It seems that libdwarf returns only DWARF expressions in `locdesc_entry`
+	   since all other possible entries seem to be returned in other variables, but
+	   I cannot be sure. Check up on this again. */
+	res = sd_init_loc_expression(locdesc_entry,
+				     locexpr_op_count,
+				     &exprs[i],
+				     &error);
+
 	if (res != DW_DLV_OK) {
-	  dwarf_dealloc_loc_head_c(loclist_head);
 	  if (res == DW_DLV_ERROR) {
 	    dwarf_dealloc_error(dbg, error);
 	  }
-	  return SP_ERR;
-	} else {
-	  sd_init_loc_range(debug_addr_missing, low_pc, high_pc, &ranges[i]);
 
-	  /* Read the location description entry at the current.
-	     TODO: It seems that libdwarf returns only DWARF expressions in `locdesc_entry`
-	     since all other possible entries seem to be returned in other variables, but
-	     I cannot be sure. Check up on this again. */
-	    res = sd_init_loc_expression(locdesc_entry,
-					 locexpr_op_count,
-					 &exprs[i],
-					 &error);
+	  dwarf_dealloc_loc_head_c(loclist_head);
 
-	  if (res != DW_DLV_OK) {
-	    if (res == DW_DLV_ERROR) {
-	      dwarf_dealloc_error(dbg, error);
-	    }
-
-	    dwarf_dealloc_loc_head_c(loclist_head);
-
-	    for (size_t j = 0; j <= i; j++) {
-	      del_expression(&exprs[i]);
-	    }
-	    free(exprs);
-
-	    return SP_ERR;	    
+	  for (size_t j = 0; j <= i; j++) {
+	    del_expression(&exprs[i]);
 	  }
+	  free(exprs);
+
+	  return SP_ERR;	    
 	}
       }
-      loclist->exprs = exprs;
-      loclist->ranges = ranges;
-      loclist->n_exprs = loclist_count;
-
-      return SP_OK;
     }
+    loclist->exprs = exprs;
+    loclist->ranges = ranges;
+    loclist->n_exprs = loclist_count;
+
+    return SP_OK;
   }
 }
 
@@ -1526,6 +1756,276 @@ void print_loclist(SdLoclist loclist) {
 }
 
 
+SdLocation sd_loc_addr(real_addr addr) {
+  return (SdLocation) {
+    .tag = LOC_ADDR,
+    .addr = addr,
+  };
+}
+
+SdLocation sd_loc_as_addr(uint64_t addr) {
+  return (SdLocation) {
+    .tag = LOC_ADDR,
+    .addr = (real_addr){addr},
+  };
+}
+
+SdLocation sd_loc_reg(x86_reg reg) {
+  return (SdLocation) {
+    .tag = LOC_REG,
+    .reg = reg,
+  };
+}
+
+/* Evaluation stack. */
+
+typedef SdLocation SdStackElem;
+
+typedef struct LocEvalStack {
+  SdStackElem *buf;		/* The stack itself */
+  size_t sp;			/* Pointer to the next unused element on the stack.
+				   (points one element past the top)*/
+  size_t n_alloc;		/* Number of elements allocated but not necessarily used. */
+} LocEvalStack;
+
+enum { LOC_EVAL_STACK_BLOCK = 32 };
+
+LocEvalStack init_eval_stack(void) {
+  LocEvalStack stack = {
+    .sp = 0,
+    .n_alloc = LOC_EVAL_STACK_BLOCK,
+    .buf = NULL,
+  };
+
+  stack.buf = calloc(stack.n_alloc, sizeof(*stack.buf));
+  assert(stack.buf != NULL);
+
+  return stack;
+}
+
+/* Pop the top-most element off the stack.
+
+   If the stack is not empty, the value of the top
+   element is stored in `pop_into` and `SP_OK` is returned.
+
+   `SP_ERR` is returned if the stack is empty and `pop_into`
+   stays untouched. */
+SprayResult pop_eval_stack(LocEvalStack *stack, SdStackElem *pop_into) {
+  assert(stack != NULL);
+  assert(pop_into != NULL);
+
+  if (stack->sp > 0) {
+    stack->sp -= 1;
+    *pop_into = stack->buf[stack->sp];
+    return SP_OK;
+  } else {
+    /* Stack is empty. */
+    return SP_ERR;
+  }
+}
+
+/* Push the given element on top of the stack. */
+void push_eval_stack(LocEvalStack *stack, SdStackElem push) {
+  assert(stack != NULL);
+
+  stack->buf[stack->sp] = push;
+  stack->sp += 1;
+
+  if (stack->sp >= stack->n_alloc) {
+    stack->n_alloc += LOC_EVAL_STACK_BLOCK;
+    stack->buf = realloc(stack->buf, sizeof(*stack->buf) * stack->n_alloc);
+    assert(stack->buf != NULL);
+  }
+}
+
+void del_eval_stack(LocEvalStack *stack) {
+  if (stack != NULL) {
+    free(stack->buf);
+    stack->buf = NULL;
+  }
+}
+
+SprayResult sd_eval_op_fbreg(Dwarf_Debug dbg,
+			     SdLocEvalCtx ctx,
+			     SdOperation self,
+			     LocEvalStack *stack) {
+  /* DW_OP_fbreg. See DWARF 5 standard, section 2.5.1.2, bullet 1. */
+
+  const Elf64_Sym *subprog = se_symbol_from_addr(ctx.pc, ctx.elf);
+  if (subprog == NULL) {
+    return SP_ERR;
+  }
+
+  const char *subprog_name = se_symbol_name(subprog, ctx.elf);
+  if (subprog_name == NULL) {
+    return SP_ERR;
+  }
+
+  SdLocAttr loc_attr = {0};
+  SprayResult res = sd_get_subprog_loc_attr(dbg, subprog_name, DW_AT_frame_base, &loc_attr);
+  if (res == SP_ERR) {
+    return SP_ERR;
+  }
+
+  SdLoclist loclist = {0};
+  res = sd_init_loclist(dbg, loc_attr, &loclist);
+  if (res == SP_ERR) {
+    return SP_ERR;
+  }
+
+  SdLocation location = {0};
+  res = sd_eval_loclist(dbg, ctx, loclist, &location);
+  del_loclist(&loclist);
+  
+  if (res == SP_ERR) {
+    return SP_ERR;
+  }
+
+  if (location.tag == LOC_REG) {
+    uint64_t base_addr = 0;
+    res = get_register_value(ctx.pid, location.reg, &base_addr);
+    if (res == SP_ERR) {
+      return SP_ERR;
+    } else {
+      /* `op.operand1` is a signed value. */
+      uint64_t loc = (uint64_t)((int64_t)base_addr + (int64_t)self.operand1);
+      SdStackElem push = sd_loc_as_addr(loc);
+      push_eval_stack(stack, push);
+      return SP_OK;
+    }
+  } else {
+    return SP_ERR;
+  }
+}
+
+SprayResult sd_eval_op_regn(Dwarf_Debug dbg,
+			    SdLocEvalCtx ctx,
+			    SdOperation self,
+			    LocEvalStack *stack) {
+  /* DW_OP_reg0 - DW_OP_reg31. See DWARF 5 standard, section 2.6.1.1.3. */
+  assert(stack != NULL);
+  unused(dbg);
+  unused(ctx);
+
+  uint8_t dwarf_regnum = self.opcode - DW_OP_reg0;
+  x86_reg reg = 0;
+  bool could_translate = dwarf_regnum_to_x86_reg(dwarf_regnum, &reg);
+  if (could_translate) {
+    push_eval_stack(stack, sd_loc_reg(reg));
+    return SP_OK;
+  } else {
+    /* The DWARF register number doesn't represent a
+       (supported) register on x86. */
+    return SP_ERR;
+  }
+}
+
+SprayResult sd_eval_op_addr(Dwarf_Debug dbg,
+			    SdLocEvalCtx ctx,
+			    SdOperation self,
+			    LocEvalStack *stack) {
+  assert(stack != NULL);
+  unused(dbg);
+
+  dbg_addr operand_addr = {self.operand1};
+  real_addr addr = dbg_to_real(ctx.load_address, operand_addr);
+  push_eval_stack(stack, sd_loc_addr(addr));
+
+  return SP_OK;
+}
+
+/* Function pointer to functions that evaluate operations. */
+typedef SprayResult (*SdEvalOp)(Dwarf_Debug dbg,
+				SdLocEvalCtx ctx,
+				SdOperation self,
+				LocEvalStack *stack);
+
+SdEvalOp sd_get_eval_handler(SdOperator opcode) {
+  static const SdEvalOp op_handlers[256] = {
+    [DW_OP_reg0 ... DW_OP_reg31] = sd_eval_op_regn,
+    [DW_OP_fbreg] = sd_eval_op_fbreg,
+    [DW_OP_addr] = sd_eval_op_addr,
+
+    /* Rest is `NULL`. */
+  };
+
+  return op_handlers[opcode];
+}
+
+SprayResult sd_eval_locop(Dwarf_Debug dbg,
+			  SdLocEvalCtx ctx,
+			  SdOperation op,
+			  LocEvalStack *stack) {
+  assert(dbg != NULL);
+  assert(stack != NULL);
+
+  SdEvalOp eval_handler = sd_get_eval_handler(op.opcode);
+  if (eval_handler == NULL) {
+    /* Operation `opcode` is not supported. */
+    return SP_ERR;
+  } else {
+    /* Evaluate the operation with the given handler. */
+    return eval_handler(dbg, ctx, op, stack);
+  }
+}
+
+SprayResult sd_eval_locexpr(Dwarf_Debug dbg,
+			    SdLocEvalCtx ctx,
+			    SdExpression locexpr,
+			    SdLocation *location) {
+  LocEvalStack stack = init_eval_stack();
+
+  for (size_t i = 0; i < locexpr.n_operations; i++) {
+    SprayResult res = sd_eval_locop(dbg, ctx, locexpr.operations[i], &stack);
+    if (res == SP_ERR) {
+      /* Abort the entire evaluation. */
+      del_eval_stack(&stack);
+      return SP_ERR;
+    }
+  }
+
+  /* Return the top element of the stack. */
+  SdStackElem top;
+  pop_eval_stack(&stack, &top);
+  *location = top;
+
+  del_eval_stack(&stack);
+
+  return SP_OK;
+}
+
+SprayResult sd_eval_loclist(Dwarf_Debug dbg,
+			    SdLocEvalCtx ctx,
+			    SdLoclist loclist,
+			    SdLocation *location) {
+  /* First, try to evaluate the first active bounded range that's found.
+     The DWARF 5 standard says that if two range bounds overlap, then the
+     object can be found at both locations at the same time. Hence, it doesn't
+     matter which active range is found first. */
+  for (size_t i = 0; i < loclist.n_exprs; i++) {
+    SdLocRange range = loclist.ranges[i];
+    if (is_active_range(range, ctx.pc)) {
+      return sd_eval_locexpr(dbg, ctx, loclist.exprs[i], location);
+    }
+  }
+
+  /* If none of the bounded location descriptions in this location
+     list are active, evaluate the first location description that
+     doesn't have a range bound and is always active. */
+  for (size_t i = 0; i < loclist.n_exprs; i++) {
+    SdLocRange range = loclist.ranges[i];
+    if (!range.meaningful) {
+      return sd_eval_locexpr(dbg, ctx, loclist.exprs[i], location);
+    }    
+  }
+
+  /* There is no location description in this location
+     list that's active at the moment. */
+  *location = sd_loc_as_addr(0x0);
+  return SP_OK;
+}
+
+
 bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
   assert(dbg != NULL);
   assert(die != NULL);
@@ -1542,7 +2042,7 @@ bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
   if (full_filepath == NULL && errno == ENOENT) {
     /* The given filename doesn't exist in the current directory.
        Likely, this is the case because the user only gave a filename
-       from the source directory, not the proper relative filepath.
+       from the source directory, not the proper relative file path.
        We work around this by only comparing file names. */
     char *filepath_cpy = strdup(filepath);
     char *expect_file_name = basename(filepath_cpy);
@@ -1722,8 +2222,7 @@ LineTable sd_get_line_table(Dwarf_Debug dbg, const char *filepath) {
    contains the address of `PC`. */
 SprayResult get_line_table_index_of_pc(const LineTable line_table,
                                       dbg_addr pc,
-                                      unsigned *index_dest
-) {
+                                      unsigned *index_dest) {
   assert(index_dest != NULL);
 
   unsigned i = 0;
@@ -1833,51 +2332,6 @@ LineEntry sd_line_entry_at(Dwarf_Debug dbg, const char *filepath,
   }
 }
 
-bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
-  assert(dbg != NULL);
-  assert(die != NULL);
-  assert(name != NULL);
-
-  int res = 0;
-  Dwarf_Error error;
-
-  Dwarf_Half die_tag = 0;
-  res = dwarf_tag(die,
-    &die_tag, &error);
-
-  if (res != DW_DLV_OK) {
-    if (res == DW_DLV_ERROR) {
-      dwarf_dealloc_error(dbg, error);
-    }
-    return false;
-  }
-
-  /* Is the given DIE about a function? */
-  if (die_tag == DW_TAG_subprogram) {
-    /* Check if the function name matches */
-    char *fn_name_buf = NULL;
-    res = dwarf_die_text(die, DW_AT_name,  
-      &fn_name_buf, &error);
-
-    if (res != DW_DLV_OK) {
-      if (res == DW_DLV_ERROR) {
-        dwarf_dealloc_error(dbg, error);
-      }
-      return false;
-    }
-
-    /* Do the names match? */
-    if (strcmp(fn_name_buf, name) == 0) {
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    /* This DIE is not a subprogram. */
-    return false;
-  }
-}
-
 typedef struct {
   /* Addresses are unsigned and we should allow them
      to have any value. Therefore `is_set` signals
@@ -1886,17 +2340,17 @@ typedef struct {
   bool is_set;
   dbg_addr lowpc;
   dbg_addr highpc;
-} SubprogAttr;
+} SubprogPcRange;
 
 /* Search callback that looks for a DIE describing the
    subprogram with the name `search_for` and stores the
    attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
-bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg,
-						 Dwarf_Die die,
-						 SearchFor search_for,
-						 SearchFindings search_findings) {
+bool callback__find_subprog_pc_range_by_subprog_name(Dwarf_Debug dbg,
+						     Dwarf_Die die,
+						     SearchFor search_for,
+						     SearchFindings search_findings) {
   const char *fn_name = (const char *) search_for.data;
-  SubprogAttr *attr = (SubprogAttr *) search_findings.data;
+  SubprogPcRange *range = (SubprogPcRange *) search_findings.data;
 
   if (sd_is_subprog_with_name(dbg, die, fn_name)) {
     int res = 0;
@@ -1911,33 +2365,33 @@ bool callback__find_subprog_attr_by_subprog_name(Dwarf_Debug dbg,
       return false;
     }
 
-    attr->lowpc = (dbg_addr) { lowpc };
-    attr->highpc = (dbg_addr) { highpc };
-    attr->is_set = true;
+    range->lowpc = (dbg_addr) { lowpc };
+    range->highpc = (dbg_addr) { highpc };
+    range->is_set = true;
     return true;
   } else {
     return false;
   }
 }
 
-SubprogAttr sd_get_subprog_attr(Dwarf_Debug dbg, const char* fn_name) {
+SubprogPcRange sd_get_subprog_pc_range(Dwarf_Debug dbg, const char *fn_name) {
   assert(dbg != NULL);
   assert(fn_name != NULL);
 
   Dwarf_Error error = NULL;
-  SubprogAttr attr = { .is_set=false };
+  SubprogPcRange range = { .is_set=false };
 
   int res = sd_search_dwarf_dbg(dbg, &error,  
-    callback__find_subprog_attr_by_subprog_name,
-    fn_name, &attr);
+    callback__find_subprog_pc_range_by_subprog_name,
+    fn_name, &range);
 
   if (res != DW_DLV_OK) {
     if (res == DW_DLV_ERROR) {
       dwarf_dealloc_error(dbg, error);
     }
-    return (SubprogAttr) { .is_set=false };
+    return (SubprogPcRange) { .is_set=false };
   } else {
-    return attr;
+    return range;
   }
 }
 
@@ -1951,7 +2405,7 @@ SprayResult sd_for_each_line_in_subprog(Dwarf_Debug dbg, const char *fn_name,
   assert(callback != NULL);
   assert(init_data != NULL);
 
-  SubprogAttr attr = sd_get_subprog_attr(dbg, fn_name);
+  SubprogPcRange attr = sd_get_subprog_pc_range(dbg, fn_name);
   if (!attr.is_set) {
     return SP_ERR;
   }

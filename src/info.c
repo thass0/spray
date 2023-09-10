@@ -462,3 +462,65 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
 
   return SP_OK;
 }
+
+typedef struct VarLocation {
+  SdLocation inner;
+} VarLocation;
+
+const real_addr *var_loc_addr(VarLocation *loc) {
+  if ((loc != NULL) && (loc->inner.tag == LOC_ADDR)) {
+    return &loc->inner.addr;
+  } else {
+    return NULL;
+  }
+}
+
+const x86_reg *var_loc_reg(VarLocation *loc) {
+  if ((loc != NULL) && (loc->inner.tag == LOC_REG)) {
+    return &loc->inner.reg;
+  } else {
+    return NULL;
+  }
+}
+
+bool is_addr_loc(VarLocation *loc) {
+  return (loc != NULL) && (loc->inner.tag == LOC_ADDR);
+}
+bool is_reg_loc(VarLocation *loc) {
+  return (loc != NULL) && (loc->inner.tag == LOC_REG);
+}
+
+VarLocation *get_var_loc(dbg_addr pc,
+			 real_addr load_address,
+			 const char *var_name,
+			 pid_t pid,
+			 const DebugInfo *info) {
+  if (var_name == NULL || info == NULL) {
+    return NULL;
+  }
+
+  SdLocAttr var_attr = {0};
+  SprayResult res = sd_location_from_variable_name(info->dbg, pc, var_name, &var_attr);
+  if (res == SP_ERR) {
+    return NULL;
+  }
+
+  SdLoclist loclist = {0};
+  res = sd_init_loclist(info->dbg, var_attr, &loclist);
+  if (res == SP_ERR) {
+    return NULL;
+  }
+
+  SdLocEvalCtx ctx = {
+    .pid = pid,
+    .pc = pc,
+    .elf = info->elf,
+    .load_address = load_address,
+  };
+
+  VarLocation *location = malloc(sizeof(*location));
+  res = sd_eval_loclist(info->dbg, ctx, loclist, (SdLocation*) location);
+  del_loclist(&loclist);
+
+  return location;
+}

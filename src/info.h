@@ -7,6 +7,7 @@
 
 #include "breakpoints.h"
 #include "addr.h"
+#include "registers.h"
 
 #include <stdbool.h>
 
@@ -105,5 +106,33 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       real_addr load_address,
                                       Breakpoints *breakpoints,
                                       real_addr **to_del, size_t *n_to_del);
+
+typedef struct VarLocation VarLocation;
+
+/* Return a pointer to the address of the location or `NULL`
+   if the location doesn't represent an address. */
+const real_addr *var_loc_addr(VarLocation *loc);
+
+/* Return a pointer to the register location stands for
+   or `NULL` if the location doesn't represent a register. */
+const x86_reg *var_loc_reg(VarLocation *loc);
+
+/* Check the type of a location. */
+bool is_addr_loc(VarLocation *loc);
+bool is_reg_loc(VarLocation *loc);
+
+// Get the location of the variable with the
+// given name in the scope around `pc`.
+//
+// On success, a new heap-allocated location is returned.
+// This location must be manually `free`'d (TODO: make
+// happen automatically when `info` is destroyed).
+//
+// `NULL` is returned on error.
+VarLocation *get_var_loc(dbg_addr pc,
+			 real_addr load_address,
+			 const char *var_name,
+			 pid_t pid,
+			 const DebugInfo *info);
 
 #endif // _SPRAY_INFO_H_

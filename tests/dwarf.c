@@ -199,7 +199,10 @@ TEST(sd_line_entry_at_works) {
 #define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_) \
   {									\
     SdLoclist loclist = {0};						\
-    SprayResult res = sd_init_loclist(dbg, (pc), (name), &loclist);	\
+    SdLocAttr var_attr = {0};						\
+    SprayResult res = sd_location_from_variable_name(dbg, (pc), (name), &var_attr); \
+    assert_int(res, ==, SP_OK);						\
+    res = sd_init_loclist(dbg, var_attr, &loclist);			\
     assert_int(res, ==, SP_OK);						\
     assert_int(loclist.ranges[0].lowpc.value, ==, (lowpc_));		\
     assert_int(loclist.ranges[0].highpc.value, ==, (highpc_));		\

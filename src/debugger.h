@@ -37,4 +37,45 @@ void run_debugger(Debugger dbg);
 // unmapped.
 SprayResult free_debugger(Debugger dbg);
 
+
+#ifdef UNIT_TESTS
+
+typedef enum {
+  EXEC_SIG_EXITED,
+  EXEC_SIG_KILLED,
+  EXEC_SIG_CONT,
+  EXEC_SIG_STOPPED,
+  EXEC_NONE,  /* No additionally information. */
+} ExecOkCode;
+
+typedef enum {
+  EXEC_CONT_DEAD,
+  EXEC_INVALID_WAIT_STATUS,
+  EXEC_FUNCTION_NOT_FOUND,
+  EXEC_SET_BREAKPOINTS_FAILED,
+  EXEC_PC_LINE_NOT_FOUND,
+  EXEC_STEP,
+} ExecErrCode;
+
+typedef struct {
+  SprayResult type;
+  union {
+    ExecOkCode ok;
+    ExecErrCode err;
+  } code;
+  union {
+    struct {
+      int signo;
+      int code;  /* `si_code` field of `siginfo_t` struct. */
+    } signal;  /* Set for `EXEC_KILLED` and `EXEC_STOPPED`. */
+    int exit_code;  /* Set for `EXEC_EXITED`. */
+    int wait_status;  /* Set for `EXEC_INVALID_WAIT_STATUS`. */
+  } data;
+} ExecResult;
+
+ExecResult continue_execution(Debugger dbg);
+ExecResult wait_for_signal(Debugger dbg);
+
+#endif  // UNIT_TESTS
+
 #endif  // _SPRAY_DEBUGGER_H_

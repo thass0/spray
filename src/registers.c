@@ -39,13 +39,7 @@ SprayResult set_register_value(pid_t pid, x86_reg reg, uint64_t write) {
   }
 }
 
-/* Get the register associated with the given DWARF
- * register number by looking it up in `register_descriptors`.
- * Returns whether or not the register number was found.
- * If `true` is returned, `store` is set to the register.
- * Else, if `dwarf_regnum` wasn't found `store` remains unchanged.
- */
-static inline bool translate_dwarf_regnum(uint8_t dwarf_regnum, x86_reg *store) {
+bool dwarf_regnum_to_x86_reg(uint8_t dwarf_regnum, x86_reg *store) {
   assert(store != NULL);
 
   size_t i  = 0;
@@ -76,7 +70,7 @@ bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *read) {
   x86_reg associated_reg;
 
   bool regnum_was_translated =
-    translate_dwarf_regnum(dwarf_regnum, &associated_reg);
+    dwarf_regnum_to_x86_reg(dwarf_regnum, &associated_reg);
 
   if (regnum_was_translated) {
     SprayResult res = get_register_value(pid, associated_reg, read);

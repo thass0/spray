@@ -217,6 +217,8 @@ void print_current_source(Debugger dbg, bool is_user_breakpoint) {
   }
 }
 
+#ifndef UNIT_TESTS
+
 typedef enum {
   EXEC_SIG_EXITED,
   EXEC_SIG_KILLED,
@@ -234,7 +236,7 @@ typedef enum {
   EXEC_STEP,
 } ExecErrCode;
 
-typedef struct {
+typedef struct ExecResult {
   SprayResult type;
   union {
     ExecOkCode ok;
@@ -249,6 +251,8 @@ typedef struct {
     int wait_status;  /* Set for `EXEC_INVALID_WAIT_STATUS`. */
   } data;
 } ExecResult;
+
+#endif  // UNIT_TESTS
 
 /* The following function construct `ExecResult`s
    which are valid for the given codes. Don't
