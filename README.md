@@ -1,6 +1,6 @@
 <p align="center">
-	<h3 align="center">🐛🐛🐛 Spray 🐛🐛🐛</h3>
-	<p align="center">Make debugging ergonomic.</p>
+	<h2 align="center">🐛🐛🐛 Spray 🐛🐛🐛</h3>
+	<p align="center">Debugging as fun.</p>
  <p align="center">
   <a href="https://github.com/d4ckard/spray/#%EF%B8%8F-installation">Get started</a> -
   <a href="https://github.com/d4ckard/spray/issues">Issues</a> -
@@ -11,11 +11,9 @@
 ![Spray debugging itself](.assets/using_spray.png) 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
 
-Spray is a debugger mainly targeted at C code. Its goal is to minimize the amount of
-overhead that many debuggers introduce. In general, Spray's vision is to make it as easy
-as possible, to jump right in and to have you never think about your debugger.
+Spray is a debugger targeted at C code. It's aimed at a core set of debugging tasks, trying to make them as easy as possible. In general, all of Spray should comfortably fit into your head. This reduces the mental overhead of jumping right into your code, all the time.
 
-This means that Spray doesn't try to fulfill all needs. It's inspired by the typical
+It also means that Spray doesn't try to fulfill *all* needs. It's inspired by the typical
 local debugging workflow that I find myself doing the most of.
 
 ## 🦾 Features
@@ -59,12 +57,9 @@ To use `spray` as a regular command you need to [add it to your `$PATH`](https:/
 
 ## 🏃‍♀️ Running Spray
 
-Ensure that the binary you want to debug has debug information enabled,
-i.e. it was compiled with the `-g` flag.
+Ensure that the binary you want to debug has debug information enabled, i.e. it was compiled with the `-g` flag. Also, you should disable all compile-time optimizations to ensure the best output.
 
-The first argument you pass to `spray` is the name of the binary that
-should be debugged (the debugee). All subsequent arguments are the
-arguments passed to the debugee.
+The first argument you pass to `spray` is the name of the binary that should be debugged (the debugee). All subsequent arguments are the arguments passed to the debugee.
 
 For example
 
