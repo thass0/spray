@@ -17,6 +17,8 @@
 #define PRINT_ARGS_BIN "tests/assets/print-args.bin"
 #define RECURRING_VARIABLES_SRC "tests/assets/recurring_variables.c"
 #define RECURRING_VARIABLES_BIN "tests/assets/recurring-variables.bin"
+#define POINTERS_SRC "tests/assets/pointers.c"
+#define POINTERS_BIN "tests/assets/pointers.bin"
 
 // Create a test
 #define TEST(name) \

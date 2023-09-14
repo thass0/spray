@@ -10,7 +10,8 @@ PRINT_ARGS = print_args.c
 COMMENTED = commented.c
 CUSTOM_TYPES = custom_types.c
 VARIABLES = recurring_variables.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin
+POINTERS = pointers.c
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin
 
 all: $(TARGETS)
 
@@ -35,6 +36,8 @@ print-args.bin: $(PRINT_ARGS)
 commented.bin: $(COMMENTED)
 	$(CC) $(CFLAGS) $< -o $@
 custom-types.bin: $(CUSTOM_TYPES)
+	$(CC) $(CFLAGS) $< -o $@
+pointers.bin: $(POINTERS)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:
