@@ -76,6 +76,8 @@ this executable the additional arguments `Hello` and `World`
 
 Available commands are:
 
+- `(print | p) <name>`: print the current value of the variable called `<name>`.
+
 - `(continue | c)`: continue execution until next breakpoint is hit. 
 
 - `(break | b) (<function> | <address> | <file>:<line>)`: set a breakpoint.

@@ -83,19 +83,19 @@ TEST(file_line_check_works) {
   return MUNIT_OK;
 }
 
-extern SprayResult check_function_name(const char *func_name);
+extern SprayResult is_valid_identifier(const char *func_name);
 
 TEST(function_name_check_works) {
-  SprayResult res = check_function_name("function_name_check_works1203");
+  SprayResult res = is_valid_identifier("function_name_check_works1203");
   assert_int(res, ==, SP_OK);
 
-  res = check_function_name("785019blah_function"); // Starts with numbers.
+  res = is_valid_identifier("785019blah_function"); // Starts with numbers.
   assert_int(res, ==, SP_ERR);
 
-  res = check_function_name("check-function-name"); // Kebab case.
+  res = is_valid_identifier("check-function-name"); // Kebab case.
   assert_int(res, ==, SP_ERR);
 
-  res = check_function_name("check>function!>name"); // Other symbols.
+  res = is_valid_identifier("check>function!>name"); // Other symbols.
   assert_int(res, ==, SP_ERR);
 
   return MUNIT_OK;
