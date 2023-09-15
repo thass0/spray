@@ -1,6 +1,5 @@
 <p align="center">
 	<h2 align="center">🐛🐛🐛 Spray 🐛🐛🐛</h3>
-	<p align="center">Debugging as fun.</p>
  <p align="center">
   <a href="https://github.com/d4ckard/spray/#%EF%B8%8F-installation">Get started</a> -
   <a href="https://github.com/d4ckard/spray/issues">Issues</a> -
@@ -11,15 +10,16 @@
 ![Spray debugging itself](.assets/using_spray.png) 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
 
-Spray is a debugger targeted at C code. It's aimed at a core set of debugging tasks, trying to make them as easy as possible. In general, all of Spray should comfortably fit into your head. This reduces the mental overhead of jumping right into your code, all the time.
+Spray is a debugger targeted at C code that includes a core set of debugging tasks. All functionality is supposed to be as simple as possible and fit comfortably in your head.
 
-It also means that Spray doesn't try to fulfill *all* needs. It's inspired by the typical
-local debugging workflow that I find myself doing the most of.
+This also means that Spray only fulfills a small set of needs. It's inspired by the typical local debugging workflow that I do most of the time.
+
+I started working on Spray out of frustration with the complexity of GDB and a general interest in how debuggers work.
 
 ## 🦾 Features
 
 - [x] Breakpoints on functions, on lines in files and on addresses
-- [x] Reading an writing memory
+- [x] Reading and writing memory
 - [x] C syntax highlighting
 - [x] Backtraces
 - [x] Instruction, function and line level stepping
@@ -30,7 +30,6 @@ local debugging workflow that I find myself doing the most of.
 - [ ] Interacting with variables (printing, setting, etc.)
 - [ ] Backtraces based on DWARF info
 - [ ] Command modularity
-- [ ] Improved separation of the debugger and the debuggee in the command line.
 
 ## 💿️ Installation
 
