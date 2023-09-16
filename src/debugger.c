@@ -46,6 +46,7 @@ typedef enum {
   PRINT_LOC,
   SET_LOC,
   SET_VALUE,
+  FILTER,
 } ErrorCode;
 
 static const char* error_messages[] = {
@@ -62,6 +63,7 @@ static const char* error_messages[] = {
   [PRINT_LOC]="location to print the value of",
   [SET_LOC]="location to set the value of",
   [SET_VALUE]="value to set the location to",
+  [FILTER]="filter",
 };
 
 static inline void invalid_error(ErrorCode what) {
@@ -721,19 +723,19 @@ ExecResult step_over(Debugger *dbg) {
    that the write operation was successful. */
 #define WRITE_READ_MSG "(read after write)"
 
-void execmd_print_memory(pid_t pid, real_addr addr) {
+void execmd_print_memory(pid_t pid, real_addr addr, PrintFilter filter) {
   uint64_t read = { 0 };
   SprayResult res = pt_read_memory(pid, addr, &read);
   if (res == SP_OK) {
     printf(MEM_READ_INDENT);
-    print_as_addr(read);
+    print_filtered(read, default_filter(filter, PF_BYTES));
     printf("\n");
   } else {
     internal_memory_error(MEMORY_READ_ACTION, addr);
   }
 }
 
-void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word) {
+void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word, PrintFilter filter) {
   SprayResult write_res = pt_write_memory(pid, addr, word);
   if (write_res == SP_ERR) {
     internal_memory_error(MEMORY_WRITE_ACTION, addr);
@@ -745,19 +747,22 @@ void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word) {
   SprayResult read_res = pt_read_memory(pid, addr, &stored);
   if (read_res == SP_OK) {
     printf(MEM_READ_INDENT);
-    print_as_addr(stored);
-    printf(" %s\n", WRITE_READ_MSG);
+    print_filtered(stored, default_filter(filter, PF_BYTES));
+    printf(" " WRITE_READ_MSG "\n");
   } else {
     internal_memory_error(MEMORY_CONFIRM_READ_ACTION, addr);
   }
 }
 
-void execmd_print_register(pid_t pid, x86_reg reg, const char *restrict reg_name) {
+void execmd_print_register(pid_t pid,
+			   x86_reg reg,
+			   const char *restrict reg_name,
+			   PrintFilter filter) {
   uint64_t reg_word = 0;
   SprayResult res = get_register_value(pid, reg, &reg_word);
   if (res == SP_OK) {
     printf("%8s ", reg_name);
-    print_as_addr(reg_word);
+    print_filtered(reg_word, default_filter(filter, PF_BYTES));
     printf("\n");
   } else {
     internal_register_error(REGISTER_READ_ACTION, reg);
@@ -767,7 +772,8 @@ void execmd_print_register(pid_t pid, x86_reg reg, const char *restrict reg_name
 void execmd_set_register(pid_t pid,
 			 x86_reg reg,
 			 const char *restrict reg_name,
-			 uint64_t word) {
+			 uint64_t word,
+			 PrintFilter filter) {
   SprayResult write_res = set_register_value(pid, reg, word);
   if (write_res == SP_ERR) {
     internal_register_error(REGISTER_WRITE_ACTION, reg);
@@ -778,14 +784,14 @@ void execmd_set_register(pid_t pid,
   SprayResult read_res = get_register_value(pid, reg, &written);
   if (read_res == SP_OK) {
     printf("%8s ", reg_name);
-    print_as_addr(written);
-    printf(" %s\n", WRITE_READ_MSG);
+    print_filtered(written, default_filter(filter, PF_BYTES));
+    printf(" " WRITE_READ_MSG "\n");
   } else {
     internal_register_error(REGISTER_CONFIRM_READ_ACTION, reg);
   }
 }
 
-void execmd_print_variable(Debugger *dbg, const char *var_name) {
+void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filter) {
   assert(dbg != NULL);
   assert(var_name != NULL);
 
@@ -818,7 +824,9 @@ void execmd_print_variable(Debugger *dbg, const char *var_name) {
   if (read_res == SP_ERR) {
     internal_error("Found a variable %s, but failed to read its value", var_name);
   } else {
-    printf(MEM_READ_INDENT "%ld\n", (int64_t) value);
+    printf(MEM_READ_INDENT);
+    print_filtered(value, filter);
+    printf("\n");
   }
 
   free(var_loc);
@@ -827,7 +835,7 @@ void execmd_print_variable(Debugger *dbg, const char *var_name) {
 #define SET_VAR_WRITE_ERR "Found a variable %s, but failed to write its value"
 #define SET_VAR_READ_ERR "Wrote to variable %s, but failed to read its new value for validation"
 
-void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value) {
+void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value, PrintFilter filter) {
   assert(dbg != NULL);
   assert(var_name != NULL);
 
@@ -878,7 +886,9 @@ void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value) {
   }
 
   /* Print the value that's been read after the write. */
-  printf(MEM_READ_INDENT "%ld " WRITE_READ_MSG "\n", (int64_t) value);
+  printf(MEM_READ_INDENT);
+  print_filtered(value, filter);
+  printf(" " WRITE_READ_MSG "\n");
 
   free(var_loc);
 }
@@ -1149,6 +1159,10 @@ void free_command_tokens(char **tokens) {
   }
 }
 
+bool is_filter_delim(const char *delim) {
+  return delim != NULL && delim[0] == '|' && delim[1] == '\0';
+}
+
 void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
   assert(dbg != NULL);
   assert(tokens != NULL);
@@ -1198,6 +1212,22 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	break;
       }
 
+      PrintFilter filter = PF_NONE;
+      const char *delim_str = next_token(tokens, &i);
+      if (delim_str != NULL) {
+	if (is_filter_delim(delim_str)) {
+	  filter = parse_filter(next_token(tokens, &i));
+	  if (filter == PF_NONE) {
+	    invalid_error(FILTER);
+	    break;
+	  }
+	} else {
+	  command_unfinished_error();
+	  break;
+	}
+      }
+
+
       if (!end_of_tokens(tokens, i)) {
 	break;
       }
@@ -1208,16 +1238,16 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	x86_reg reg = 0;
 	bool valid_reg = get_register_from_name(reg_name, &reg);
 	if (valid_reg) {
-	  execmd_print_register(dbg->pid, reg, reg_name);
+	  execmd_print_register(dbg->pid, reg, reg_name, filter);
 	} else {
 	  invalid_error(REGISTER_NAME);
 	}
       } else if (is_valid_identifier(loc_str)) {
 	/* Warn if the identifier is also the name of a register. */
 	warn_ident_with_reg_name(loc_str);
-	execmd_print_variable(dbg, loc_str);
+	execmd_print_variable(dbg, loc_str, filter);
       } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
-	execmd_print_memory(dbg->pid, addr);
+	execmd_print_memory(dbg->pid, addr, filter);
       } else {
 	invalid_error(PRINT_LOC);
       }
@@ -1234,15 +1264,36 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	break;
       }
 
+      PrintFilter filter = PF_NONE;
+      const char *delim_str = next_token(tokens, &i);
+      if (delim_str != NULL) {
+	if (is_filter_delim(delim_str)) {
+	  filter = parse_filter(next_token(tokens, &i));
+	  if (filter == PF_NONE) {
+	    invalid_error(FILTER);
+	    break;
+	  }
+
+	} else {
+	  command_unfinished_error();
+	  break;
+	}
+      }
+
       if (!end_of_tokens(tokens, i)) {
 	break;
       }
 
+      /* Parse the input value using the correct base. By default,
+	 that same base will be used to print confirmation, too. */
       uint64_t value = 0;
-      if (parse_base10(value_str, &value) == SP_ERR
-	  && parse_base16(value_str, &value) == SP_ERR) {
+      if (parse_base10(value_str, &value) == SP_OK) {
+	filter = default_filter(filter, PF_DEC);
+      } else if (parse_base16(value_str, &value) == SP_OK) {
+	filter = default_filter(filter, PF_HEX);
+      } else {
 	invalid_error(SET_VALUE);
-	break;
+	break;	
       }
 
       real_addr addr = {0};
@@ -1251,14 +1302,14 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	x86_reg reg = 0;
 	bool valid_reg = get_register_from_name(reg_name, &reg);
 	if (valid_reg) {
-	  execmd_set_register(dbg->pid, reg, reg_name, value);
+	  execmd_set_register(dbg->pid, reg, reg_name, value, filter);
 	} else {
 	  invalid_error(REGISTER_NAME);
 	}
       } else if (is_valid_identifier(loc_str)) {
-	execmd_set_variable(dbg, loc_str, value);
+	execmd_set_variable(dbg, loc_str, value, filter);
       } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
-	execmd_set_memory(dbg->pid, addr, value);
+	execmd_set_memory(dbg->pid, addr, value, filter);
       } else {
 	invalid_error(SET_LOC);
       }

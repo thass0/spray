@@ -105,8 +105,10 @@ class TestStepCommands:
 
 class TestRegisterCommands:
     def test_register_read(self):
-        assert_lit('p %rip', '     rip 0x000000000040114f')
-        assert_lit('print %rip', '     rip 0x000000000040114f')
+        assert_lit('p %rip',
+                   '     rip 00 00 00 00 00 40 11 4f')
+        assert_lit('print %rip',
+                   '     rip 00 00 00 00 00 40 11 4f')
 
     def test_register_command_errors(self):
         assert_lit('t %rax', 'Missing value to set the location to')
@@ -116,9 +118,9 @@ class TestRegisterCommands:
 
     def test_register_write(self):
         assert_lit('t %rax 123',
-                   '     rax 0x000000000000007b (read after write)')
+                   '     rax 123 (read after write)')
         assert_lit('set %rbx 0xdeadbeef',
-                   '     rbx 0x00000000deadbeef (read after write)')
+                   '     rbx 0xdeadbeef (read after write)')
 
     def test_register_name_conflict(self):
         assert_ends_with('p rax', """\
@@ -129,9 +131,10 @@ HINT: All register names start with a '%'. Use '%rax' to read the rax register i
 
 class TestMemoryCommands:
     def test_memory_read(self):
-        assert_lit('p 0x403020', '         0xfffff04000000048')
+        assert_lit('p 0x403020',
+                   '         ff ff f0 40 00 00 00 48')
         assert_lit('print 0x403020',
-                   '         0xfffff04000000048')
+                   '         ff ff f0 40 00 00 00 48')
 
     def test_memory_command_errors(self):
         assert_lit('t 0x123', 'Missing value to set the location to')
@@ -141,9 +144,46 @@ class TestMemoryCommands:
 
     def test_memory_write(self):
         assert_lit('t 0x00007ffff7fe53b0 0xdecafbad',
-                   '         0x00000000decafbad (read after write)')
+                   '         0xdecafbad (read after write)')
         assert_lit('set 0x00007ffff7fe53a5 0xbadeaffe',
-                   '         0x00000000badeaffe (read after write)')
+                   '         0xbadeaffe (read after write)')
+
+
+class TestFilters:
+    def test_filter_print(self):
+        assert_ends_with("""t a 103
+        p a | hex
+        p a | bits
+        p a | addr
+        p a | dec
+        p a | bytes""", """\
+         103 (read after write)
+         0x67
+         00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111
+         0x0000000000000067
+         103
+         00 00 00 00 00 00 00 67
+""")
+
+    def test_filter_print_errors(self):
+        assert_ends_with('t a 103\np a |bytes', 'Trailing characters in command')
+        assert_ends_with('t a 103\np a |', 'Invalid filter')
+        assert_ends_with('t a 103\np a | blah-invalid-filter', 'Invalid filter')
+
+    def test_filter_set(self):
+        assert_ends_with("""t a 103
+        t a 0x600 | bytes
+        t a 0x700 | hex
+        t a 0x800""", """\
+         00 00 00 00 00 00 06 00 (read after write)
+         0x700 (read after write)
+         0x800 (read after write)
+""")
+
+    def test_filter_set_errors(self):
+        assert_ends_with('t a 0x10 |hex', 'Trailing characters in command')
+        assert_ends_with('t a 0x10 |', 'Invalid filter')
+        assert_ends_with('t a 0x10 | blah-invalid-filter', 'Invalid filter')
 
 
 class TestBreakpointCommands:

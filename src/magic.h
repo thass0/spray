@@ -5,6 +5,9 @@
 #ifndef _SPRAY_MAGIC_H_
 #define _SPRAY_MAGIC_H_
 
+#include <stdint.h>		/* `uint64_t` for address values. */
+#include <stdio.h>		/* `printf` for `print_addr`. */
+
 #define unused(x) (void) (x);
 
 enum magic_numbers {
@@ -44,5 +47,53 @@ unsigned n_digits(double num);
 
 /* Print n space characters to standard out. */
 void indent_by(unsigned n_spaces);
+
+typedef struct {
+  uint64_t value;
+} real_addr;
+
+typedef struct {
+  uint64_t value;
+} dbg_addr;
+
+/* The runtime addresses in *position independent executables*
+   may all be offset by a particular value from the addresses
+   which are stored in the binary file itself.
+   The addresses found in the DWARF debug information are such
+   permanently stored addresses. `dbg_addr` represents them.
+   Addresses retrieved from the running process or addresses from
+   the debug addresses, which have been offset by the load address,
+   are represented by `real_addr`. The are also referred to as *real*
+   addresses. */
+
+/* Convert a real address to a debug address. */
+dbg_addr real_to_dbg(real_addr offset, real_addr real);
+
+/* Convert a debug address to a real address. */
+real_addr dbg_to_real(real_addr offset, dbg_addr dwarf);
+
+
+/* Filters to format the output. */
+
+typedef enum PrintFilter {
+  PF_NONE, /* No filter. */
+  PF_HEX,  /* Hexadecimal number. */
+  PF_BITS,  /* Binary data. */
+  PF_ADDR, /* Address. */
+  PF_DEC,  /* Signed decimal number. */
+  PF_BYTES, /* Hexadecimal bytes. */
+} PrintFilter;
+
+PrintFilter parse_filter(const char *filter_str);
+
+/* Turn `current` into `_default` if `_default` is `PF_NONE`. */
+PrintFilter default_filter(PrintFilter current, PrintFilter _default);
+
+void print_as_addr(uint64_t addr);
+void print_filtered(uint64_t value, PrintFilter filter);
+
+/* Print an address. */
+#define print_addr(x) print_as_addr((x).value)
+#define print_addr_filtered(x) print_as_addr_filtered((x).value)
 
 #endif  // _SPRAY_MAGIC_H_

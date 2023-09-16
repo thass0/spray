@@ -6,9 +6,7 @@
 #define _SPRAY_INFO_H_
 
 #include "breakpoints.h"
-#include "addr.h"
 #include "registers.h"
-
 #include <stdbool.h>
 
 typedef struct DebugInfo DebugInfo;

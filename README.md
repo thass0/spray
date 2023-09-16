@@ -116,6 +116,20 @@ It's possible that the location passed to `break`, `delete`, `print`, or `set` i
 | `inst`, `i`      | Step to the next instruction.                       |
 | `backtrace`, `a` | Print a backtrace starting at the current position. |
 
+### Filters
+
+`print` and `set` commands can be followed by a filter. For example, if you want to inspect the binary data in the rdx register, you can use run `print %rdx | bin`. Filters are separated from the command by a pipe symbol: `<command> '|' <filter>`. Currently, only one filter can be used at a time.
+
+The following table shows how different filters format the same 64-bit word with a decimal value of 103.
+
+
+| Filter                | Output                                                                    |
+|-----------------------|---------------------------------------------------------------------------|
+| `dec` (*decimal*)     | `103`                                                                     |
+| `hex` (*hexadecimal*) | `0x67`                                                                    |
+| `addr` (*address*)    | `0x0000000000000067`                                                      |
+| `bits`                | `00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111` |
+| `bytes`               | `00 00 00 00 00 00 00 67`                                                 |
 
 ## 🛠️Contributing
 
@@ -132,4 +146,3 @@ It's possible that some of the tests fail due to off-by-one errors when
 making assertions about specific values found in the example binaries that
 are used in the tests. Refer to [this issue](https://github.com/d4ckard/spray/issues/2)
 for more details. You can ignore tests that fail for this reason only.
-

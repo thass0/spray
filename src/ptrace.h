@@ -17,7 +17,6 @@
 #include <sys/user.h>
 
 #include "magic.h"
-#include "addr.h"
 
 SprayResult pt_read_memory(pid_t pid, real_addr addr, uint64_t *read);
 SprayResult pt_write_memory(pid_t pid, real_addr addr, uint64_t write);
