@@ -73,6 +73,8 @@ this executable the additional arguments `Hello` and `World`
 
 ## ⌨️ Commands
 
+Spray's REPL offers the following commands. You can view them by running `spray --help`, too. In addition to that, `spray --help` also gives you all the command line parameters that Spray accepts.
+
 ### Reading and writing values
 
 | Command      | Argument(s)          | Description                                             |
@@ -84,8 +86,11 @@ this executable the additional arguments `Hello` and `World`
 |              | `<register> <value>` | Set the value of the register.                          |
 |              | `<address> <value>`  | Set the value of the program's memory at the address.   |
 
+Register names are prefixed with a `%`, akin to the AT&T assembly syntax. This avoids name conflicts between register names and variable names. For example, to read the value of `rax`, use `print %rax`. You can find a table of all available register names in `src/registers.h`.
 
-Currently all values are full 64-bit words.
+Currently, all values are full 64-bit words without any notion of a type. This will change in the future. A `<value>` can be a hexadecimal or a decimal number. The default is base 10 and hexadecimal will only be chosen if the literal contains a character that's exclusive to base 16 (i.e. one of a - f). You can prefix the literal with `0x` to explicitly use hexadecimal in cases where decimal would work as well.
+
+An `<address>` is always a hexadecimal number. The prefix `0x` is again optional.
 
 ### Breakpoints
 
@@ -99,6 +104,8 @@ Currently all values are full 64-bit words.
 |                 | `<address>`     | Delete a breakpoint on the address.           |
 | `continue`, `c` |                 | Continue execution until the next breakpoint. |
 
+It's possible that the location passed to `break`, `delete`, `print`, or `set` is both a valid function name and a valid hexadecimal address. For example, `add` could refer to a function called `add` and the number `0xadd`. In such a case, the default is to interpret the location as a function name. Use the prefix `0x` to explicitly specify an address.
+
 ### Stepping
 
 | Command          | Description                                         |
@@ -109,21 +116,6 @@ Currently all values are full 64-bit words.
 | `inst`, `i`      | Step to the next instruction.                       |
 | `backtrace`, `a` | Print a backtrace starting at the current position. |
 
-### Notes
-
-- Register names are prefixed with a `%`, akin to the AT&T assembly syntax. This avoids name conflicts between register names and variable names. For example, to read the value of `rax`, use `print %rax`.
-
-- Currently all values are full 64-bit words without any notion of a type. This will change in the future.
-
-- `<address>` always denotes a hexadecimal number.
-
-- `<value>` can be either a hexadecimal or a decimal number. If it's not clear from the literal itself whether a given number is decimal or hexadecimal, `0x` can be used to explicitly prefix hexadecimal numbers. Otherwise base 10 will be chosen as the default.
-
-- The names of all known registers can be found in the `reg_descriptors` table in `src/registers.h`.
-
-- It's possible that the location passed to `break`, `delete`, `print`, or `set` is both a valid function name and a valid hexadecimal address. For example, `add` could refer to a function called `add` and the number `0xadd`. In such a case, the default is to interpret the location as a function name. Use the prefix `0x` to explicitly specify an address.
-
-In addition to the REPL, you can use `spray --help` to see all parameters that are available on the command line.
 
 ## 🛠️Contributing
 
