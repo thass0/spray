@@ -73,8 +73,8 @@ typedef struct {
   } data;
 } ExecResult;
 
-ExecResult continue_execution(Debugger dbg);
-ExecResult wait_for_signal(Debugger dbg);
+ExecResult continue_execution(Debugger *dbg);
+ExecResult wait_for_signal(Debugger *dbg);
 
 #endif  // UNIT_TESTS
 

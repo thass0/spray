@@ -136,9 +136,11 @@ real_addr get_pc(pid_t pid) {
 /* Get the program counter and remove any offset which is
    added to the physical process counter in PIEs. The DWARF
    debug info doesn't know about this offset. */
-dbg_addr get_dbg_pc(Debugger dbg) {
-  real_addr real_pc = get_pc(dbg.pid);
-  return real_to_dbg(dbg.load_address, real_pc);
+dbg_addr get_dbg_pc(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  real_addr real_pc = get_pc(dbg->pid);
+  return real_to_dbg(dbg->load_address, real_pc);
 }
 
 /* Set the program counter. */
@@ -193,17 +195,19 @@ void print_as_relative(const char *filepath) {
 
 // If `is_user_breakpoint` is true, then a message is printed
 // giving the user information about their breakpoint.
-void print_current_source(Debugger dbg, bool is_user_breakpoint) {
-  dbg_addr pc = get_dbg_pc(dbg);
-  const DebugSymbol *sym = sym_by_addr(pc, dbg.info);
+void print_current_source(Debugger *dbg, bool is_user_breakpoint) {
+  assert(dbg != NULL);
 
-  const Position *pos = sym_position(sym, dbg.info);
-  const char *filepath = sym_filepath(sym, dbg.info);
+  dbg_addr pc = get_dbg_pc(dbg);
+  const DebugSymbol *sym = sym_by_addr(pc, dbg->info);
+
+  const Position *pos = sym_position(sym, dbg->info);
+  const char *filepath = sym_filepath(sym, dbg->info);
 
   if (pos != NULL && filepath != NULL) {
     if (is_user_breakpoint) {
       printf("Hit breakpoint at address ");
-      print_addr(get_pc(dbg.pid));
+      print_addr(get_pc(dbg->pid));
       printf(" in ");
       print_as_relative(filepath);
       printf("\n");
@@ -349,8 +353,10 @@ static inline bool is_exec_err(ExecResult *exec_result) {
   }
 } */
 
-void print_exec_ok(Debugger dbg, ExecResult *exec_res) {
+void print_exec_ok(Debugger *dbg, ExecResult *exec_res) {
+  assert(dbg != NULL);
   assert(exec_res != NULL);
+
   switch (exec_res->code.ok) {
     case EXEC_NONE:
       break;
@@ -371,7 +377,7 @@ void print_exec_ok(Debugger dbg, ExecResult *exec_res) {
       } else if (signo == SIGTRAP) {
         if (code == SI_KERNEL || code == TRAP_BRKPT) {
           bool is_user_breakpoint = false;
-          if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
+          if (lookup_breakpoint(dbg->breakpoints, get_pc(dbg->pid))) {
             // The debugger might insert breakpoints internally to implement
             // different kinds of stepping behaviour. If the breakpoint that
             // led here was such an internal breakpoint, then looking it up
@@ -420,7 +426,9 @@ void print_exec_err(ExecResult *exec_res) {
   }
 }
 
-void print_exec_res(Debugger dbg, ExecResult exec_res) {
+void print_exec_res(Debugger *dbg, ExecResult exec_res) {
+  assert(dbg != NULL);
+
   if (exec_res.type == SP_OK) {
     print_exec_ok(dbg, &exec_res);
   } else {
@@ -433,20 +441,22 @@ void print_exec_res(Debugger dbg, ExecResult exec_res) {
 // Stepping and Breakpoint Logic
 // =============================
 
-ExecResult wait_for_signal(Debugger dbg);
+ExecResult wait_for_signal(Debugger *dbg);
 
 /* Execute the instruction at the breakpoints location
    and stop the tracee again. */
-ExecResult single_step_breakpoint(Debugger dbg) {
-  real_addr pc_address = get_pc(dbg.pid);
+ExecResult single_step_breakpoint(Debugger *dbg) {
+  assert(dbg != NULL);
 
-  if (lookup_breakpoint(dbg.breakpoints, pc_address)) {
+  real_addr pc_address = get_pc(dbg->pid);
+
+  if (lookup_breakpoint(dbg->breakpoints, pc_address)) {
     /* Disable the breakpoint, run the original
        instruction and stop. */
-    disable_breakpoint(dbg.breakpoints, pc_address);
-    pt_single_step(dbg.pid);
+    disable_breakpoint(dbg->breakpoints, pc_address);
+    pt_single_step(dbg->pid);
     ExecResult exec_res = wait_for_signal(dbg);
-    enable_breakpoint(dbg.breakpoints, pc_address);
+    enable_breakpoint(dbg->breakpoints, pc_address);
     return exec_res;
   } else {
     return exec_ok();
@@ -455,11 +465,13 @@ ExecResult single_step_breakpoint(Debugger dbg) {
 
 /* Continue execution of child process. If the PC is currently
    hung up on a breakpoint then that breakpoint is stepped-over. */
-ExecResult continue_execution(Debugger dbg) {
+ExecResult continue_execution(Debugger *dbg) {
+  assert(dbg != NULL);
+
   single_step_breakpoint(dbg);
 
   errno = 0;
-  pt_continue_execution(dbg.pid);
+  pt_continue_execution(dbg->pid);
   /* Is the process still alive? */
   if (errno == ESRCH) {
     return exec_continue_dead();
@@ -468,19 +480,23 @@ ExecResult continue_execution(Debugger dbg) {
   return exec_ok();
 }
 
-void handle_sigtrap(Debugger dbg, siginfo_t siginfo) {
+void handle_sigtrap(Debugger *dbg, siginfo_t siginfo) {
+  assert(dbg != NULL);
+
   /* Did the tracee hit a breakpoint? */
   if (
     siginfo.si_code == SI_KERNEL ||
     siginfo.si_code == TRAP_BRKPT
   ) {
     /* Go back to real breakpoint address. */
-    real_addr pc = get_pc(dbg.pid);
-    set_pc(dbg.pid, (real_addr) {pc.value - 1});
+    real_addr pc = get_pc(dbg->pid);
+    set_pc(dbg->pid, (real_addr) {pc.value - 1});
   }
 }
 
-ExecResult wait_for_signal(Debugger dbg) {
+ExecResult wait_for_signal(Debugger *dbg) {
+  assert(dbg != NULL);
+
   /* Wait for the tracee to be stopped by receiving a
    * signal. Once the tracee is stopped again we can
    * continue to poke at it. Effectively this is just
@@ -493,7 +509,7 @@ ExecResult wait_for_signal(Debugger dbg) {
    */
   int wait_status;  /* Store status info here. */
   int options = 0;  /* Normal behaviour. */
-  waitpid(dbg.pid, &wait_status, options);
+  waitpid(dbg->pid, &wait_status, options);
 
   /* Display some info about the state-change which
    * has just stopped the tracee. This helps grasp
@@ -515,7 +531,7 @@ ExecResult wait_for_signal(Debugger dbg) {
   // Was the tracee stopped by another signal?
   else if (WIFSTOPPED(wait_status)) {
     siginfo_t siginfo = { 0 };
-    pt_get_signal_info(dbg.pid, &siginfo);
+    pt_get_signal_info(dbg->pid, &siginfo);
 
     switch (siginfo.si_signo) {
       case SIGSEGV: {
@@ -541,12 +557,14 @@ ExecResult wait_for_signal(Debugger dbg) {
   }
 }
 
-ExecResult single_step_instruction(Debugger dbg) {
-  if (lookup_breakpoint(dbg.breakpoints, get_pc(dbg.pid))) {
+ExecResult single_step_instruction(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  if (lookup_breakpoint(dbg->breakpoints, get_pc(dbg->pid))) {
     single_step_breakpoint(dbg);
     return exec_ok();
   } else {
-    pt_single_step(dbg.pid);
+    pt_single_step(dbg->pid);
     return wait_for_signal(dbg);
   }
 }
@@ -580,26 +598,30 @@ bool set_return_address_breakpoint(Breakpoints *breakpoints, pid_t pid, real_add
 }
 
 /* Step outside of the current function. */
-ExecResult step_out(Debugger dbg) {
+ExecResult step_out(Debugger *dbg) {
+  assert(dbg != NULL);
+
   real_addr return_address = { 0 };
-  bool remove_internal_breakpoint = set_return_address_breakpoint(
-    dbg.breakpoints,
-    dbg.pid,
-    &return_address);
+  bool remove_internal_breakpoint =
+    set_return_address_breakpoint(dbg->breakpoints,
+				  dbg->pid,
+				  &return_address);
 
   continue_execution(dbg);
   ExecResult exec_res = wait_for_signal(dbg);
 
   if (remove_internal_breakpoint) {
-    disable_breakpoint(dbg.breakpoints, return_address);
+    disable_breakpoint(dbg->breakpoints, return_address);
   }
 
   return exec_res;
 }
 
 /* Single step instructions until the line number has changed. */
-ExecResult single_step_line(Debugger dbg) {
-  const Position *pos = addr_position(get_dbg_pc(dbg), dbg.info);
+ExecResult single_step_line(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  const Position *pos = addr_position(get_dbg_pc(dbg), dbg->info);
   if (pos == NULL) {
     return exec_pc_line_not_found();
   }
@@ -618,7 +640,7 @@ ExecResult single_step_line(Debugger dbg) {
     n_instruction_steps ++;
 
     // Should (or can) we continue searching?
-    pos = addr_position(get_dbg_pc(dbg), dbg.info);
+    pos = addr_position(get_dbg_pc(dbg), dbg->info);
     if (pos == NULL || n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
       return exec_step_target_not_found();
     }
@@ -628,12 +650,14 @@ ExecResult single_step_line(Debugger dbg) {
 }
 
 /* Step to the next line. Don't step into functions. */
-ExecResult step_over(Debugger dbg) {
+ExecResult step_over(Debugger *dbg) {
+  assert(dbg != NULL);
+
   /* This functions sets breakpoints all over the current DWARF
      subprogram except for the next line so that we stop right
      after executing the code in it. */
 
-  const DebugSymbol *func = sym_by_addr(get_dbg_pc(dbg), dbg.info);
+  const DebugSymbol *func = sym_by_addr(get_dbg_pc(dbg), dbg->info);
   if (func == NULL) {
     return exec_function_not_found();
   }
@@ -641,32 +665,34 @@ ExecResult step_over(Debugger dbg) {
   real_addr *to_del = NULL;
   size_t n_to_del = 0;
 
-  SprayResult set_res = set_step_over_breakpoints(
-      func, dbg.info, dbg.load_address, dbg.breakpoints, &to_del, &n_to_del);
+  SprayResult set_res =
+    set_step_over_breakpoints(func,
+			      dbg->info,
+			      dbg->load_address,
+			      dbg->breakpoints,
+			      &to_del,
+			      &n_to_del);
   if (set_res == SP_ERR) {
     return exec_set_breakpoints_failed();
   }
 
   real_addr return_address = { 0 };
-  bool remove_internal_breakpoint = set_return_address_breakpoint(
-    dbg.breakpoints,
-    dbg.pid,
-    &return_address
-  );
+  bool remove_internal_breakpoint =
+    set_return_address_breakpoint(dbg->breakpoints,
+				  dbg->pid,
+				  &return_address);
 
   continue_execution(dbg);
   ExecResult exec_res = wait_for_signal(dbg);
 
   for (size_t i = 0; i < n_to_del; i++) {
-    disable_breakpoint(dbg.breakpoints, to_del[i]);
+    disable_breakpoint(dbg->breakpoints, to_del[i]);
   }
   free(to_del);
 
   if (remove_internal_breakpoint) {
-    disable_breakpoint(
-      dbg.breakpoints,
-      return_address
-    );
+    disable_breakpoint(dbg->breakpoints,
+		       return_address);
   }
 
   return exec_res;
@@ -803,7 +829,9 @@ void exec_command_delete(Breakpoints *breakpoints, real_addr addr) {
 /* Execute the instruction at the current breakpoint,
    continue the tracee and wait until it receives the
    next signal. */
-void exec_command_continue(Debugger dbg) {
+void exec_command_continue(Debugger *dbg) {
+  assert(dbg != NULL);
+
   ExecResult cont_res = continue_execution(dbg);
   if (is_exec_err(&cont_res)) {
     print_exec_res(dbg, cont_res);
@@ -813,7 +841,9 @@ void exec_command_continue(Debugger dbg) {
   }
 }
 
-void exec_command_single_step_instruction(Debugger dbg) {
+void exec_command_single_step_instruction(Debugger *dbg) {
+  assert(dbg != NULL);
+
   ExecResult exec_res = single_step_instruction(dbg);
   if (is_exec_err(&exec_res)) {
     print_exec_res(dbg, exec_res);
@@ -822,14 +852,17 @@ void exec_command_single_step_instruction(Debugger dbg) {
   }
 }
 
-void exec_command_step_out(Debugger dbg) {
+void exec_command_step_out(Debugger *dbg) {
+  assert(dbg != NULL);
+
   ExecResult exec_res = step_out(dbg);
   print_exec_res(dbg, exec_res);
 }
 
-void exec_command_single_step(Debugger dbg) {
-  /* Single step instructions until the line number
-  has changed. */
+void exec_command_single_step(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  /* Single step instructions until the line number has changed. */
   ExecResult exec_res = single_step_line(dbg);
   if (is_exec_err(&exec_res)) {
     print_exec_res(dbg, exec_res);
@@ -838,13 +871,20 @@ void exec_command_single_step(Debugger dbg) {
   }
 }
 
-void exec_command_step_over(Debugger dbg) {
+void exec_command_step_over(Debugger *dbg) {
+  assert(dbg != NULL);
+
   ExecResult exec_res = step_over(dbg);
   print_exec_res(dbg, exec_res);
 }
 
-void exec_command_backtrace(Debugger dbg) {
-  CallFrame *backtrace = init_backtrace(get_dbg_pc(dbg), dbg.load_address, dbg.pid, dbg.info);
+void exec_command_backtrace(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  CallFrame *backtrace = init_backtrace(get_dbg_pc(dbg),
+					dbg->load_address,
+					dbg->pid,
+					dbg->info);
   if (backtrace == NULL) {
     internal_error("Failed to determine backtrace");
   } else {
@@ -853,14 +893,15 @@ void exec_command_backtrace(Debugger dbg) {
   free_backtrace(backtrace);
 }
 
-void exec_command_print_variable(Debugger dbg, const char *var_name) {
+void exec_command_print_variable(Debugger *dbg, const char *var_name) {
+  assert(dbg != NULL);
   assert(var_name != NULL);
 
   VarLocation *var_loc = get_var_loc(get_dbg_pc(dbg),
-				     dbg.load_address,
+				     dbg->load_address,
 				     var_name,
-				     dbg.pid,
-				     dbg.info);
+				     dbg->pid,
+				     dbg->info);
 
   if (var_loc == NULL) {
     internal_error("Failed to find a variable called %s", var_name);
@@ -873,14 +914,13 @@ void exec_command_print_variable(Debugger dbg, const char *var_name) {
   /* Is this location a memory address? */
   if (var_loc_addr(var_loc)) {
     real_addr loc_addr = *var_loc_addr(var_loc);
-    read_res = pt_read_memory(dbg.pid, loc_addr, &value);
-
+    read_res = pt_read_memory(dbg->pid, loc_addr, &value);
   }
 
   /* Is this location a register number? */
   if (var_loc_reg(var_loc)) {
     x86_reg loc_reg = *var_loc_reg(var_loc);
-    get_register_value(dbg.pid, loc_reg, &value);
+    get_register_value(dbg->pid, loc_reg, &value);
   }
 
   if (read_res == SP_ERR) {
@@ -1084,7 +1124,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
   do {
     if (is_command(cmd, "c", "continue")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_continue(*dbg);
+      exec_command_continue(dbg);
     } else if (is_command(cmd, "b", "break")) {
       const char *loc_str = get_next_token(tokens, &i);
       if (loc_str == NULL) {
@@ -1210,7 +1250,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	missing_error(VAR_NAME);
       } else {
 	if (is_valid_identifier(var_name) && end_of_tokens(tokens, i)) {
-	  exec_command_print_variable(*dbg, var_name);
+	  exec_command_print_variable(dbg, var_name);
 	} else if (!is_valid_identifier(var_name)) {
 	  invalid_error(VAR_NAME);
 	} else {
@@ -1220,18 +1260,18 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       }
     } else if (is_command(cmd, "i", "inst")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_single_step_instruction(*dbg);
+      exec_command_single_step_instruction(dbg);
     } else if (is_command(cmd, "l", "leave")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_step_out(*dbg);
+      exec_command_step_out(dbg);
     } else if (is_command(cmd, "s", "step")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_single_step(*dbg);
+      exec_command_single_step(dbg);
     } else if (is_command(cmd, "n", "next")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_step_over(*dbg);
+      exec_command_step_over(dbg);
     } else if (is_command(cmd, "bt", "backtrace")) {
-      exec_command_backtrace(*dbg);
+      exec_command_backtrace(dbg);
     } else {
       unknown_cmd_error();
     }
@@ -1381,21 +1421,21 @@ void run_debugger(Debugger dbg) {
   SprayResult found_start = function_start_addr(main, dbg.info, &start_main);
   if (found_start == SP_OK) {
     enable_breakpoint(dbg.breakpoints, dbg_to_real(dbg.load_address, start_main));
-    ExecResult exec_res = continue_execution(dbg);
+    ExecResult exec_res = continue_execution(&dbg);
     if (exec_res.type == SP_ERR) {
-      print_exec_res(dbg, exec_res);
+      print_exec_res(&dbg, exec_res);
       free_debugger(dbg);
       return;
     }
-    ExecResult wait_res = wait_for_signal(dbg);
+    ExecResult wait_res = wait_for_signal(&dbg);
     if (wait_res.type == SP_ERR) {
-      print_exec_res(dbg, wait_res);
+      print_exec_res(&dbg, wait_res);
       free_debugger(dbg);
       return;
     }
   }
 
-  print_current_source(dbg, false);
+  print_current_source(&dbg, false);
 
   char *line_buf = NULL;
   while ((line_buf = linenoise("spray> ")) != NULL) {

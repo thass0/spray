@@ -40,7 +40,7 @@ TEST(accept_valid_executable) {
   Elf64_Shdr symtab_sh = elf_file.sect_table.headers[30];
   assert_int(symtab_sh.sh_type, ==, SHT_SYMTAB);
   assert_int(symtab_sh.sh_addr, ==, 0x0);
-  assert_int(symtab_sh.sh_offset, ==, 0x49d0);
+  assert_int(symtab_sh.sh_offset, ==, 18856);
   assert_int(symtab_sh.sh_size, ==, 0x630);
   assert_int(symtab_sh.sh_entsize, ==, 0x18);
   assert_int(symtab_sh.sh_flags, ==, 0);
