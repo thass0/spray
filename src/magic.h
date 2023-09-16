@@ -1,4 +1,4 @@
-/* Utils and magic numbers ✨. */
+/* Utilities, miscellaneous functions and magic numbers.  ✨. */
 
 #pragma once
 
@@ -38,5 +38,11 @@ typedef enum {
   SP_OK,
   SP_ERR,
 } SprayResult;
+
+/* Calculate the number of digits in the given number. */
+unsigned n_digits(double num);
+
+/* Print n space characters to standard out. */
+void indent_by(unsigned n_spaces);
 
 #endif  // _SPRAY_MAGIC_H_

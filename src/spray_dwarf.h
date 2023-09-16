@@ -63,14 +63,14 @@ SprayResult sd_effective_start_addr(Dwarf_Debug dbg,
 
 /* Locations of variables */
 
-typedef struct SdExpression SdExpression;
+typedef struct SdExpression SdLocdesc;
 typedef struct SdLocRange SdLocRange;
 
 /* A DWARF loclist (list of DWARF expressions) used to
    describe the locations of variables over time */
 typedef struct SdLoclist {
   size_t n_exprs;
-  SdExpression *exprs;
+  SdLocdesc *exprs;
   SdLocRange *ranges;
 } SdLoclist;
 

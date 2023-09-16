@@ -9,7 +9,6 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#include <math.h>		/* For `log10`, `fabs` and `floor` to compute the number of digits. */
 
 
 /* NOTE: The function prefix `sd_` stands for 'Spray DWARF' and
@@ -1063,7 +1062,7 @@ typedef struct SdOperation {
 typedef struct SdExpression {
   size_t n_operations;
   SdOperation *operations;
-} SdExpression;
+} SdLocdesc;
 
 #endif  // UNIT_TESTS
 
@@ -1072,7 +1071,7 @@ typedef struct SdExpression {
    error is returned. `expr_dest` is only changed on success. */
 int sd_init_loc_expression(Dwarf_Locdesc_c locdesc_entry,
 			   size_t locexpr_op_count,
-			   SdExpression *expr_dest,
+			   SdLocdesc *expr_dest,
 			   Dwarf_Error *error) {
   assert(locdesc_entry != NULL);
   assert(expr_dest != NULL);
@@ -1114,7 +1113,7 @@ int sd_init_loc_expression(Dwarf_Locdesc_c locdesc_entry,
 }
 
 /* Free the memory associated with the given DWARF expression. */
-void del_expression(SdExpression *expr) {
+void del_expression(SdLocdesc *expr) {
   if (expr != NULL) {
     free(expr->operations);
     expr->operations = NULL;
@@ -1597,7 +1596,7 @@ SprayResult sd_init_loclist(Dwarf_Debug dbg,
     }
     return SP_ERR;
   } else {
-    SdExpression *exprs = calloc(loclist_count, sizeof(SdExpression));
+    SdLocdesc *exprs = calloc(loclist_count, sizeof(SdLocdesc));
     assert(exprs != NULL);
     SdLocRange *ranges = calloc(loclist_count, sizeof(SdLocRange));
     assert(ranges != NULL);
@@ -1655,10 +1654,7 @@ SprayResult sd_init_loclist(Dwarf_Debug dbg,
       } else {
 	sd_init_loc_range(debug_addr_missing, low_pc, high_pc, &ranges[i]);
 
-	/* Read the location description entry at the current.
-	   TODO: It seems that libdwarf returns only DWARF expressions in `locdesc_entry`
-	   since all other possible entries seem to be returned in other variables, but
-	   I cannot be sure. Check up on this again. */
+	/* Read the location description entry at the current. */
 	res = sd_init_loc_expression(locdesc_entry,
 				     locexpr_op_count,
 				     &exprs[i],
@@ -1701,25 +1697,9 @@ void del_loclist(SdLoclist *loclist) {
   }
 }
 
-/* Calculate the number of digits in the given number. */
-unsigned n_digits(double num) {
-  if (num == 0) {
-    return 1;			/* Zero has one digit when written out. */
-  } else {
-    return ((unsigned) floor(log10(fabs(num)))) + 1;    
-  }
-}
-
-/* Print n space characters to standard out. */
-void indent_by(unsigned n_spaces) {
-  for (unsigned i = 0; i < n_spaces; i++) {
-    printf(" ");
-  }
-}
-
 void print_loclist(SdLoclist loclist) {
   for (size_t i = 0; i < loclist.n_exprs; i++) {
-    SdExpression *expr = &loclist.exprs[i];
+    SdLocdesc *expr = &loclist.exprs[i];
     SdLocRange *range = &loclist.ranges[i];
 
     printf("%lu ", i);		/* Print the location list entry index. */
@@ -1971,7 +1951,7 @@ SprayResult sd_eval_locop(Dwarf_Debug dbg,
 
 SprayResult sd_eval_locexpr(Dwarf_Debug dbg,
 			    SdLocEvalCtx ctx,
-			    SdExpression locexpr,
+			    SdLocdesc locexpr,
 			    SdLocation *location) {
   LocEvalStack stack = init_eval_stack();
 

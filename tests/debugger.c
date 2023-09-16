@@ -31,9 +31,9 @@ TEST(breakpoints_work) {
     dbg_addr pc = {(pc_value)};						\
 									\
     enable_breakpoint(dbg.breakpoints, dbg_to_real(dbg.load_address, pc)); \
-    ExecResult exec_res = continue_execution(dbg);			\
+    ExecResult exec_res = continue_execution(&dbg);			\
     assert_int(exec_res.type, ==, SP_OK);				\
-    ExecResult wait_res = wait_for_signal(dbg);				\
+    ExecResult wait_res = wait_for_signal(&dbg);			\
     assert_int(wait_res.type, ==, SP_OK);				\
 									\
     VarLocation *location = get_var_loc(pc,				\
@@ -86,17 +86,17 @@ TEST(file_line_check_works) {
 extern SprayResult is_valid_identifier(const char *func_name);
 
 TEST(function_name_check_works) {
-  SprayResult res = is_valid_identifier("function_name_check_works1203");
-  assert_int(res, ==, SP_OK);
+  bool is_valid = is_valid_identifier("function_name_check_works1203");
+  assert_true(is_valid);
 
-  res = is_valid_identifier("785019blah_function"); // Starts with numbers.
-  assert_int(res, ==, SP_ERR);
+  is_valid = is_valid_identifier("785019blah_function"); // Starts with numbers.
+  assert_false(is_valid);
 
-  res = is_valid_identifier("check-function-name"); // Kebab case.
-  assert_int(res, ==, SP_ERR);
+  is_valid = is_valid_identifier("check-function-name"); // Kebab case.
+  assert_false(is_valid);
 
-  res = is_valid_identifier("check>function!>name"); // Other symbols.
-  assert_int(res, ==, SP_ERR);
+  is_valid = is_valid_identifier("check>function!>name"); // Other symbols.
+  assert_false(is_valid);
 
   return MUNIT_OK;
 }
