@@ -73,45 +73,56 @@ this executable the additional arguments `Hello` and `World`
 
 ## ⌨️ Commands
 
-Available commands are:
+### Reading and writing values
 
-- `(print | p) <name>`: print the current value of the variable called `<name>`.
+| Command      | Argument(s)          | Description                                             |
+|--------------|----------------------|---------------------------------------------------------|
+| `print`, `p` | `<variable>`         | Print the value of the runtime variable.                |
+|              | `<register>`         | Print the value of the register.                        |
+|              | `<address>`          | Print the value of the program's memory at the address. |
+| `set`, `t`   | `<variable> <value>` | Set the value of the runtime variable.                  |
+|              | `<register> <value>` | Set the value of the register.                          |
+|              | `<address> <value>`  | Set the value of the program's memory at the address.   |
 
-- `(continue | c)`: continue execution until next breakpoint is hit. 
 
-- `(break | b) (<function> | <address> | <file>:<line>)`: set a breakpoint.
+Currently all values are full 64-bit words.
 
-- `(delete | d) (<function> | <address> | <file>:<line>)`: delete a breakpoint.
+### Breakpoints
 
-- `(register | r) <name> (read | rd)`: read the value in register `<name>`.
+| Command         | Argument(s)     | Description                                   |
+|-----------------|-----------------|-----------------------------------------------|
+| `break`, `b`    | `<function>`    | Set a breakpoint on the function.             |
+|                 | `<file>:<line>` | Set a breakpoint on the line in the file.     |
+|                 | `<address>`     | Set a breakpoint on the address.              |
+| `delete`, `d`   | `<function>`    | Delete a breakpoint on the function.          |
+|                 | `<file>:<line>` | Delete a breakpoint on the line in the file.  |
+|                 | `<address>`     | Delete a breakpoint on the address.           |
+| `continue`, `c` |                 | Continue execution until the next breakpoint. |
 
-- `(register | r) <name> (write | wr) <value>`: write `<value>` to register `<name>`.
+### Stepping
 
-- `(register | r) (print | dump)`: read the values of all registers.
+| Command      | Description                                     |
+|--------------|-------------------------------------------------|
+| `next`, `n`  | Go to the next line. Don't step into functions. |
+| `step`, `s`  | Go to the next line. Step into functions.       |
+| `leave`, `l` | Step out of the current function.               |
+| `inst`, `i`  | Step to the next instruction.                   |
 
-- `(memory | m) <address> (read | rd)`: read the value in memory at `<address>`.
+### Notes
 
-- `(memory | m) <address> (write | wr) <value>`: write `<value>` to memory at `<address>`.
+- Register names are prefixed with a `%`, akin to the AT&T assembly syntax. This avoids name conflicts between register names and variable names. For example, to read the value of `rax`, use `print %rax`.
 
-- `(inst | i)`: Single step to the next instruction.
+- Currently all values are full 64-bit words without any notion of a type. This will change in the future.
 
-- `(leave | l)`: Step out of the current function.
+- `<address>` always denotes a hexadecimal number.
 
-- `(step | s)`: Single step to the next line. Steps into functions.
+- `<value>` can be either a hexadecimal or a decimal number. If it's not clear from the literal itself whether a given number is decimal or hexadecimal, `0x` can be used to explicitly prefix hexadecimal numbers.
 
-- `(next | n)`: Go to the next line. Doesn't step into functions.
+- The names of all known registers can be found in the `reg_descriptors` table in `src/registers.h`.
 
-Where `<address>` and `<value>` are validated with `strtol(..., 16)`. 
-All valid register names can be found in the `reg_descriptors`
-table in `src/registers.h`.
+- It's possible that the location passed to `break`, `delete`, `print`, or `set` is both a valid function name and a valid hexadecimal address. For example, `add` could refer to a function called `add` and the number `0xadd`. In such a case, the default is to interpret the location as a function name. Use the prefix `0x` to explicitly specify an address.
 
-Also note that if the location provided to `break` or `delete` is
-both a valid function name and a valid hexadecimal address (e.g. `add`
-can be read as the function `add` or the number `0xadd`), this location
-is always interpreted as a function name. Use the prefix `0x` to specify
-addresses explicitly.
-
-Run `spray --help` to see all parameters that are available on the command line.
+In addition to the REPL, you can use `spray --help` to see all parameters that are available on the command line.
 
 ## 🛠️Contributing
 
