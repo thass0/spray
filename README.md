@@ -19,17 +19,17 @@ I started working on Spray out of frustration with the complexity of GDB and a g
 ## 🦾 Features
 
 - [x] Breakpoints on functions, on lines in files and on addresses
-- [x] Reading and writing memory
+- [x] Reading and writing variables, memory at addresses and registers
 - [x] C syntax highlighting
 - [x] Backtraces
 - [x] Instruction, function and line level stepping
+- [x] Filters to format command output
 
 ## 🚀 Roadmap 
 
-- [ ] [redis-cli](https://redis.io/docs/ui/cli/)-like command auto-completion to improve command discoverability
-- [ ] Interacting with variables (printing, setting, etc.)
-- [ ] Backtraces based on DWARF info
-- [ ] Command modularity
+- [ ] Interacting with variables through their original types
+- [ ] Improved backtraces based on DWARF info
+- [ ] [redis-cli](https://redis.io/docs/ui/cli/)-like command auto-completion
 
 ## 💿️ Installation
 
