@@ -101,12 +101,13 @@ Currently all values are full 64-bit words.
 
 ### Stepping
 
-| Command      | Description                                     |
-|--------------|-------------------------------------------------|
-| `next`, `n`  | Go to the next line. Don't step into functions. |
-| `step`, `s`  | Go to the next line. Step into functions.       |
-| `leave`, `l` | Step out of the current function.               |
-| `inst`, `i`  | Step to the next instruction.                   |
+| Command          | Description                                         |
+|------------------|-----------------------------------------------------|
+| `next`, `n`      | Go to the next line. Don't step into functions.     |
+| `step`, `s`      | Go to the next line. Step into functions.           |
+| `leave`, `l`     | Step out of the current function.                   |
+| `inst`, `i`      | Step to the next instruction.                       |
+| `backtrace`, `a` | Print a backtrace starting at the current position. |
 
 ### Notes
 
@@ -116,7 +117,7 @@ Currently all values are full 64-bit words.
 
 - `<address>` always denotes a hexadecimal number.
 
-- `<value>` can be either a hexadecimal or a decimal number. If it's not clear from the literal itself whether a given number is decimal or hexadecimal, `0x` can be used to explicitly prefix hexadecimal numbers.
+- `<value>` can be either a hexadecimal or a decimal number. If it's not clear from the literal itself whether a given number is decimal or hexadecimal, `0x` can be used to explicitly prefix hexadecimal numbers. Otherwise base 10 will be chosen as the default.
 
 - The names of all known registers can be found in the `reg_descriptors` table in `src/registers.h`.
 

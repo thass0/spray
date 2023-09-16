@@ -36,38 +36,32 @@ typedef enum {
   BREAK_LOC,
   DELETE_LOC,
   REGISTER_NAME,
-  REGISTER_OPERATION,
-  REGISTER_WRITE_VALUE,
-  MEMORY_ADDR,
-  MEMORY_OPERATION,
-  MEMORY_WRITE_VALUE,
   MEMORY_READ_ACTION,
   MEMORY_WRITE_ACTION,
   MEMORY_CONFIRM_READ_ACTION,
   REGISTER_READ_ACTION,
   REGISTER_WRITE_ACTION,
   REGISTER_CONFIRM_READ_ACTION,
-  REGISTER_PRINT_ACTION,
   VAR_NAME,
+  PRINT_LOC,
+  SET_LOC,
+  SET_VALUE,
 } ErrorCode;
 
 static const char* error_messages[] = {
   [BREAK_LOC]="location for break",
   [DELETE_LOC]="location for delete",
   [REGISTER_NAME]="register name for register operation",
-  [REGISTER_OPERATION]="register operation",
-  [REGISTER_WRITE_VALUE]="value for register write",
-  [MEMORY_ADDR]="address for memory operation",
-  [MEMORY_OPERATION]="memory operation",
-  [MEMORY_WRITE_VALUE]="value for memory write",
   [MEMORY_READ_ACTION]="read from tracee memory",
   [MEMORY_WRITE_ACTION]="write to tracee memory",
   [MEMORY_CONFIRM_READ_ACTION]="read from tracee memory to confirm successful write",
   [REGISTER_READ_ACTION]="read from tracee register",
   [REGISTER_WRITE_ACTION]="write to tracee register",
   [REGISTER_CONFIRM_READ_ACTION]="read from tracee register to confirm successful write",
-  [REGISTER_PRINT_ACTION]="read all tracee registers for register dump",
   [VAR_NAME]="variable name",
+  [PRINT_LOC]="location to print the value of",
+  [SET_LOC]="location to set the value of",
+  [SET_VALUE]="value to set the location to",
 };
 
 static inline void invalid_error(ErrorCode what) {
@@ -114,6 +108,18 @@ static inline void missing_source_error(dbg_addr addr) {
   printf("<No source info for PC ");
   print_addr(addr);
   printf(">\n");
+}
+
+static inline void warn_ident_with_reg_name(const char *ident) {
+  assert(ident != NULL);
+
+  x86_reg _reg_buf = 0;	/* Not used. */
+  bool valid_reg = get_register_from_name(ident, &_reg_buf);
+  if (valid_reg) {
+    printf("WARN: The variable name '%s' is also the name of a register.\n"
+	   "HINT: All register names start with a '%%'. Use '%%%s' to read the %s register instead.\n",
+	   ident, ident, ident);
+  }
 }
 
 
@@ -715,7 +721,7 @@ ExecResult step_over(Debugger *dbg) {
    that the write operation was successful. */
 #define WRITE_READ_MSG "(read after write)"
 
-void exec_command_memory_read(pid_t pid, real_addr addr) {
+void execmd_print_memory(pid_t pid, real_addr addr) {
   uint64_t read = { 0 };
   SprayResult res = pt_read_memory(pid, addr, &read);
   if (res == SP_OK) {
@@ -727,7 +733,7 @@ void exec_command_memory_read(pid_t pid, real_addr addr) {
   }
 }
 
-void exec_command_memory_write(pid_t pid, real_addr addr, uint64_t word) {
+void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word) {
   SprayResult write_res = pt_write_memory(pid, addr, word);
   if (write_res == SP_ERR) {
     internal_memory_error(MEMORY_WRITE_ACTION, addr);
@@ -746,7 +752,7 @@ void exec_command_memory_write(pid_t pid, real_addr addr, uint64_t word) {
   }
 }
 
-void exec_command_register_read(pid_t pid, x86_reg reg, const char *restrict reg_name) {
+void execmd_print_register(pid_t pid, x86_reg reg, const char *restrict reg_name) {
   uint64_t reg_word = 0;
   SprayResult res = get_register_value(pid, reg, &reg_word);
   if (res == SP_OK) {
@@ -758,10 +764,10 @@ void exec_command_register_read(pid_t pid, x86_reg reg, const char *restrict reg
   }
 }
 
-void exec_command_register_write(pid_t pid,
-				 x86_reg reg,
-				 const char *restrict reg_name,
-				 uint64_t word) {
+void execmd_set_register(pid_t pid,
+			 x86_reg reg,
+			 const char *restrict reg_name,
+			 uint64_t word) {
   SprayResult write_res = set_register_value(pid, reg, word);
   if (write_res == SP_ERR) {
     internal_register_error(REGISTER_WRITE_ACTION, reg);
@@ -779,121 +785,7 @@ void exec_command_register_write(pid_t pid,
   }
 }
 
-void exec_command_print(pid_t pid) {
-  char *buf = (char *) calloc (REGISTER_PRINT_BUF_SIZE, sizeof(char));
-  assert(buf != NULL);
-  size_t pos = 0;
-
-  for (size_t i = 0; i < N_REGISTERS; i++) {
-    reg_descriptor desc = reg_descriptors[i];
-
-    uint64_t reg_word = 0;
-    SprayResult res = get_register_value(pid, desc.r, &reg_word);
-    if (res == SP_ERR) {
-      free(buf);
-      internal_register_error(REGISTER_PRINT_ACTION, desc.r);
-      return;
-    }
-
-    snprintf(buf + pos,
-	     REGISTER_PRINT_LEN + 1,
-	     "\t%8s " HEX_FORMAT,
-	     desc.name,
-	     reg_word);
-
-    pos += REGISTER_PRINT_LEN;
-
-    // Always put two registers on the same line.
-    if (i % 2 == 1) {
-      buf[pos ++] = '\n';
-    }
-  }
-
-  assert(pos == REGISTER_PRINT_BUF_SIZE - 1);
-  buf[pos] = '\0';
-
-  puts(buf);
-  free(buf);
-}
-
-void exec_command_break(Breakpoints *breakpoints, real_addr addr) {
-  assert(breakpoints != NULL);
-  enable_breakpoint(breakpoints, addr);
-}
-
-void exec_command_delete(Breakpoints *breakpoints, real_addr addr) {
-  assert(breakpoints != NULL);
-  disable_breakpoint(breakpoints, addr);
-}
-
-/* Execute the instruction at the current breakpoint,
-   continue the tracee and wait until it receives the
-   next signal. */
-void exec_command_continue(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  ExecResult cont_res = continue_execution(dbg);
-  if (is_exec_err(&cont_res)) {
-    print_exec_res(dbg, cont_res);
-  } else {
-    ExecResult exec_res = wait_for_signal(dbg);
-    print_exec_res(dbg, exec_res);
-  }
-}
-
-void exec_command_single_step_instruction(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  ExecResult exec_res = single_step_instruction(dbg);
-  if (is_exec_err(&exec_res)) {
-    print_exec_res(dbg, exec_res);
-  } else {
-    print_current_source(dbg, false);
-  }
-}
-
-void exec_command_step_out(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  ExecResult exec_res = step_out(dbg);
-  print_exec_res(dbg, exec_res);
-}
-
-void exec_command_single_step(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  /* Single step instructions until the line number has changed. */
-  ExecResult exec_res = single_step_line(dbg);
-  if (is_exec_err(&exec_res)) {
-    print_exec_res(dbg, exec_res);
-  } else {
-    print_current_source(dbg, false);
-  }
-}
-
-void exec_command_step_over(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  ExecResult exec_res = step_over(dbg);
-  print_exec_res(dbg, exec_res);
-}
-
-void exec_command_backtrace(Debugger *dbg) {
-  assert(dbg != NULL);
-
-  CallFrame *backtrace = init_backtrace(get_dbg_pc(dbg),
-					dbg->load_address,
-					dbg->pid,
-					dbg->info);
-  if (backtrace == NULL) {
-    internal_error("Failed to determine backtrace");
-  } else {
-    print_backtrace(backtrace);
-  }
-  free_backtrace(backtrace);
-}
-
-void exec_command_print_variable(Debugger *dbg, const char *var_name) {
+void execmd_print_variable(Debugger *dbg, const char *var_name) {
   assert(dbg != NULL);
   assert(var_name != NULL);
 
@@ -920,23 +812,160 @@ void exec_command_print_variable(Debugger *dbg, const char *var_name) {
   /* Is this location a register number? */
   if (var_loc_reg(var_loc)) {
     x86_reg loc_reg = *var_loc_reg(var_loc);
-    get_register_value(dbg->pid, loc_reg, &value);
+    read_res = get_register_value(dbg->pid, loc_reg, &value);
   }
 
   if (read_res == SP_ERR) {
     internal_error("Found a variable %s, but failed to read its value", var_name);
   } else {
-    printf("%ld\n", (int64_t) value);
+    printf(MEM_READ_INDENT "%ld\n", (int64_t) value);
   }
 
   free(var_loc);
 }
 
+#define SET_VAR_WRITE_ERR "Found a variable %s, but failed to write its value"
+#define SET_VAR_READ_ERR "Wrote to variable %s, but failed to read its new value for validation"
+
+void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value) {
+  assert(dbg != NULL);
+  assert(var_name != NULL);
+
+  VarLocation *var_loc = get_var_loc(get_dbg_pc(dbg),
+				     dbg->load_address,
+				     var_name,
+				     dbg->pid,
+				     dbg->info);
+
+  if (var_loc == NULL) {
+    internal_error("Failed to find a variable called %s", var_name);
+    return;
+  }
+
+  uint64_t value_after = 0;
+  SprayResult res = SP_ERR;
+
+  /* Is this location a memory address? */
+  if (var_loc_addr(var_loc)) {
+    real_addr loc_addr = *var_loc_addr(var_loc);
+    res = pt_write_memory(dbg->pid, loc_addr, value);
+    if (res == SP_ERR) {
+      internal_error(SET_VAR_WRITE_ERR, var_name);
+      return;
+    }
+
+    res = pt_read_memory(dbg->pid, loc_addr, &value_after);
+    if (res == SP_ERR) {
+      internal_error(SET_VAR_READ_ERR, var_name);
+      return;
+    }
+  }
+
+  /* Is this location a register number? */
+  if (var_loc_reg(var_loc)) {
+    x86_reg loc_reg = *var_loc_reg(var_loc);
+    res = set_register_value(dbg->pid, loc_reg, value);
+    if (res == SP_ERR) {
+      internal_error(SET_VAR_WRITE_ERR, var_name);
+      return;
+    }
+
+    res = get_register_value(dbg->pid, loc_reg, &value_after);
+    if (res == SP_ERR) {
+      internal_error(SET_VAR_READ_ERR, var_name);
+      return;
+    }
+  }
+
+  /* Print the value that's been read after the write. */
+  printf(MEM_READ_INDENT "%ld " WRITE_READ_MSG "\n", (int64_t) value);
+
+  free(var_loc);
+}
+
+void execmd_break(Breakpoints *breakpoints, real_addr addr) {
+  assert(breakpoints != NULL);
+  enable_breakpoint(breakpoints, addr);
+}
+
+void execmd_delete(Breakpoints *breakpoints, real_addr addr) {
+  assert(breakpoints != NULL);
+  disable_breakpoint(breakpoints, addr);
+}
+
+/* Execute the instruction at the current breakpoint,
+   continue the tracee and wait until it receives the
+   next signal. */
+void execmd_continue(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  ExecResult cont_res = continue_execution(dbg);
+  if (is_exec_err(&cont_res)) {
+    print_exec_res(dbg, cont_res);
+  } else {
+    ExecResult exec_res = wait_for_signal(dbg);
+    print_exec_res(dbg, exec_res);
+  }
+}
+
+void execmd_inst(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  ExecResult exec_res = single_step_instruction(dbg);
+  if (is_exec_err(&exec_res)) {
+    print_exec_res(dbg, exec_res);
+  } else {
+    print_current_source(dbg, false);
+  }
+}
+
+void execmd_leave(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  ExecResult exec_res = step_out(dbg);
+  print_exec_res(dbg, exec_res);
+}
+
+void execmd_step(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  /* Single step instructions until the line number has changed. */
+  ExecResult exec_res = single_step_line(dbg);
+  if (is_exec_err(&exec_res)) {
+    print_exec_res(dbg, exec_res);
+  } else {
+    print_current_source(dbg, false);
+  }
+}
+
+void execmd_next(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  ExecResult exec_res = step_over(dbg);
+  print_exec_res(dbg, exec_res);
+}
+
+void execmd_backtrace(Debugger *dbg) {
+  assert(dbg != NULL);
+
+  CallFrame *backtrace = init_backtrace(get_dbg_pc(dbg),
+					dbg->load_address,
+					dbg->pid,
+					dbg->info);
+  if (backtrace == NULL) {
+    internal_error("Failed to determine backtrace");
+  } else {
+    print_backtrace(backtrace);
+  }
+  free_backtrace(backtrace);
+}
+
+
 // ===============
 // Command Parsing
 // ===============
 
-static inline const char *get_next_token(char *const *tokens, size_t *i) {
+static inline const char *next_token(char *const *tokens, size_t *i) {
   assert(i != NULL);
   const char *ret = tokens[*i];
   if (ret  == NULL) {
@@ -956,28 +985,34 @@ static inline bool end_of_tokens(char *const *tokens, size_t i) {
   }
 }
 
-bool is_command(
-  const char *restrict in,
-  const char *restrict short_from,
-  const char *restrict long_form
-) {
+bool is_command(const char *restrict in,
+		char short_form,
+		const char *restrict long_form) {
   if (in != NULL) {
-    return (strcmp(in, short_from) == 0)
+    return (strlen(in) == 1 && in[0] == short_form)
       || (strcmp(in, long_form) == 0);
   } else {
     return false;
   }
 }
 
-SprayResult parse_base16(const char *restrict str, uint64_t *store) {
+SprayResult parse_num(const char *restrict str, uint64_t *store, uint8_t base) {
   char *str_end;
-  uint64_t value = strtol(str, &str_end, 16);
+  uint64_t value = strtol(str, &str_end, base);
   if (str[0] != '\0' && *str_end == '\0') {
     *store = value;
     return SP_OK;
   } else {
     return SP_ERR;
-  }
+  }  
+}
+
+SprayResult parse_base16(const char *restrict str, uint64_t *store) {
+  return parse_num(str, store, 16);
+}
+
+SprayResult parse_base10(const char *restrict str, uint64_t *store) {
+  return parse_num(str, store, 10);
 }
 
 bool is_valid_identifier(const char *ident) {
@@ -996,7 +1031,7 @@ bool is_valid_identifier(const char *ident) {
   int match = regexec(&ident_regex,
                       ident,
                       0,     // We are not interested
-                      NULL,  // in any subexpressions.
+                      NULL,  // in any sub-expressions.
                       0);
   regfree(&ident_regex);
   if (match == 0) {
@@ -1006,7 +1041,7 @@ bool is_valid_identifier(const char *ident) {
   }
 }
 
-SprayResult check_file_line(const char *file_line) {
+SprayResult is_file_with_line(const char *file_line) {
   regex_t file_line_regex;
   int comp_res = regcomp(&file_line_regex,
                          "^[^:]+:[0-9]+$",
@@ -1047,7 +1082,7 @@ SprayResult parse_break_location(Debugger dbg,
     return function_start_addr(func, dbg.info, dest);
   } else if (parse_base16(location, &dest->value) == SP_OK) {
     return SP_OK;
-  } else if (check_file_line(location) == SP_OK) {
+  } else if (is_file_with_line(location) == SP_OK) {
     char *location_cpy = strdup(location);
     const char *filepath = strtok(location_cpy, ":");
     assert(filepath != NULL);  // OK since `location` was validated.
@@ -1119,14 +1154,14 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
   assert(tokens != NULL);
 
   size_t i = 0;
-  const char *cmd = get_next_token(tokens, &i);
+  const char *cmd = next_token(tokens, &i);
 
   do {
-    if (is_command(cmd, "c", "continue")) {
+    if (is_command(cmd, 'c', "continue")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_continue(dbg);
-    } else if (is_command(cmd, "b", "break")) {
-      const char *loc_str = get_next_token(tokens, &i);
+      execmd_continue(dbg);
+    } else if (is_command(cmd, 'b', "break")) {
+      const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
         missing_error(BREAK_LOC);
       } else {
@@ -1135,13 +1170,13 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
           if (!end_of_tokens(tokens, i)) {
             break;	    
 	  }
-          exec_command_break(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
+          execmd_break(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
           invalid_error(BREAK_LOC);
         }
       }
-    } else if (is_command(cmd, "d", "delete")) {
-      const char *loc_str = get_next_token(tokens, &i);
+    } else if (is_command(cmd, 'd', "delete")) {
+      const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
         missing_error(DELETE_LOC);
       } else {
@@ -1149,135 +1184,106 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
         if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
           if (!end_of_tokens(tokens, i))
             break;
-          exec_command_delete(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
+          execmd_delete(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
           invalid_error(DELETE_LOC);
         }
       }
-    } else if (is_command(cmd, "r", "register")) {
-      const char *name = get_next_token(tokens, &i);
-      x86_reg reg;
-      if (name == NULL) {
-        missing_error(REGISTER_NAME);
-        break;
-      } else if (is_command(name, "dump", "print")) {
-        if (!end_of_tokens(tokens, i)) break;
-        /* This is an exception: instead of a name the register
-         * operation could also be followed by a `dump`/`print` command.
-         */
-        exec_command_print(dbg->pid);
-        break;
-      } else {
-        /* Read the register of interest. */
-        x86_reg reg_buf;
-        bool found_register = get_register_from_name(name, &reg_buf);
-        if (found_register) {
-          reg = reg_buf;
-        } else {
-          invalid_error(REGISTER_NAME);
-          break;
-        }
+    }
+
+    else if (is_command(cmd, 'p', "print")) {
+      const char *loc_str = next_token(tokens, &i);
+      if (loc_str == NULL) {
+	missing_error(PRINT_LOC);
+	break;
       }
 
-      const char *op_str = get_next_token(tokens, &i);
-      if (op_str == NULL) {
-        missing_error(REGISTER_OPERATION);
-      } else {
-        if (is_command(op_str, "rd", "read")) {
-          if (!end_of_tokens(tokens, i)) break;
-          /* Read */
-          exec_command_register_read(dbg->pid, reg, name);
-        } else if (is_command(op_str, "wr", "write")) {
-          /* Write */
-          const char *value_str = get_next_token(tokens, &i);
-          if (value_str == NULL) {
-            missing_error(REGISTER_WRITE_VALUE);
-          } else {
-            uint64_t word;
-            if (parse_base16(value_str, &word) == SP_OK) {
-              if (!end_of_tokens(tokens, i)) break;
-              exec_command_register_write(dbg->pid, reg, name, word);
-            } else {
-              invalid_error(REGISTER_WRITE_VALUE);
-            }
-          }
-        } else {
-          invalid_error(REGISTER_OPERATION);
-        }
-      }
-    } else if (is_command(cmd, "m", "memory")) {
-      const char *addr_str = get_next_token(tokens, &i);
-      real_addr addr;
-      if (addr_str == NULL) {
-        missing_error(MEMORY_ADDR);
-        break;
-      } else {
-        real_addr addr_buf;
-        if (parse_base16(addr_str, &addr_buf.value) == SP_OK) {
-          addr = addr_buf;
-        } else {
-          invalid_error(MEMORY_ADDR);
-          break;
-        }
+      if (!end_of_tokens(tokens, i)) {
+	break;
       }
 
-      const char *op_str = get_next_token(tokens, &i);
-      if (op_str == NULL) {
-        missing_error(MEMORY_OPERATION);
-      } else if (is_command(op_str, "rd", "read")) {
-        if (!end_of_tokens(tokens, i)) break;
-        /* Read */
-        exec_command_memory_read(dbg->pid, addr);
-      } else if (is_command(op_str, "wr", "write")) {
-        const char *value_str = get_next_token(tokens, &i);
-        if (value_str == NULL) {
-          missing_error(MEMORY_WRITE_VALUE);
-        } else {
-          uint64_t word;
-          if (parse_base16(value_str, &word) == SP_OK) {
-            if (!end_of_tokens(tokens, i)) break;
-            exec_command_memory_write(dbg->pid, addr, word);
-          } else {
-            invalid_error(MEMORY_WRITE_VALUE);
-          }
-        }
-      } else {
-        invalid_error(MEMORY_OPERATION);
-      }
-    } else if (is_command(cmd, "p", "print")) {
-      const char *var_name = get_next_token(tokens, &i);
-      if (var_name == NULL) {
-	missing_error(VAR_NAME);
-      } else {
-	if (is_valid_identifier(var_name) && end_of_tokens(tokens, i)) {
-	  exec_command_print_variable(dbg, var_name);
-	} else if (!is_valid_identifier(var_name)) {
-	  invalid_error(VAR_NAME);
+      real_addr addr = {0};
+      if (loc_str[0] == '%') {
+	const char *reg_name = loc_str + 1;
+	x86_reg reg = 0;
+	bool valid_reg = get_register_from_name(reg_name, &reg);
+	if (valid_reg) {
+	  execmd_print_register(dbg->pid, reg, reg_name);
 	} else {
-	  /* `end_of_tokens` handles printing the error if we land here. */
-	  break;
+	  invalid_error(REGISTER_NAME);
 	}
+      } else if (is_valid_identifier(loc_str)) {
+	/* Warn if the identifier is also the name of a register. */
+	warn_ident_with_reg_name(loc_str);
+	execmd_print_variable(dbg, loc_str);
+      } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
+	execmd_print_memory(dbg->pid, addr);
+      } else {
+	invalid_error(PRINT_LOC);
       }
-    } else if (is_command(cmd, "i", "inst")) {
+    } else if (is_command(cmd, 't', "set")) {
+      const char *loc_str = next_token(tokens, &i);
+      if (loc_str == NULL) {
+	missing_error(SET_LOC);
+	break;
+      }
+
+      const char *value_str = next_token(tokens, &i);
+      if (value_str == NULL) {
+	missing_error(SET_VALUE);
+	break;
+      }
+
+      if (!end_of_tokens(tokens, i)) {
+	break;
+      }
+
+      uint64_t value = 0;
+      if (parse_base10(value_str, &value) == SP_ERR
+	  && parse_base16(value_str, &value) == SP_ERR) {
+	invalid_error(SET_VALUE);
+	break;
+      }
+
+      real_addr addr = {0};
+      if (loc_str[0] == '%') {
+	const char *reg_name = loc_str + 1;
+	x86_reg reg = 0;
+	bool valid_reg = get_register_from_name(reg_name, &reg);
+	if (valid_reg) {
+	  execmd_set_register(dbg->pid, reg, reg_name, value);
+	} else {
+	  invalid_error(REGISTER_NAME);
+	}
+      } else if (is_valid_identifier(loc_str)) {
+	execmd_set_variable(dbg, loc_str, value);
+      } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
+	execmd_set_memory(dbg->pid, addr, value);
+      } else {
+	invalid_error(SET_LOC);
+      }
+    }
+
+    else if (is_command(cmd, 'i', "inst")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_single_step_instruction(dbg);
-    } else if (is_command(cmd, "l", "leave")) {
+      execmd_inst(dbg);
+    } else if (is_command(cmd, 'l', "leave")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_step_out(dbg);
-    } else if (is_command(cmd, "s", "step")) {
+      execmd_leave(dbg);
+    } else if (is_command(cmd, 's', "step")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_single_step(dbg);
-    } else if (is_command(cmd, "n", "next")) {
+      execmd_step(dbg);
+    } else if (is_command(cmd, 'n', "next")) {
       if (!end_of_tokens(tokens, i)) break;
-      exec_command_step_over(dbg);
-    } else if (is_command(cmd, "bt", "backtrace")) {
-      exec_command_backtrace(dbg);
+      execmd_next(dbg);
+    } else if (is_command(cmd, 'a', "backtrace")) {
+      execmd_backtrace(dbg);
     } else {
       unknown_cmd_error();
     }
   } while (0); /* Only run this block once. The
-   * loop is only used to make `break` available
-   * for  skipping subsequent steps on error. */
+     loop is only used to make `break` available
+     for  skipping subsequent steps on error. */
 }
 
 void handle_debug_command(Debugger *dbg, const char *line) {
@@ -1286,7 +1292,7 @@ void handle_debug_command(Debugger *dbg, const char *line) {
 
   char **tokens = get_command_tokens(line);
   size_t i = 0;
-  const char *first_token = get_next_token(tokens, &i);
+  const char *first_token = next_token(tokens, &i);
 
   /* Is the command empty? */
   if (first_token == NULL) {

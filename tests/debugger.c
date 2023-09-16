@@ -65,19 +65,19 @@ TEST_VARLOC(varloc_fbreg_works1, RECURRING_VARIABLES_BIN, "c", 0x401124, 9)
 TEST_VARLOC(varloc_addr_works, RECURRING_VARIABLES_BIN, "a", 0x401124, 3)
 
 
-extern SprayResult check_file_line(const char *file_line);
+extern SprayResult is_file_with_line(const char *file_line);
 
 TEST(file_line_check_works) {
-  SprayResult res = check_file_line("this/is/a/file:2578");
+  SprayResult res = is_file_with_line("this/is/a/file:2578");
   assert_int(res, ==, SP_OK);
 
-  res = check_file_line("this/is/a/filename/without/a/line");
+  res = is_file_with_line("this/is/a/filename/without/a/line");
   assert_int(res, ==, SP_ERR);
 
-  res = check_file_line("710985");
+  res = is_file_with_line("710985");
   assert_int(res, ==, SP_ERR);
 
-  res = check_file_line("src/blah/test.c74");
+  res = is_file_with_line("src/blah/test.c74");
   assert_int(res, ==, SP_ERR);
 
   return MUNIT_OK;

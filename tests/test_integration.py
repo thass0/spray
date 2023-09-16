@@ -105,44 +105,44 @@ class TestStepCommands:
 
 class TestRegisterCommands:
     def test_register_read(self):
-        assert_lit('r rip rd', '     rip 0x000000000040114f')
-        assert_lit('register rip read', '     rip 0x000000000040114f')
+        assert_lit('p %rip', '     rip 0x000000000040114f')
+        assert_lit('print %rip', '     rip 0x000000000040114f')
 
     def test_register_command_errors(self):
-        assert_lit('r rax', 'Missing register operation')
-        assert_lit('r rax ' + random_string(), 'Invalid register operation')
-        assert_lit('r rax rd 0xdeadbeef', 'Trailing characters in command')
-        assert_lit('registre rax rd', 'I don\'t know that')
+        assert_lit('t %rax', 'Missing value to set the location to')
+        assert_lit('t %rax ' + random_string(), 'Invalid value to set the location to')
+        assert_lit('t %rax 0xc0ffee 0xbeef', 'Trailing characters in command')
+        assert_lit('ste %rax 0x31', 'I don\'t know that')
 
     def test_register_write(self):
-        assert_lit('r rax wr 0x123',
-                   '     rax 0x0000000000000123 (read after write)')
-        assert_lit('register rbx write 0xdeadbeef',
+        assert_lit('t %rax 123',
+                   '     rax 0x000000000000007b (read after write)')
+        assert_lit('set %rbx 0xdeadbeef',
                    '     rbx 0x00000000deadbeef (read after write)')
 
-    def test_register_dump(self):
-        dump_end = 'gs 0x00000000000000'
-        assert_lit('register dump', dump_end)
-        assert_lit('r dump', dump_end)
-        assert_lit('r print', dump_end)
-
+    def test_register_name_conflict(self):
+        assert_ends_with('p rax', """\
+WARN: The variable name 'rax' is also the name of a register.
+HINT: All register names start with a '%'. Use '%rax' to read the rax register instead.
+💢 Failed to find a variable called rax
+""")
 
 class TestMemoryCommands:
     def test_memory_read(self):
-        assert_lit('m 0x00007ffff7fe53b0 rd', '         0x00000c98e8e78948')
-        assert_lit('memory 0x00007ffff7fe53ba read',
-                   '         0xd6894824148b48c4')
+        assert_lit('p 0x403020', '         0xfffff04000000048')
+        assert_lit('print 0x403020',
+                   '         0xfffff04000000048')
 
     def test_memory_command_errors(self):
-        assert_lit('m 0x123', 'Missing memory operation')
-        assert_lit('m 0x123 ' + random_string(), 'Invalid memory operation')
-        assert_lit('m 0x123 read 0xdeadbeef', 'Trailing characters in command')
-        assert_lit('memroy 0x12 wr 0x34', 'I don\'t know that')
+        assert_lit('t 0x123', 'Missing value to set the location to')
+        assert_lit('t 0x123 ' + random_string(), 'Invalid value to set the location to')
+        assert_lit('t 0x123 0xc0ffee 0xbeef', 'Trailing characters in command')
+        assert_lit('ste 0xc0ffee 0x31', 'I don\'t know that')
 
     def test_memory_write(self):
-        assert_lit('m 0x00007ffff7fe53b0 wr 0xdecafbad',
+        assert_lit('t 0x00007ffff7fe53b0 0xdecafbad',
                    '         0x00000000decafbad (read after write)')
-        assert_lit('memory 0x00007ffff7fe53a5 write 0xbadeaffe',
+        assert_lit('set 0x00007ffff7fe53a5 0xbadeaffe',
                    '         0x00000000badeaffe (read after write)')
 
 
@@ -280,24 +280,24 @@ class TestCLI:
 
 class TestBacktrace:
     def test_basic_backtrace(self):
-        assert_ends_with('b add\nc\nbt', """\
+        assert_ends_with('b add\nc\nbacktrace', """\
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df6c0b <?>
-  0x00007ffff7df6b4a <?>
+  0x00007ffff7df5c4b <?>
+  0x00007ffff7df5b8a <?>
   0x00000000004011be main:17
   0x0000000000401183 mul:11
   0x000000000040113a add:4
 """, FRAME_POINTER_BIN)
 
-        assert_ends_with('b add\nc\nbt', """\
+        assert_ends_with('b add\nc\na', """\
 WARN: it seems like this executable doesn't maintain a frame pointer.
       This results in incorrect or incomplete backtraces.
 HINT: Try to compile again with `-fno-omit-frame-pointer`.
 
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df6c0b <?>
+  0x00007ffff7df5c4b <?>
   0x0000000000401138 add:4
 """, NO_FRAME_POINTER_BIN)
 
