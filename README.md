@@ -77,14 +77,39 @@ Spray's REPL offers the following commands. You can view them by running `spray 
 
 ### Reading and writing values
 
-| Command      | Argument(s)          | Description                                             |
-|--------------|----------------------|---------------------------------------------------------|
-| `print`, `p` | `<variable>`         | Print the value of the runtime variable.                |
-|              | `<register>`         | Print the value of the register.                        |
-|              | `<address>`          | Print the value of the program's memory at the address. |
-| `set`, `t`   | `<variable> <value>` | Set the value of the runtime variable.                  |
-|              | `<register> <value>` | Set the value of the register.                          |
-|              | `<address> <value>`  | Set the value of the program's memory at the address.   |
+<table>
+    <tr>
+        <td>Command</td>
+        <td>Argument(s)</td>
+        <td>Description</td>
+    </tr>
+    <tr>
+        <td rowspan="3"><code>print</code>, <code>p</code></td>
+        <td><code>&lt;variable&gt;</code></td>
+        <td>Print the value of the runtime variable.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;register&gt;</code></td>
+        <td>Print the value of the register.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;address&gt;</code></td>
+        <td>Print the value of the program&#39;s memory at the address.</td>
+    </tr>
+    <tr>
+        <td rowspan="3"><code>set</code>, <code>t</code></td>
+        <td><code>&lt;variable&gt; &lt;value&gt;</code></td>
+        <td>Set the value of the runtime variable.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;register&gt; &lt;value&gt;</code></td>
+        <td>Set the value of the register.</td>
+    </tr>
+    <tr>
+	<td><code>&lt;address&gt; &lt;value&gt;</code></td>
+        <td>Set the value of the program&#39;s memory at the address.</td>
+    </tr>
+</table>
 
 Register names are prefixed with a `%`, akin to the AT&T assembly syntax. This avoids name conflicts between register names and variable names. For example, to read the value of `rax`, use `print %rax`. You can find a table of all available register names in `src/registers.h`.
 
@@ -94,15 +119,44 @@ An `<address>` is always a hexadecimal number. The prefix `0x` is again optional
 
 ### Breakpoints
 
-| Command         | Argument(s)     | Description                                   |
-|-----------------|-----------------|-----------------------------------------------|
-| `break`, `b`    | `<function>`    | Set a breakpoint on the function.             |
-|                 | `<file>:<line>` | Set a breakpoint on the line in the file.     |
-|                 | `<address>`     | Set a breakpoint on the address.              |
-| `delete`, `d`   | `<function>`    | Delete a breakpoint on the function.          |
-|                 | `<file>:<line>` | Delete a breakpoint on the line in the file.  |
-|                 | `<address>`     | Delete a breakpoint on the address.           |
-| `continue`, `c` |                 | Continue execution until the next breakpoint. |
+<table>
+    <tr>
+        <td>Command</td>
+        <td>Argument(s)</td>
+        <td>Description</td>
+    </tr>
+    <tr>
+        <td rowspan="3"><code>break</code>, <code>b</code></td>
+        <td><code>&lt;function&gt;</code></td>
+        <td>Set a breakpoint on the function.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;file&gt;:&lt;line&gt;</code></td>
+        <td>Set a breakpoint on the line in the file.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;address&gt;</code></td>
+        <td>Set a breakpoint on the address.</td>
+    </tr>
+    <tr>
+        <td rowspan="3"><code>delete</code>, <code>d</code></td>
+        <td><code>&lt;function&gt;</code></td>
+        <td>Delete a breakpoint on the function.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;file&gt;:&lt;line&gt;</code></td>
+        <td>Delete a breakpoint on the line in the file.</td>
+    </tr>
+    <tr>
+        <td><code>&lt;address&gt;</code></td>
+        <td>Delete a breakpoint on the address.</td>
+    </tr>
+    <tr>
+        <td><code>continue</code>, <code>c</code></td>
+        <td></td>
+        <td>Continue execution until the next breakpoint.</td>
+    </tr>
+</table>
 
 It's possible that the location passed to `break`, `delete`, `print`, or `set` is both a valid function name and a valid hexadecimal address. For example, `add` could refer to a function called `add` and the number `0xadd`. In such a case, the default is to interpret the location as a function name. Use the prefix `0x` to explicitly specify an address.
 
