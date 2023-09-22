@@ -375,10 +375,8 @@ bool callback__find_subprog_name_by_pc(Dwarf_Debug dbg,
       return false;
     } else {
       /* Found PC in this DIE. */
-      Dwarf_Half attrnum = DW_AT_name;
       char *attr_buf;
-      res = dwarf_die_text(die, attrnum,
-        &attr_buf, &error);
+      res = dwarf_die_text(die, DW_AT_name, &attr_buf, &error);
 
       if (res == DW_DLV_OK) {
         size_t len = strlen(attr_buf);
@@ -460,6 +458,7 @@ bool sd_get_line_context(Dwarf_Debug dbg, Dwarf_Die cu_die, Dwarf_Line_Context *
   return true;
 }
 
+/* Table of line entries. */
 typedef struct {
   bool is_set;
   LineEntry *lines;
@@ -483,7 +482,8 @@ void sd_free_line_table(LineTable *line_table) {
   *line_table = (LineTable) { 0 };
 }
 
-int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry *line_entry,
+int sd_line_entry_from_dwarf_line(Dwarf_Line line,
+				  LineEntry *line_entry,
                                   Dwarf_Error *error) {
   assert(line != NULL);
   assert(error != NULL);
@@ -491,8 +491,9 @@ int sd_line_entry_from_dwarf_line(Dwarf_Line line, LineEntry *line_entry,
   int res = DW_DLV_OK;
 
   Dwarf_Unsigned lineno;
-  res = dwarf_lineno(line, &lineno,
-    error);
+  res = dwarf_lineno(line,
+		     &lineno,
+		     error);
 
   if (res != DW_DLV_OK) { return res; }
 
@@ -605,7 +606,7 @@ char *sd_get_filepath(Dwarf_Debug dbg, Dwarf_Die die) {
     strcat(filepath, file_name);
     return filepath;
   } else if (sd_has_at(dbg, die, DW_AT_decl_file)) {
-    /* Get file and dir name for normal DIE. */
+    /* Get file and dir name for normal DIEs. */
     char *decl_file = NULL;
     res = dwarf_die_text(die, DW_AT_decl_file, &decl_file, &error);
     if (res != DW_DLV_OK) {
@@ -717,13 +718,137 @@ bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
   }
 }
 
+
+/*
+  Get the CU die of the CU that the given DIE is part of.
+  See section 9.50 in the libdwarf docs for the details
+  of how this works.
+
+  On success `SP_OK` is returned and `cu_die` is made to
+  point to the allocated CU DIE. Then, `cu_die` must be
+  free'd using `dwarf_dealloc_die`.
+
+  On error `SP_ERR` is returned and `cu_die` remains unchanged.
+
+  `dbg`, `die` and `cu_die` must not be `NULL`.
+*/
+SprayResult sd_get_cu_of_die(Dwarf_Debug dbg,
+			     Dwarf_Die die,
+			     Dwarf_Die *cu_die) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(cu_die != NULL);
+
+  int res = 0;
+  Dwarf_Error error = NULL;
+
+  Dwarf_Off cu_offset = 0;
+  res = dwarf_CU_dieoffset_given_die(die, &cu_offset, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  Dwarf_Die cu_die_buf = NULL;
+  res = dwarf_offdie_b(dbg, cu_offset, true, &cu_die_buf, &error);
+
+  /*
+   Try again, this time checking `.debug_types` instead of
+   `.debug_info` if there was no entry found in `.debug_info`.
+  */
+  if (res == DW_DLV_NO_ENTRY) {
+    res = dwarf_offdie_b(dbg, cu_offset, false, &cu_die_buf, &error);
+  }
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  *cu_die = cu_die_buf;
+  
+  return SP_OK;
+}
+
+
+/*
+  Retrieve the list of source files which is found
+  in the line table header of the line table for the
+  given DIE.
+
+  On success `SP_OK` is returned, `files` is set to point
+  to an array of file paths, and `n_files` is set to the
+  length of that array. Each `files` itself, and each
+  `files[i]` must be free'd using `dwarf_dealloc`. See
+  section 9.59 of the libdwarf docs for details.
+
+  On error `SP_ERR` is returned, and both `files` and
+  `n_files` remain unchanged.
+
+  `dbg`, `die`, `files`, and `n_files` most not be `NULL`.
+ */
+SprayResult sd_get_die_source_files(Dwarf_Debug dbg,
+				    Dwarf_Die die,
+				    char ***files,
+				    unsigned *n_files) {
+  assert(dbg != NULL);
+  assert(die != NULL);
+  assert(files != NULL);
+  assert(n_files != NULL);
+
+  /*
+   Get the CU DIE of the CU that the given DIE is part of.
+  */
+  Dwarf_Die cu_die = NULL;
+  SprayResult cu_res = sd_get_cu_of_die(dbg, die, &cu_die);
+  if (cu_res == SP_ERR) {
+    return SP_ERR;
+  }
+
+  int res = 0;
+  Dwarf_Error error = NULL;
+
+  /*
+   Get the list of source files found in
+   this CU's line table program header.
+  */
+  char **files_buf = NULL;
+  Dwarf_Signed n_files_buf = 0;
+  res = dwarf_srcfiles(cu_die, &files_buf, &n_files_buf, &error);
+
+  if (res  != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  /*
+   The libdwarf docs say that `n_files_buf` is non-negative
+   (see the parameter description of dw_filecount in section 9.11.2.1).
+  */
+  assert(n_files_buf >= 0);
+
+  *files = files_buf;
+  *n_files = n_files_buf;
+
+  return SP_OK;
+}
+
 /* Check to see if the given attribute has a DWARF form
-   that can be used with `dwarf_get_loclist_c`. The libdwarf
-   docs for `dwarf_get_loclist_c` describe this procedure. */
+   that can be used with `dwarf_get_loclist_c`.
+
+   The libdwarf docs for `dwarf_get_loclist_c` describe
+   how this function works. */
 SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
 			     Dwarf_Die die,
-			     Dwarf_Attribute attr,
-			     SdLocAttr *attr_dest) {
+			     Dwarf_Attribute loc,
+			     SdLocattr *attr_dest) {
   int res = DW_DLV_OK;
   Dwarf_Half version = 0;
   Dwarf_Half offset_size = 0;
@@ -735,7 +860,7 @@ SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
     Dwarf_Error error = NULL;
 
     Dwarf_Half form = 0;
-    res = dwarf_whatform(attr, &form, &error);
+    res = dwarf_whatform(loc, &form, &error);
     if (res != DW_DLV_OK) {
       if (res == DW_DLV_ERROR) {
 	dwarf_dealloc_error(dbg, error);
@@ -744,7 +869,7 @@ SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
     }
 
     Dwarf_Half num = 0;
-    res = dwarf_whatattr(attr, &num, &error);
+    res = dwarf_whatattr(loc, &num, &error);
     if (res != DW_DLV_OK) {
       if (res == DW_DLV_ERROR) {
 	dwarf_dealloc_error(dbg, error);
@@ -760,8 +885,8 @@ SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
 	|| class == DW_FORM_CLASS_LOCLIST
 	|| class == DW_FORM_CLASS_LOCLISTSPTR
 	|| class == DW_FORM_CLASS_BLOCK) {
-      *attr_dest = (SdLocAttr) {
-	.attr=attr
+      *attr_dest = (SdLocattr) {
+	.loc=loc,
       };
       return SP_OK;
     } else {
@@ -798,7 +923,7 @@ bool callback_find_subprog_loc_attr_by_subprog_name(Dwarf_Debug dbg,
       }
       return false;
     } else {
-      SdLocAttr *loc_attr = search_findings.data;
+      SdLocattr *loc_attr = search_findings.data;
       SprayResult res = sd_init_loc_attr(dbg,
 					 die,
 					 attr,
@@ -823,7 +948,7 @@ bool callback_find_subprog_loc_attr_by_subprog_name(Dwarf_Debug dbg,
 SprayResult sd_get_subprog_loc_attr(Dwarf_Debug dbg,
 				    const char *subprog_name,
 				    Dwarf_Half attr_num,
-				    SdLocAttr *loc_dest) {
+				    SdLocattr *loc_dest) {
   assert(dbg != NULL);
   assert(subprog_name != NULL);
 
@@ -833,7 +958,7 @@ SprayResult sd_get_subprog_loc_attr(Dwarf_Debug dbg,
     .name = subprog_name,
     .attr_num = attr_num,
   };
-  SdLocAttr loc_attr = {NULL};
+  SdLocattr loc_attr = {NULL};
 
   int res = sd_search_dwarf_dbg(dbg,
 				&error,
@@ -871,7 +996,9 @@ typedef struct VarLocSearchFor {
 typedef struct VarLocSearchFindings {
   bool in_scope;
   unsigned scope_level;
-  SdLocAttr attr;
+  SdLocattr loc_attr;
+  char *decl_file;
+  unsigned decl_line;
 } VarLocSearchFindings;
 
 /* Search callback used in combination with `sd_search_dwarf_die` that
@@ -921,8 +1048,11 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
     }    
   }
 
-  /* If the scope is used we must be in scope to look for a variable.
-     Otherwise, if the scope is ignored, it doesn't matter if we're in scope. */
+  /*
+   If the scope is used we must be in scope to look
+   for a variable. Otherwise, if the scope is ignored,
+   it doesn't matter if we're in scope.
+  */
   if (!var_search_for->use_scope
       || (var_search_for->use_scope && var_search_findings->in_scope)) {
 
@@ -931,7 +1061,10 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 
     bool location_attr = sd_has_at(dbg, die, DW_AT_location);
 
-    /* Is the given DIE a `DW_TAG_variable` and does it contain the `DW_AT_location` attribute? */
+    /*
+     Is the given DIE a `DW_TAG_variable` and does
+     it contain the `DW_AT_location` attribute?
+    */
     if (correct_tag && location_attr) {
       const char *var_name = var_search_for->var_name;
 
@@ -942,29 +1075,114 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
       res = dwarf_diename(die, &die_var_name, &error);
 
       if (res == DW_DLV_OK && strcmp(var_name, die_var_name) == 0) {
-	/* Retrieve the `location` attribute of this DIE. */
-	Dwarf_Attribute attr = NULL;
-	res = dwarf_attr(die, DW_AT_location, &attr, &error);
+	/*
+	 1. Retrieve the path to the file where this variables was declared.
+	*/
+	Dwarf_Attribute file_attr = NULL;
+	res = dwarf_attr(die, DW_AT_decl_file, &file_attr, &error);
+
+	/*
+	 Here the error is ignored. `decl_file` can just stay
+	 NULL, indicating that we couldn't find it. The same
+	 is true for the line number. Both are optional.
+	*/
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	  error = NULL;
+	}
+
+	/*
+	 DWARF 5 standard section 2.14:
+	 [...] The value of the DW_AT_decl_file attribute corresponds
+	 to a file number from the line number information table for
+	 the [CU] containing the [DIE] and represents the source file
+	 in which the declaration appeared [...]. The value 0 indicates
+	 that no source file has been specified. [...]
+	*/
+
+	Dwarf_Unsigned decl_file_num = 0;
+	res = dwarf_formudata(file_attr, &decl_file_num, &error);
+
+	char *decl_file = NULL;
+	
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	  error = NULL;
+	} else if (decl_file_num != 0) {
+	  char **files = NULL;
+	  unsigned n_files = 0;
+	  SprayResult res = sd_get_die_source_files(dbg, die, &files, &n_files);
+
+	  /*
+	   `DW_AT_decl_file` starts counting at 1, but clang doesn't
+	   include an additional entry at the start to make the file
+	   path list 1-based. Only `gcc` does.
+	  */
+	  Dwarf_Unsigned files_idx = decl_file_num - 1;
+	  if (res == SP_OK && files_idx < n_files) {
+	    /* Copy only the file path of interest. */
+
+	    decl_file = strdup(files[files_idx]);
+	    assert(decl_file != NULL);
+
+	    for (unsigned i = 0; i < n_files; i++) {
+	      dwarf_dealloc(dbg, files[i], DW_DLA_STRING);
+	    }
+	    dwarf_dealloc(dbg, files, DW_DLA_LIST);
+	  }
+	}
+
+	
+	/*
+	 2. Retrieve the line number where this variable was declared.
+	*/
+	Dwarf_Attribute line_attr = NULL;
+	res = dwarf_attr(die, DW_AT_decl_line, &line_attr, &error);
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	  error = NULL;
+	}
+
+	Dwarf_Unsigned decl_line_buf = 0;
+	res = dwarf_formudata(line_attr, &decl_line_buf, &error);
+	if (res == DW_DLV_ERROR) {
+	  dwarf_dealloc_error(dbg, error);
+	  error = NULL;
+	}
+	unsigned decl_line = decl_line_buf;
+
+
+	/*
+	 3. Retrieve the `location` attribute of this DIE.
+	*/
+	Dwarf_Attribute loc_attr = NULL;
+	res = dwarf_attr(die, DW_AT_location, &loc_attr, &error);
 
 	if (res != DW_DLV_OK) {
 	  if (res == DW_DLV_ERROR) {
 	    dwarf_dealloc_error(dbg, error);
 	  }
 	  return false;
+	}
+   
+	/*
+	 Ensure that the attribute we found has the right
+	 form, too. This should never fail for the `location`
+	 attribute of `variable` and `formal_parameter` DIEs.
+	*/
+	SdLocattr loc_attr_buf;
+	SprayResult res = sd_init_loc_attr(dbg,
+					   die,
+					   loc_attr,
+					   &loc_attr_buf);
+	if (res == SP_OK) {
+	  var_search_findings->loc_attr = loc_attr_buf;
+	  var_search_findings->decl_file = decl_file;
+	  var_search_findings->decl_line = decl_line;
+	  return true;
 	} else {
-	  /* Ensure that the attribute we found has the right
-	     form, too. This should never fail for the `location`
-	     attribute of `variable` and `formal_parameter` DIEs. */
-	  SprayResult res = sd_init_loc_attr(dbg,
-					     die,
-					     attr,
-					     &var_search_findings->attr);
-	  if (res == SP_OK) {
-	    return true;
-	  } else {
-	    return false;
-	  }
-	}	      
+	  return false;
+	}
       } else {
 	if (res == DW_DLV_ERROR) {
 	  dwarf_dealloc_error(dbg, error);
@@ -988,9 +1206,15 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
 					   dbg_addr pc,
 					   const char *var_name,
-					   SdLocAttr *attr) {
+					   SdLocattr *loc_attr,
+					   char **decl_file,
+					   unsigned *decl_line) {
   assert(dbg != NULL);
   assert(var_name != NULL);
+  assert(loc_attr != NULL);
+  assert(decl_file != NULL);
+  assert(decl_line != NULL);
+
   Dwarf_Error error = NULL;
 
   VarLocSearchFor search_for = {
@@ -1001,7 +1225,9 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
 
   VarLocSearchFindings search_findings = {
     .in_scope = false,
-    .attr = {0},
+    .loc_attr = {0},
+    .decl_file = NULL,		/* `malloc`'d in the callback on success. */
+    .decl_line = 0,
   };
 
   int res = sd_search_dwarf_dbg(dbg,
@@ -1014,8 +1240,11 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
     dwarf_dealloc_error(dbg, error);
     return SP_ERR;
   } else if (res == DW_DLV_NO_ENTRY) {
-    /* Try again, this time ignoring the scope. Thereby, the first
-       global variable with the given name is chosen. */
+    /*
+     Try again, this time ignoring the scope. Thereby,
+     the first global variable with the given name is
+     chosen.
+    */
     search_for.use_scope = false;
     res = sd_search_dwarf_dbg(dbg,
 			      &error,
@@ -1029,11 +1258,15 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
       }
       return SP_ERR;
     } else {
-      *attr = search_findings.attr;
+      *loc_attr = search_findings.loc_attr;
+      *decl_file = search_findings.decl_file;
+      *decl_line = search_findings.decl_line;
       return SP_OK;
     }
   } else {
-    *attr = search_findings.attr;
+    *loc_attr = search_findings.loc_attr;
+    *decl_file = search_findings.decl_file;
+    *decl_line = search_findings.decl_line;
     return SP_OK;
   }
 }
@@ -1571,13 +1804,13 @@ bool is_active_range(SdLocRange range, dbg_addr _pc) {
 }
 
 SprayResult sd_init_loclist(Dwarf_Debug dbg,
-			    SdLocAttr loc_attr,
+			    SdLocattr loc_attr,
 			    SdLoclist *loclist) {
   assert(dbg != NULL);
   assert(loclist != NULL);
 
   Dwarf_Error error = NULL;
-  Dwarf_Attribute attr = loc_attr.attr;
+  Dwarf_Attribute attr = loc_attr.loc;
 
   /* Pointer to the start of the loclist created by `dwarf_get_loclist_c`. */
   Dwarf_Loc_Head_c loclist_head = NULL;
@@ -1841,7 +2074,7 @@ SprayResult sd_eval_op_fbreg(Dwarf_Debug dbg,
     return SP_ERR;
   }
 
-  SdLocAttr loc_attr = {0};
+  SdLocattr loc_attr = {0};
   SprayResult res = sd_get_subprog_loc_attr(dbg, subprog_name, DW_AT_frame_base, &loc_attr);
   if (res == SP_ERR) {
     return SP_ERR;
@@ -2071,8 +2304,7 @@ bool callback__get_filepaths(Dwarf_Debug dbg,
     if (this_filepath != NULL) {
       if (filepaths->idx >= filepaths->nalloc) {
         filepaths->nalloc += FILEPATHS_ALLOC;
-        filepaths->filepaths = (char **) realloc (filepaths->filepaths,
-                                                  sizeof(char  *) * filepaths->nalloc);
+        filepaths->filepaths = realloc(filepaths->filepaths, sizeof(char*) * filepaths->nalloc);
         assert(filepaths->filepaths != NULL);
       }
       filepaths->filepaths[filepaths->idx] = this_filepath;
@@ -2084,7 +2316,8 @@ bool callback__get_filepaths(Dwarf_Debug dbg,
   return false;
 }
 
-/* Return a NULL-terminated array of all filepaths. */
+/* Return a NULL-terminated array of the file paths of
+   all compilation units found in debug information. */
 char **sd_get_filepaths(Dwarf_Debug dbg) {
   assert(dbg != NULL);  
 
@@ -2096,18 +2329,24 @@ char **sd_get_filepaths(Dwarf_Debug dbg) {
     .filepaths = NULL,
   };
 
-  int res = sd_search_dwarf_dbg(dbg, &error,
-    callback__get_filepaths,
-    NULL, &filepaths);
+  int res = sd_search_dwarf_dbg(dbg,
+				&error,
+				callback__get_filepaths,
+				NULL,
+				&filepaths);
 
   if (res == DW_DLV_ERROR) {
     dwarf_dealloc_error(dbg, error);
     return NULL;
-  } else {  /* We expect DW_DLV_NO_ENTRY here. */
-    char **filepaths_arr = (char **) realloc (filepaths.filepaths,
-                                              (filepaths.idx + 1) * sizeof(char *));
+  } else {
+    /* `DW_DLV_NO_ENTRY` is expected because the search callback
+       never returns `true`, so that all DIEs are searched. */
+
+    /* `NULL`-terminate the array. */
+    char **filepaths_arr = realloc(filepaths.filepaths, sizeof(char *) * (filepaths.idx + 1));
     assert(filepaths_arr != NULL);
     filepaths_arr[filepaths.idx] = NULL;
+
     return filepaths_arr;
   }
 }
@@ -2141,8 +2380,9 @@ bool callback__get_srclines(Dwarf_Debug dbg,
   Dwarf_Signed n_lines = 0;
 
   res = dwarf_srclines_from_linecontext(line_context,
-    &lines, &n_lines,
-    &error);
+					&lines,
+					&n_lines,
+					&error);
 
   if (res != DW_DLV_OK) {
     dwarf_srclines_dealloc_b(line_context);
@@ -2151,16 +2391,18 @@ bool callback__get_srclines(Dwarf_Debug dbg,
     }
     return false;
   } else {
-    LineEntry *line_entries = (LineEntry *) calloc (n_lines, sizeof(LineEntry));
+    LineEntry *line_entries = calloc(n_lines, sizeof(LineEntry));
+
     for (unsigned i = 0; i < n_lines; i++) {
       res = sd_line_entry_from_dwarf_line(lines[i],
                                           &line_entries[i],
                                           &error);
+
       if (res != DW_DLV_OK) {
         if (res == DW_DLV_ERROR) {
           dwarf_dealloc_error(dbg, error);
         }
-        free(line_entries);
+        free(line_entries);	/* <- Also free buffer on error. */
         return false;
       }
 

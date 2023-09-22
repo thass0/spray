@@ -3,6 +3,10 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>		/* `getcwd` */
+#include <stdlib.h>
+#include <assert.h>
+#include <limits.h>		/* `PATH_MAX` */
 
 unsigned n_digits(double num) {
   if (num == 0) {
@@ -124,5 +128,58 @@ void print_filtered(uint64_t value, PrintFilter filter) {
   case PF_BYTES:
     printf(PRINTF_BYTES_PATTERN_INT64, PRINTF_BYTES_INT64(value));
     break;
+  }
+}
+
+// Return the part of `abs_filepath` that's relative to
+// the present working directory. It is assumed that 
+//
+// On success, the pointer that's returned points into
+// `abs_filepath`.
+//
+// Otherwise, `NULL` is returned to signal an error.
+const char *relative_filepath(const char *abs_filepath) {
+  if (abs_filepath == NULL) {
+    return NULL;
+  }
+
+  char *cwd_buf = malloc(sizeof(*cwd_buf) * PATH_MAX);
+  char *cwd = getcwd(cwd_buf, PATH_MAX);
+  if (cwd == NULL) {
+    return NULL;
+  }
+
+  // Set `i` to the first index in `filepath` that's not part of the cwd.
+  size_t i = 0;
+  while (cwd[i] == abs_filepath[i]) {
+    i++;
+  }
+
+  free(cwd_buf);
+
+  if (i == 0) {
+    // `abs_filepath` is a relative filepath and should
+    // be returned entirely.
+    return abs_filepath;
+  } else {
+    // Return the part of `filepath` that's not part of the cwd.
+    // `+ 1` removes the slash character at `abs_filepath[i]`.
+    // This slash is left because `cwd` doesn't have a trailing
+    // slash character. Hence, this character is the first one
+    // where `abs_filepath` and `cmd` differ.
+    return abs_filepath + i + 1;
+  }
+}
+
+void print_as_relative_filepath(const char *filepath) {
+  assert(filepath != NULL);
+
+  char *relative_buf = strdup(filepath);
+  const char *relative = relative_filepath(relative_buf);
+  if (relative != NULL) {
+    printf("%s", relative);
+    free(relative_buf);
+  } else {
+    printf("%s", filepath);
   }
 }

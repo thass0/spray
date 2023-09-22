@@ -86,14 +86,19 @@ typedef enum PrintFilter {
 
 PrintFilter parse_filter(const char *filter_str);
 
-/* Turn `current` into `_default` if `_default` is `PF_NONE`. */
+// Turn `current` into `_default` if `_default` is `PF_NONE`.
 PrintFilter default_filter(PrintFilter current, PrintFilter _default);
 
 void print_as_addr(uint64_t addr);
 void print_filtered(uint64_t value, PrintFilter filter);
 
-/* Print an address. */
+// Print an address.
 #define print_addr(x) print_as_addr((x).value)
 #define print_addr_filtered(x) print_as_addr_filtered((x).value)
+
+// Print `filepath` as relative to the current working directory.
+//
+// `filepath` must not be `NULL`.
+void print_as_relative_filepath(const char *filepath);
 
 #endif  // _SPRAY_MAGIC_H_

@@ -74,31 +74,51 @@ typedef struct SdLoclist {
   SdLocRange *ranges;
 } SdLoclist;
 
-/* A DWARF DIE attribute that can be used in combination
-   with `sd_init_loclist` to initialize a new location list.
+/* `DW_AT_location` of DIEs that represent runtime variables.
+   It can be used in combination with `sd_init_loclist` to
+   initialize a new location list.
 
    `sd_init_loc_attr` is the only way to initialize this struct,
-   because this function ensures that the form bounds are met. */
-typedef struct SdLocAttr {
-  Dwarf_Attribute attr;
-} SdLocAttr;
+   because this function ensures that the form bounds are met for
+   the `loc_attr` field. */
+typedef struct SdLocattr {
+  Dwarf_Attribute loc;		/* `DW_AT_location` attribute. */
+} SdLocattr;
 
 SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
 			     Dwarf_Die die,
-			     Dwarf_Attribute attr,
-			     SdLocAttr *attr_dest);
+			     Dwarf_Attribute loc,
+			     SdLocattr *attr_dest);
 
-/* Get the location description attribute of the variable
-   with the given name. `pc` is used to choose the closest
-   variable if the variable name occurs more than once. */
+/*
+  Get the location description attribute, and the file and
+  line where it was declared of the variable the given name.
+  `pc` is used to choose the closest variable if the variable
+  name occurs more than once.
+
+  On success `SP_OK` is returned, and `attr`, `decl_file`, and
+  `decl_line` are set. `decl_file` must be `free`'d manually by
+  this function's caller.
+
+  On error `SP_ERR` is returned, and `attr`, `decl_file`, and
+  `decl_file` remain unchanged.
+
+  `dbg`, `var_name`, `attr`, `decl_file`, and `decl_line` must
+  not be `NULL`.
+*/
 SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
 					   dbg_addr pc,
 					   const char *var_name,
-					   SdLocAttr *attr);
-  
-/* Initialize a location list from the location description attribute in `loc_attr`. */
+					   SdLocattr *attr,
+					   char **decl_file,
+					   unsigned *decl_line);
+
+/*
+ Initialize a location list from the location
+ description attribute in `loc_attr`.
+*/
 SprayResult sd_init_loclist(Dwarf_Debug dbg,
-			    SdLocAttr loc_attr,
+			    SdLocattr loc_attr,
                             SdLoclist *loclist);
 
 /* Delete the given location list. */

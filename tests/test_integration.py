@@ -157,12 +157,12 @@ class TestFilters:
         p a | addr
         p a | dec
         p a | bytes""", """\
-         103 (read after write)
-         0x67
-         00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111
-         0x0000000000000067
-         103
-         00 00 00 00 00 00 00 67
+         103 (read after write) (tests/assets/simple.c:10)
+         0x67 (tests/assets/simple.c:10)
+         00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111 (tests/assets/simple.c:10)
+         0x0000000000000067 (tests/assets/simple.c:10)
+         103 (tests/assets/simple.c:10)
+         00 00 00 00 00 00 00 67 (tests/assets/simple.c:10)
 """)
 
     def test_filter_print_errors(self):
@@ -175,9 +175,9 @@ class TestFilters:
         t a 0x600 | bytes
         t a 0x700 | hex
         t a 0x800""", """\
-         00 00 00 00 00 00 06 00 (read after write)
-         0x700 (read after write)
-         0x800 (read after write)
+         00 00 00 00 00 00 06 00 (read after write) (tests/assets/simple.c:10)
+         0x700 (read after write) (tests/assets/simple.c:10)
+         0x800 (read after write) (tests/assets/simple.c:10)
 """)
 
     def test_filter_set_errors(self):

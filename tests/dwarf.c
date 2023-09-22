@@ -196,11 +196,19 @@ TEST(sd_line_entry_at_works) {
 
 /* Assert that the first location description in the location list for
    the variable `name` in `func` has the given values. */
-#define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_) \
+#define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_, file) \
   {									\
     SdLoclist loclist = {0};						\
-    SdLocAttr var_attr = {0};						\
-    SprayResult res = sd_location_from_variable_name(dbg, (pc), (name), &var_attr); \
+    SdLocattr var_attr = {0};						\
+    /* The following two variables are unused rn. */			\
+    char *decl_file = NULL;						\
+    unsigned decl_line = 0;						\
+    SprayResult res = sd_location_from_variable_name(dbg,		\
+						     (pc),		\
+						     (name),		\
+						     &var_attr,		\
+						     &decl_file,	\
+						     &decl_line);	\
     assert_int(res, ==, SP_OK);						\
     res = sd_init_loclist(dbg, var_attr, &loclist);			\
     assert_int(res, ==, SP_OK);						\
@@ -210,6 +218,8 @@ TEST(sd_line_entry_at_works) {
     assert_int(loclist.exprs[0].operations[0].operand1, ==, (op1));	\
     assert_int(loclist.exprs[0].operations[0].operand2, ==, (op2));	\
     assert_int(loclist.exprs[0].operations[0].operand3, ==, (op3));	\
+    assert_string_equal(decl_file, (file));				\
+    free(decl_file);							\
     del_loclist(&loclist);						\
   }
 
@@ -219,8 +229,12 @@ TEST(finding_variable_locations_works) {
   assert_ptr_not_null(dbg);
 
   dbg_addr main_addr = {0x401163}; /* Address from the binary's `main`. */
-  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0);
+  char* file_path = realpath(SIMPLE_SRC, NULL);
+  assert_ptr_not_null(file_path);
 
+  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0, file_path);
+
+  free(file_path);
   dwarf_finish(dbg);
   return MUNIT_OK;
 }
@@ -232,14 +246,63 @@ TEST(finding_locations_by_scope_works) {
 
   dbg_addr main_addr = {0x401182}; /* Some address in the binary's `main`. */
   dbg_addr blah_addr = {0x401132}; /* Some address in the `blah` function. */
+  char* file_path = realpath(RECURRING_VARIABLES_SRC, NULL);
+  assert_ptr_not_null(file_path);
+  
+  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0, file_path);
+  ASSERT_LOCDESC("b", main_addr, DW_OP_fbreg, -24, 0, 0, 0, 0, file_path);
+  ASSERT_LOCDESC("c", main_addr, DW_OP_fbreg, -32, 0, 0, 0, 0, file_path);
 
-  ASSERT_LOCDESC("a", main_addr, DW_OP_fbreg, -8, 0, 0, 0, 0);
-  ASSERT_LOCDESC("b", main_addr, DW_OP_fbreg, -24, 0, 0, 0, 0);
-  ASSERT_LOCDESC("c", main_addr, DW_OP_fbreg, -32, 0, 0, 0, 0);
+  ASSERT_LOCDESC("a", blah_addr, DW_OP_addr, 4202512, 0, 0, 0, 0, file_path);
+  ASSERT_LOCDESC("b", blah_addr, DW_OP_fbreg, -16, 0, 0, 0, 0, file_path);
+  ASSERT_LOCDESC("c", blah_addr, DW_OP_fbreg, -24, 0, 0, 0, 0, file_path);
 
-  ASSERT_LOCDESC("a", blah_addr, DW_OP_addr, 4202512, 0, 0, 0, 0);
-  ASSERT_LOCDESC("b", blah_addr, DW_OP_fbreg, -16, 0, 0, 0, 0);
-  ASSERT_LOCDESC("c", blah_addr, DW_OP_fbreg, -24, 0, 0, 0, 0);
+  free(file_path);
+  dwarf_finish(dbg);
+
+  return MUNIT_OK;
+}
+
+TEST(finding_variable_declration_files_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(EXTERN_VARIABLES_BIN, &error);
+  assert_ptr_not_null(dbg);
+
+  dbg_addr addr = {0x40115e};
+  char *blah_int1_file = realpath("tests/assets/extern-variables/first_file.c", NULL);
+  char *blah_int2_file = realpath("tests/assets/extern-variables/second_file.c", NULL);
+  char *blah_int_another_file = realpath("tests/assets/extern-variables/third_file.c", NULL);
+  char *my_own_int_file = realpath("tests/assets/extern-variables/main.c", NULL);
+  assert_ptr_not_null(blah_int1_file);
+  assert_ptr_not_null(blah_int2_file);
+  assert_ptr_not_null(blah_int_another_file);
+  assert_ptr_not_null(my_own_int_file);
+
+  ASSERT_LOCDESC("blah_int1", addr, DW_OP_addr, 0x404014, 0, 0, 0, 0, blah_int1_file);
+  ASSERT_LOCDESC("blah_int2", addr, DW_OP_addr, 0x404010, 0, 0, 0, 0, blah_int2_file);
+  ASSERT_LOCDESC("blah_int_another", addr, DW_OP_addr, 0x404018, 0, 0, 0, 0, blah_int_another_file);
+  ASSERT_LOCDESC("my_own_int", addr, DW_OP_addr, 0x40400c, 0, 0, 0, 0, my_own_int_file);
+
+  free(blah_int1_file);
+  free(blah_int2_file);
+  free(blah_int_another_file);
+  free(my_own_int_file);
+  dwarf_finish(dbg);
+
+  dbg = sd_dwarf_init(INCLUDE_VARIABLE_BIN, &error);
+  assert_ptr_not_null(dbg);
+
+  addr = (dbg_addr) {0x401129};
+  char *blah_file = realpath("tests/assets/include-variable/header.h", NULL);
+  char *here_file = realpath("tests/assets/include-variable/main.c", NULL);
+  assert_ptr_not_null(blah_file);
+  assert_ptr_not_null(here_file);
+  
+  ASSERT_LOCDESC("blah", addr, DW_OP_addr, 0x404004, 0, 0, 0, 0, blah_file);
+  ASSERT_LOCDESC("here", addr, DW_OP_addr, 0x404008, 0, 0, 0, 0, here_file);
+
+  free(blah_file);
+  free(here_file);
   dwarf_finish(dbg);
 
   return MUNIT_OK;
@@ -305,5 +368,6 @@ MunitTest dwarf_tests[] = {
     REG_TEST(finding_variable_locations_works),
     REG_TEST(finding_locations_by_scope_works),
     REG_TEST(manual_check_locexpr_output),
+    REG_TEST(finding_variable_declration_files_works),
     {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}
 };

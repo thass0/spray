@@ -105,6 +105,16 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       Breakpoints *breakpoints,
                                       real_addr **to_del, size_t *n_to_del);
 
+// Location of a variable.
+//
+// This includes a description of where to find this variable
+// in the memory of the running debugee process, the path to
+// the file where the variable is declared and line number in
+// this file.
+//
+// It does not include the name the variable is declared as.
+// The name should be easily accessible since it's required
+// to create an instance of `VarLocation`.
 typedef struct VarLocation VarLocation;
 
 /* Return a pointer to the address of the location or `NULL`
@@ -119,6 +129,23 @@ const x86_reg *var_loc_reg(VarLocation *loc);
 bool is_addr_loc(VarLocation *loc);
 bool is_reg_loc(VarLocation *loc);
 
+// Return the path of the file and the line number in the file
+// where the variable described by `loc` was declared.
+//
+// Both of them are optional. `0` indicates that there is no
+// line number (since line numbers start at 1!), and `NULL` is
+// returned if there is no path.
+const char *var_loc_path(VarLocation *loc);
+unsigned var_loc_line(VarLocation *loc);
+
+// Print the path and the line of the given variable.
+//
+// This function uses the values as `var_loc_path` and
+// `var_loc_line` return.
+//
+// `loc` must not be `NULL`.
+void print_var_loc(VarLocation *loc);
+
 // Get the location of the variable with the
 // given name in the scope around `pc`.
 //
@@ -127,10 +154,13 @@ bool is_reg_loc(VarLocation *loc);
 // happen automatically when `info` is destroyed).
 //
 // `NULL` is returned on error.
-VarLocation *get_var_loc(dbg_addr pc,
+VarLocation *init_var_loc(dbg_addr pc,
 			 real_addr load_address,
 			 const char *var_name,
 			 pid_t pid,
 			 const DebugInfo *info);
+
+// Delete a `VarLocation` pointer as returned by `init_var_loc`.
+void free_var_loc(VarLocation *loc);
 
 #endif // _SPRAY_INFO_H_

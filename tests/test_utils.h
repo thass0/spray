@@ -13,12 +13,14 @@
 #define NESTED_FUNCTIONS_SRC "tests/assets/nested_functions.c"
 #define NESTED_FUNCTIONS_BIN "tests/assets/nested-functions.bin"
 #define MULTI_FILE_BIN "tests/assets/multi-file.bin"
+#define EXTERN_VARIABLES_BIN "tests/assets/extern-variables.bin"
 #define PRINT_ARGS_SRC "tests/assets/print_args.c"
 #define PRINT_ARGS_BIN "tests/assets/print-args.bin"
 #define RECURRING_VARIABLES_SRC "tests/assets/recurring_variables.c"
 #define RECURRING_VARIABLES_BIN "tests/assets/recurring-variables.bin"
 #define POINTERS_SRC "tests/assets/pointers.c"
 #define POINTERS_BIN "tests/assets/pointers.bin"
+#define INCLUDE_VARIABLE_BIN "tests/assets/include-variable.bin"
 
 // Create a test
 #define TEST(name) \

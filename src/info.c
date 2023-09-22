@@ -464,43 +464,84 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
 }
 
 typedef struct VarLocation {
-  SdLocation inner;
+  SdLocation loc;
+  char *decl_file;		/* The file where the variable was declared. */
+  unsigned decl_line;		/* The line where the variable was declared. */
 } VarLocation;
 
 const real_addr *var_loc_addr(VarLocation *loc) {
-  if ((loc != NULL) && (loc->inner.tag == LOC_ADDR)) {
-    return &loc->inner.addr;
+  if ((loc != NULL) && (loc->loc.tag == LOC_ADDR)) {
+    return &loc->loc.addr;
   } else {
     return NULL;
   }
 }
 
 const x86_reg *var_loc_reg(VarLocation *loc) {
-  if ((loc != NULL) && (loc->inner.tag == LOC_REG)) {
-    return &loc->inner.reg;
+  if ((loc != NULL) && (loc->loc.tag == LOC_REG)) {
+    return &loc->loc.reg;
   } else {
     return NULL;
   }
 }
 
 bool is_addr_loc(VarLocation *loc) {
-  return (loc != NULL) && (loc->inner.tag == LOC_ADDR);
+  return (loc != NULL) && (loc->loc.tag == LOC_ADDR);
 }
 bool is_reg_loc(VarLocation *loc) {
-  return (loc != NULL) && (loc->inner.tag == LOC_REG);
+  return (loc != NULL) && (loc->loc.tag == LOC_REG);
 }
 
-VarLocation *get_var_loc(dbg_addr pc,
-			 real_addr load_address,
-			 const char *var_name,
-			 pid_t pid,
-			 const DebugInfo *info) {
+const char *var_loc_path(VarLocation *loc) {
+  assert(loc != NULL);
+  return loc->decl_file;
+}
+
+unsigned var_loc_line(VarLocation *loc) {
+  assert(loc != NULL);
+  return loc->decl_line;
+}
+
+void print_var_loc(VarLocation *loc) {
+  if (loc == NULL) {
+    printf("<?>:<?>");
+  } else {
+    const char *var_path = var_loc_path(loc);
+    if (var_path != NULL) {
+      print_as_relative_filepath(var_path);
+    } else {
+      printf("<?>");
+    }
+
+    printf(":");
+
+    unsigned var_line = var_loc_line(loc);
+    if (var_line > 0) {		/* Line numbers start at 1! */
+      printf("%u", var_line);
+    } else {
+      printf("<?>");
+    }
+  }
+}
+
+VarLocation *init_var_loc(dbg_addr pc,
+			  real_addr load_address,
+			  const char *var_name,
+			  pid_t pid,
+			  const DebugInfo *info) {
   if (var_name == NULL || info == NULL) {
     return NULL;
   }
 
-  SdLocAttr var_attr = {0};
-  SprayResult res = sd_location_from_variable_name(info->dbg, pc, var_name, &var_attr);
+  SdLocattr var_attr = {0};
+  char *decl_file = NULL;
+  unsigned decl_line = 0;
+  SprayResult res = sd_location_from_variable_name(info->dbg,
+						   pc,
+						   var_name,
+						   &var_attr,
+						   &decl_file,
+						   &decl_line);
   if (res == SP_ERR) {
     return NULL;
   }
@@ -519,8 +560,24 @@ VarLocation *get_var_loc(dbg_addr pc,
   };
 
   VarLocation *location = malloc(sizeof(*location));
-  res = sd_eval_loclist(info->dbg, ctx, loclist, (SdLocation*) location);
+  assert(location != NULL);
+
+  /*
+   `decl_line` and `decl_file` are both optional, and
+   may be `0` or `NULL` respectively.
+  */
+  location->decl_line = decl_line;
+  location->decl_file = decl_file;
+
+  res = sd_eval_loclist(info->dbg, ctx, loclist, &location->loc);
   del_loclist(&loclist);
 
   return location;
+}
+
+void free_var_loc(VarLocation *loc) {
+  if (loc != NULL) {
+    free(loc->decl_file);
+    free(loc);
+  }
 }

@@ -13,11 +13,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <unistd.h>
 #include <assert.h>
 #include <errno.h>
 #include <regex.h>
-#include <limits.h>
+#include <limits.h>		/* `UINT_MAX` */
 #include <sys/wait.h>
 #include <sys/personality.h>
 
@@ -161,46 +160,6 @@ void set_pc(pid_t pid, real_addr pc) {
 // Command and Internal Execution Result
 // =====================================
 
-// Return the part of `filepath` that's relative to
-// the present working directory.
-char *as_relative(char *filepath) {
-  if (filepath == NULL) {
-    return NULL;
-  }
-
-  char *cwd_buf = malloc(sizeof(*cwd_buf) * PATH_MAX);
-  char *cwd = getcwd(cwd_buf, PATH_MAX);
-  if (cwd == NULL) {
-    return NULL;
-  }
-
-  // Set `i` to the first index in `filepath` that's not part of the cwd.
-  size_t i = 0;
-  while (cwd[i] == filepath[i]) {
-    i++;
-  }
-
-  free(cwd_buf);
-
-  // Return the part of `filepath` that's not part of the cwd.
-  // `+ 1` removes the initial slash that's left because `cwd`
-  // doesn't end in a slash.
-  return filepath + i + 1;
-}
-
-void print_as_relative(const char *filepath) {
-  assert(filepath != NULL);
-
-  char *relative_buf = strdup(filepath);
-  char *relative = as_relative(relative_buf);
-  if (relative != NULL) {
-    printf("%s", relative);
-    free(relative_buf);
-  } else {
-    printf("%s", filepath);
-  }
-}
-
 // If `is_user_breakpoint` is true, then a message is printed
 // giving the user information about their breakpoint.
 void print_current_source(Debugger *dbg, bool is_user_breakpoint) {
@@ -217,7 +176,7 @@ void print_current_source(Debugger *dbg, bool is_user_breakpoint) {
       printf("Hit breakpoint at address ");
       print_addr(get_pc(dbg->pid));
       printf(" in ");
-      print_as_relative(filepath);
+      print_as_relative_filepath(filepath);
       printf("\n");
     }
 
@@ -795,11 +754,11 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
   assert(dbg != NULL);
   assert(var_name != NULL);
 
-  VarLocation *var_loc = get_var_loc(get_dbg_pc(dbg),
-				     dbg->load_address,
-				     var_name,
-				     dbg->pid,
-				     dbg->info);
+  VarLocation *var_loc = init_var_loc(get_dbg_pc(dbg),
+				      dbg->load_address,
+				      var_name,
+				      dbg->pid,
+				      dbg->info);
 
   if (var_loc == NULL) {
     internal_error("Failed to find a variable called %s", var_name);
@@ -825,11 +784,17 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
     internal_error("Found a variable %s, but failed to read its value", var_name);
   } else {
     printf(MEM_READ_INDENT);
+
     print_filtered(value, filter);
-    printf("\n");
+
+    printf(" (");
+
+    print_var_loc(var_loc);
+
+    printf(")\n");
   }
 
-  free(var_loc);
+  free_var_loc(var_loc);
 }
 
 #define SET_VAR_WRITE_ERR "Found a variable %s, but failed to write its value"
@@ -839,11 +804,11 @@ void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value, Pr
   assert(dbg != NULL);
   assert(var_name != NULL);
 
-  VarLocation *var_loc = get_var_loc(get_dbg_pc(dbg),
-				     dbg->load_address,
-				     var_name,
-				     dbg->pid,
-				     dbg->info);
+  VarLocation *var_loc = init_var_loc(get_dbg_pc(dbg),
+				      dbg->load_address,
+				      var_name,
+				      dbg->pid,
+				      dbg->info);
 
   if (var_loc == NULL) {
     internal_error("Failed to find a variable called %s", var_name);
@@ -887,10 +852,16 @@ void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value, Pr
 
   /* Print the value that's been read after the write. */
   printf(MEM_READ_INDENT);
-  print_filtered(value, filter);
-  printf(" " WRITE_READ_MSG "\n");
 
-  free(var_loc);
+  print_filtered(value, filter);
+
+  printf(" " WRITE_READ_MSG " (");
+
+  print_var_loc(var_loc);
+
+  printf(")\n");
+
+  free_var_loc(var_loc);
 }
 
 void execmd_break(Breakpoints *breakpoints, real_addr addr) {

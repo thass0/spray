@@ -6,12 +6,14 @@ CFLAGS = -g
 SIMPLE = simple.c
 NESTED = nested_functions.c
 MULTI_FILE = multi-file/file1.c multi-file/file2.c
+EXTERN_VARIABLES = extern-variables/main.c extern-variables/second_file.c extern-variables/first_file.c extern-variables/third_file.c
+INCLUDE_VARIABLE = include-variable/main.c
 PRINT_ARGS = print_args.c
 COMMENTED = commented.c
 CUSTOM_TYPES = custom_types.c
 VARIABLES = recurring_variables.c
 POINTERS = pointers.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin extern-variables.bin include-variable.bin
 
 all: $(TARGETS)
 
@@ -39,6 +41,11 @@ custom-types.bin: $(CUSTOM_TYPES)
 	$(CC) $(CFLAGS) $< -o $@
 pointers.bin: $(POINTERS)
 	$(CC) $(CFLAGS) $< -o $@
+extern-variables.bin: $(EXTERN_VARIABLES)
+	$(CC) $(CFLAGS) $(EXTERN_VARIABLES) -o $@
+include-variable.bin: $(INCLUDE_VARIABLE)
+	$(CC) $(CFLAGS) $< -o $@
+
 
 clean:
 	$(RM) $(TARGETS)
