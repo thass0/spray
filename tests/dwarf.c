@@ -358,6 +358,13 @@ TEST(manual_check_locexpr_output) {
   return MUNIT_OK;
 }
 
+TEST(validating_compilers_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(WRONG_COMPILER_BIN, &error);
+  assert_ptr_equal(dbg, NULL);
+  return MUNIT_OK;
+}
+
 MunitTest dwarf_tests[] = {
     REG_TEST(get_line_entry_from_pc_works),
     REG_TEST(iterating_lines_works),
@@ -369,5 +376,6 @@ MunitTest dwarf_tests[] = {
     REG_TEST(finding_locations_by_scope_works),
     REG_TEST(manual_check_locexpr_output),
     REG_TEST(finding_variable_declration_files_works),
+    REG_TEST(validating_compilers_works),
     {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}
 };

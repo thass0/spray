@@ -3,10 +3,11 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>		/* `getcwd` */
+#include <unistd.h> /* `getcwd` */
 #include <stdlib.h>
 #include <assert.h>
-#include <limits.h>		/* `PATH_MAX` */
+#include <limits.h> /* `PATH_MAX` */
+#include <stdarg.h>
 
 unsigned n_digits(double num) {
   if (num == 0) {
@@ -182,4 +183,48 @@ void print_as_relative_filepath(const char *filepath) {
   } else {
     printf("%s", filepath);
   }
+}
+
+void spray_msg(const char *kind, const char *fmt, va_list argp) {
+  assert(kind != NULL);
+  assert(fmt != NULL);
+  assert(argp != NULL);
+
+  size_t len = strlen(fmt) + strlen(kind) + 4;
+  char *fmt_buf = calloc(len, sizeof(*fmt_buf));
+  assert(fmt_buf != NULL);
+
+  size_t n_printed = snprintf(fmt_buf, len, "%s: %s\n", kind, fmt);
+  /*
+   `snprintf` writes a maximum of `len` bytes, including the
+   `\0` byte, and returns the number of bytes written,
+   excluding the `\0` byte. Thus, `len` was too small and the
+   output was truncated  if `n_printed >= len`.
+  */
+  assert(n_printed == (len - 1));
+
+  vfprintf(stderr, fmt_buf, argp);
+
+  free(fmt_buf);
+}
+
+void spray_err(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  spray_msg("ERR", fmt, argp);
+  va_end(argp);
+}
+
+void spray_warn(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  spray_msg("WARN", fmt, argp);
+  va_end(argp);
+}
+
+void spray_hint(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  spray_msg("HINT", fmt, argp);
+  va_end(argp);
 }

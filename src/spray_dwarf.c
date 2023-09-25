@@ -43,6 +43,8 @@ const char *what_dwarf_result(int dwarf_res) {
   }
 }
 
+bool sd_is_valid_compiler(Dwarf_Debug dbg);
+
 Dwarf_Debug sd_dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   assert(filepath != NULL);
   assert(error != NULL);
@@ -69,17 +71,21 @@ Dwarf_Debug sd_dwarf_init(const char *restrict filepath, Dwarf_Error *error) {
   Dwarf_Debug dbg = NULL;
 
   int res = dwarf_init_path(filepath,  /* Only external parameter. */
-    true_pathbuf, true_pathlen,
-    group_number,
-    error_handler, error_argument,  /* Both `NULL` => unused. */
-    &dbg, error
-  );
+			    true_pathbuf, true_pathlen,
+			    group_number,
+			    error_handler, error_argument,  /* Both `NULL` => unused. */
+			    &dbg, error);
 
-  if (res == DW_DLV_ERROR || res == DW_DLV_NO_ENTRY) {
+  if (res != DW_DLV_OK) {
     return NULL;
   } else {
-    /* `res == DW_DLV_OK`, success! */
-    return dbg;
+    if (!sd_is_valid_compiler(dbg)) {
+      spray_err("Wrong compiler. Currently, only Clang is supported");
+      dwarf_finish(dbg);
+      return NULL;
+    } else {
+      return dbg;
+    }
   }
 }
 
@@ -98,7 +104,7 @@ int sd_search_dwarf_die(Dwarf_Debug dbg,
 			unsigned level,
 			SearchCallback search_callback,
 			const void *search_for_data,
-			void  *search_findings_data
+			void *search_findings_data
 ) {  
   int res = DW_DLV_OK;
   Dwarf_Die cur_die = in_die;
@@ -346,6 +352,76 @@ bool sd_has_tag(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tagnum) {
   }
 
   return die_tag == tagnum;
+}
+
+bool callback__is_valid_compiler(Dwarf_Debug dbg,
+				 Dwarf_Die die,
+				 SearchFor search_for,
+				 SearchFindings search_findings) {
+  unused(search_for);
+  unused(search_findings);
+
+  if (sd_has_tag(dbg, die, DW_TAG_compile_unit)) {
+    int res = DW_DLV_OK;
+    Dwarf_Error error = NULL;
+
+    char *die_compiler = NULL;
+    res = dwarf_die_text(die, DW_AT_producer, &die_compiler, &error);
+    if (res != DW_DLV_OK) {
+      if (res == DW_DLV_ERROR) {
+	dwarf_dealloc_error(dbg, error);
+      }
+      /*
+       Stop the search, because we were not able to
+       validate this CU's compiler.
+      */
+      return true;
+    }
+
+    if (strstr(die_compiler, "clang")) {
+      /* Continue the search, validating all subsequent CUs. */
+      return false;
+    } else {
+      /* Stop the search, because this CU's compiler is invalid. */
+      return true;
+    }
+  } else {
+    /* No need to just non-CU DIEs. Just continue searching. */
+    return false;
+  }
+}
+
+bool sd_is_valid_compiler(Dwarf_Debug dbg) {
+  assert(dbg != NULL);
+
+  Dwarf_Error error = NULL;
+  int res = sd_search_dwarf_dbg(dbg,
+				&error,
+				callback__is_valid_compiler,
+				NULL,
+				NULL);
+  switch (res) {
+  case DW_DLV_OK:
+    /*
+     The search ended prematurely. The callback only
+     ends the search if a CU's compiler could not be
+     validated or is invalid.
+    */
+    return false;
+  case DW_DLV_NO_ENTRY:
+    /*
+     All CU DIEs were searched without the callback
+     ever aborting the search. This means that all
+     CU's compiler could be validated successfully.
+    */
+    return true;
+  case DW_DLV_ERROR:
+    dwarf_dealloc_error(dbg, error);
+    return false;
+  default:
+    /* Unreachable ... */
+    return false;
+  }
 }
 
 /* Used to find the name of the subprogram that contains a given PC.

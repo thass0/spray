@@ -101,4 +101,13 @@ void print_filtered(uint64_t value, PrintFilter filter);
 // `filepath` must not be `NULL`.
 void print_as_relative_filepath(const char *filepath);
 
+
+/* Print an error message. */
+void spray_err(const char *fmt, ...);
+/* Print a warning. */
+void spray_warn(const char *fmt, ...);
+/* Print a hint. */
+void spray_hint(const char *fmt, ...);
+
+
 #endif  // _SPRAY_MAGIC_H_

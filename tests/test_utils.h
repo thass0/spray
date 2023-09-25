@@ -21,6 +21,7 @@
 #define POINTERS_SRC "tests/assets/pointers.c"
 #define POINTERS_BIN "tests/assets/pointers.bin"
 #define INCLUDE_VARIABLE_BIN "tests/assets/include-variable.bin"
+#define WRONG_COMPILER_BIN "tests/assets/wrong-compiler.bin"
 
 // Create a test
 #define TEST(name) \
