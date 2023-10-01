@@ -101,13 +101,38 @@ void print_filtered(uint64_t value, PrintFilter filter);
 // `filepath` must not be `NULL`.
 void print_as_relative_filepath(const char *filepath);
 
+/*
+ FORMAT OF MESSAGES
+
+ 1. They start with a capital letter.
+ 2. They do not include tags like 'ERR' or 'WARN'. Those tags
+    are added automatically.
+ 3. They do not end with a newline character. Line breaks are
+    automatically added at the end of each message.
+ 4. They do not end with a period. Periods are only used to delimit
+    sentences inside the message. If appropriate, question or
+    exclamation marks may be used at the end of a message.
+ 5. They may use standard `printf` formatting.
+
+ EXAMPLES OF VALID MESSAGES
+
+ 'Failed to retrieve data'
+ 'Did you forget to initialize this variable?'
+ 'Variable %s has the value %d'     - Expects a string and an integer.
+
+ EXAMPLES OF INVALID MESSAGES
+
+ 'ERR: Cannot open file'            - The 'ERR: ' is added automatically.
+ 'Please provide more information.' - The period at the end is not needed.
+                                      It only adds visual clutter.
+*/
 
 /* Print an error message. */
-void spray_err(const char *fmt, ...);
+void spray_err(const char *msg, ...);
 /* Print a warning. */
-void spray_warn(const char *fmt, ...);
+void spray_warn(const char *msg, ...);
 /* Print a hint. */
-void spray_hint(const char *fmt, ...);
+void spray_hint(const char *msg, ...);
 
 
 #endif  // _SPRAY_MAGIC_H_

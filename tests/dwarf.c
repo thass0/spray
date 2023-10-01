@@ -194,33 +194,115 @@ TEST(sd_line_entry_at_works) {
   return MUNIT_OK;
 }
 
-/* Assert that the first location description in the location list for
-   the variable `name` in `func` has the given values. */
-#define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_, file) \
-  {									\
-    SdLoclist loclist = {0};						\
-    SdLocattr var_attr = {0};						\
-    /* The following two variables are unused rn. */			\
-    char *decl_file = NULL;						\
-    unsigned decl_line = 0;						\
-    SprayResult res = sd_location_from_variable_name(dbg,		\
-						     (pc),		\
-						     (name),		\
-						     &var_attr,		\
-						     &decl_file,	\
-						     &decl_line);	\
-    assert_int(res, ==, SP_OK);						\
-    res = sd_init_loclist(dbg, var_attr, &loclist);			\
-    assert_int(res, ==, SP_OK);						\
-    assert_int(loclist.ranges[0].lowpc.value, ==, (lowpc_));		\
-    assert_int(loclist.ranges[0].highpc.value, ==, (highpc_));		\
-    assert_int(loclist.exprs[0].operations[0].opcode, ==, (opcode_));	\
-    assert_int(loclist.exprs[0].operations[0].operand1, ==, (op1));	\
-    assert_int(loclist.exprs[0].operations[0].operand2, ==, (op2));	\
-    assert_int(loclist.exprs[0].operations[0].operand3, ==, (op3));	\
-    assert_string_equal(decl_file, (file));				\
-    free(decl_file);							\
-    del_loclist(&loclist);						\
+#define ASSERT_TYPE(name, pc, _type)                                           \
+  {                                                                            \
+    SdVarattr var_attr = {0};                                                  \
+    char *unused_decl_file = NULL;                                             \
+    unsigned unused_decl_line = 0;                                             \
+    SprayResult res = sd_runtime_variable(                                     \
+        dbg, (pc), (name), &var_attr, &unused_decl_file, &unused_decl_line);   \
+    assert_int(res, ==, SP_OK);                                                \
+    assert_int(var_attr.type.n_nodes, ==, (_type).n_nodes);                    \
+    for (size_t i = 0; i < (_type).n_nodes; i++) {                             \
+      assert_memory_equal(sizeof(*(_type).nodes), &(_type).nodes[i],           \
+                          &var_attr.type.nodes[i]);                            \
+    }                                                                          \
+                                                                               \
+    free(unused_decl_file);                                                    \
+    del_var_attr(&var_attr);                                                   \
+  }
+
+TEST(finding_basic_variable_types_works) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(TYPE_EXAMPLES_OBJ, &error);
+  assert_ptr_not_null(dbg);
+
+  /* There is no executable code in this CU. */
+  dbg_addr addr = {0x0};
+  
+  SdTypenode a_nodes[1] = {
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_INT, .size = 4 }},
+  };
+  SdType a = { .n_nodes = 1, .nodes = (SdTypenode*)&a_nodes };
+  ASSERT_TYPE("a", addr, a);
+
+  SdTypenode b_nodes[2] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_CONST },
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_LONG, .size = 8 }}, 
+  };
+  SdType b = { .n_nodes = 2, .nodes = (SdTypenode*)&b_nodes };
+  ASSERT_TYPE("b", addr, b);
+
+  SdTypenode c_nodes[1] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_POINTER },
+  };
+  SdType c = { .n_nodes = 1, .nodes = (SdTypenode*)&c_nodes };
+  ASSERT_TYPE("c", addr, c);
+ 
+  SdTypenode d_nodes[2] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_POINTER },
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_LONG_LONG, .size = 8 }}, 
+  };
+  SdType d = { .n_nodes = 2, .nodes = (SdTypenode*)&d_nodes };
+  ASSERT_TYPE("d", addr, d);
+ 
+  SdTypenode e_nodes[3] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_POINTER },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_CONST },
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_UNSIGNED_INT, .size = 4 }}, 
+  };
+  SdType e = { .n_nodes = 3, .nodes = (SdTypenode*)&e_nodes };
+  ASSERT_TYPE("e", addr, e);
+
+  SdTypenode f_nodes[3] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_CONST },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_POINTER },
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_INT, .size = 4 }}, 
+  };
+  SdType f = { .n_nodes = 3, .nodes = (SdTypenode*)&f_nodes };
+  ASSERT_TYPE("f", addr, f);
+
+  SdTypenode g_nodes[6] = {
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_CONST },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_RESTRICT },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_POINTER },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_CONST },
+    { .tag = NODE_MODIFIER, .modifier = TYPE_MOD_VOLATILE },
+    { .tag = NODE_BASE_TYPE, .base_type = { .tag = BASE_TYPE_CHAR, .size = 1 }}, 
+  };
+  SdType g = { .n_nodes = 6, .nodes = (SdTypenode*)&g_nodes };
+  ASSERT_TYPE("g", addr, g);
+
+  dwarf_finish(dbg);
+  return MUNIT_OK;
+}
+
+/*
+ Assert that the first location description in the location list
+ for the variable `name` in `func` has the given values.
+*/
+#define ASSERT_LOCDESC(name, pc, opcode_, op1, op2, op3, lowpc_, highpc_,      \
+                       file)                                                   \
+  {                                                                            \
+    SdLoclist loclist = {0};                                                   \
+    SdVarattr var_attr = {0};                                                  \
+    char *decl_file = NULL;                                                    \
+    unsigned decl_line = 0;                                                    \
+    SprayResult res = sd_runtime_variable(dbg, (pc), (name), &var_attr,        \
+                                          &decl_file, &decl_line);             \
+    assert_int(res, ==, SP_OK);                                                \
+    res = sd_init_loclist(dbg, var_attr.loc, &loclist);                        \
+    assert_int(res, ==, SP_OK);                                                \
+    assert_int(loclist.ranges[0].lowpc.value, ==, (lowpc_));                   \
+    assert_int(loclist.ranges[0].highpc.value, ==, (highpc_));                 \
+    assert_int(loclist.exprs[0].operations[0].opcode, ==, (opcode_));          \
+    assert_int(loclist.exprs[0].operations[0].operand1, ==, (op1));            \
+    assert_int(loclist.exprs[0].operations[0].operand2, ==, (op2));            \
+    assert_int(loclist.exprs[0].operations[0].operand3, ==, (op3));            \
+    assert_string_equal(decl_file, (file));                                    \
+    free(decl_file);                                                           \
+    del_var_attr(&var_attr);                                                   \
+    del_loclist(&loclist);                                                     \
   }
 
 TEST(finding_variable_locations_works) {
@@ -365,6 +447,31 @@ TEST(validating_compilers_works) {
   return MUNIT_OK;
 }
 
+TEST(type_attribute_form) {
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init(SIMPLE_64BIT_BIN, &error);
+  assert_ptr_not_null(dbg);
+
+  SdVarattr var_attr = {0};
+  dbg_addr main_addr = {0x401163}; /* Address from the binary's `main`. */
+  char *decl_file = NULL;
+  unsigned decl_line = 0;
+  SprayResult res = sd_runtime_variable(dbg,
+					main_addr,
+				        "a",
+					&var_attr,
+					&decl_file,
+					&decl_line);
+  assert_int(res, ==, SP_OK);
+
+  dwarf_finish(dbg);
+  del_var_attr(&var_attr);
+  free(decl_file);
+
+  return MUNIT_OK;
+}
+
+
 MunitTest dwarf_tests[] = {
     REG_TEST(get_line_entry_from_pc_works),
     REG_TEST(iterating_lines_works),
@@ -372,10 +479,12 @@ MunitTest dwarf_tests[] = {
     REG_TEST(get_effective_function_start_works),
     REG_TEST(get_filepath_from_pc_works),
     REG_TEST(sd_line_entry_at_works),
+    REG_TEST(finding_basic_variable_types_works),
     REG_TEST(finding_variable_locations_works),
     REG_TEST(finding_locations_by_scope_works),
     REG_TEST(manual_check_locexpr_output),
     REG_TEST(finding_variable_declration_files_works),
     REG_TEST(validating_compilers_works),
+    REG_TEST(type_attribute_form),
     {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}
 };

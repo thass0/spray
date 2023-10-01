@@ -533,21 +533,21 @@ VarLocation *init_var_loc(dbg_addr pc,
     return NULL;
   }
 
-  SdLocattr var_attr = {0};
+  SdVarattr var_attr = {0};
   char *decl_file = NULL;
   unsigned decl_line = 0;
-  SprayResult res = sd_location_from_variable_name(info->dbg,
-						   pc,
-						   var_name,
-						   &var_attr,
-						   &decl_file,
-						   &decl_line);
+  SprayResult res = sd_runtime_variable(info->dbg,
+					pc,
+					var_name,
+					&var_attr,
+					&decl_file,
+					&decl_line);
   if (res == SP_ERR) {
     return NULL;
   }
 
   SdLoclist loclist = {0};
-  res = sd_init_loclist(info->dbg, var_attr, &loclist);
+  res = sd_init_loclist(info->dbg, var_attr.loc, &loclist);
   if (res == SP_ERR) {
     return NULL;
   }
@@ -571,6 +571,7 @@ VarLocation *init_var_loc(dbg_addr pc,
 
   res = sd_eval_loclist(info->dbg, ctx, loclist, &location->loc);
   del_loclist(&loclist);
+  del_var_attr(&var_attr);
 
   return location;
 }

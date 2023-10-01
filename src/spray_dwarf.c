@@ -1053,42 +1053,386 @@ SprayResult sd_get_subprog_loc_attr(Dwarf_Debug dbg,
   }
 }
 
-/* While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
-   keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
-   PC we are looking for.
-   Once we find another DIE with a PC range, we update the search
-   findings depending on whether or not the PC is still in this range.
-   Only if the given PC is currently in the range of the DIEs, do we consider
-   looking for the variable or formal parameter. Otherwise, we are not in the
-   right scope. */
+/*
+ Helper for type-related functions that need to
+ compare type name strings quite a lot.
+*/
+bool str_eq(const char *restrict a, const char *restrict b) {
+  return strcmp(a, b) == 0;
+}
 
-typedef struct VarLocSearchFor {
+/*
+ Populate a `NODE_BASE_TYPE` node using the data from
+ a DIE `DW_TAG_base_type` DIE. It is assumed that `die`
+ has this tag.
+
+ On success, `SP_OK` is returned and `node` is populated
+ with `tag` set to `NODE_BASE_TYPE`.
+
+ On error, `SP_ERR` is returned and `node` stays untouched.
+
+ `die`, die`, and `node` must not be `NULL`.
+*/
+SprayResult sd_build_base_type(Dwarf_Debug dbg,
+			       Dwarf_Die die,
+			       SdTypenode *node) {
+  if (dbg == NULL || die == NULL || node == NULL) {
+    return SP_ERR;
+  }
+
+  int res = DW_DLV_OK;
+  Dwarf_Error error = NULL;
+
+  char *type_name = NULL;	/* Must not free. */
+  res = dwarf_diename(die, &type_name, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  SdBasetype base_type = {0};
+
+  if (str_eq(type_name, "char")) {
+    base_type.tag = BASE_TYPE_CHAR;
+  } else if (str_eq(type_name, "signed char")) {
+    base_type.tag = BASE_TYPE_SIGNED_CHAR;
+  } else if (str_eq(type_name, "unsigned char")) {
+    base_type.tag = BASE_TYPE_UNSIGNED_CHAR;
+  } else if (str_eq(type_name, "short")) {
+    base_type.tag = BASE_TYPE_SHORT;
+  } else if (str_eq(type_name, "unsigned short")) {
+    base_type.tag = BASE_TYPE_UNSIGNED_SHORT;
+  } else if (str_eq(type_name, "int")) {
+    base_type.tag = BASE_TYPE_INT;
+  } else if (str_eq(type_name, "unsigned int")) {
+    base_type.tag = BASE_TYPE_UNSIGNED_INT;
+  } else if (str_eq(type_name, "long")) {
+    base_type.tag = BASE_TYPE_LONG;
+  } else if (str_eq(type_name, "unsigned long")) {
+    base_type.tag = BASE_TYPE_UNSIGNED_LONG;
+  } else if (str_eq(type_name, "long long")) {
+    base_type.tag = BASE_TYPE_LONG_LONG;
+  } else if (str_eq(type_name, "unsigned long long")) {
+    base_type.tag = BASE_TYPE_UNSIGNED_LONG_LONG;
+  } else if (str_eq(type_name, "float")) {
+    base_type.tag = BASE_TYPE_FLOAT;
+  } else if (str_eq(type_name, "double")) {
+    base_type.tag = BASE_TYPE_DOUBLE;
+  } else if (str_eq(type_name, "long double")) {
+    base_type.tag = BASE_TYPE_LONG_DOUBLE;
+  } else {
+    return SP_ERR;
+  }
+
+  /*
+   `DW_AT_encoding` is ignored. The default base
+   type encodings of C are assumed.
+  */
+
+  Dwarf_Unsigned byte_size = 0;
+  res = dwarf_bytesize(die, &byte_size, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  if (byte_size > 0xff) {
+    return SP_ERR;
+  } else {
+    base_type.size = byte_size;
+  }
+
+  node->tag = NODE_BASE_TYPE;
+  node->base_type = base_type;
+
+  return SP_OK;
+}
+
+/*
+ Get the DIE referenced by the given DIE's `DW_AT_type` attribute.
+
+ On success, `SP_OK` is returned and `type_die` is a newly allocated
+ DIE that must be `free`'d by the caller using `dwarf_dealloc_die`.
+
+ On error, `SP_ERR` is returned and `type_die` remains untouched.
+
+ `dbg`, `die`, and `type_die` must not be `NULL`.
+*/
+SprayResult sd_type_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *type_die) {
+  if (dbg == NULL || die == NULL || type_die == NULL) {
+    return SP_ERR;
+  }
+
+  int res = DW_DLV_OK;
+  Dwarf_Error error = NULL;
+
+  Dwarf_Off type_off = 0;
+  Dwarf_Bool type_off_is_info = 0;
+  res = dwarf_dietype_offset(die,
+			     &type_off,
+			     &type_off_is_info,
+			     &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  Dwarf_Die type_die_buf = NULL;
+  res = dwarf_offdie_b(dbg,
+		       type_off,
+		       type_off_is_info,
+		       &type_die_buf,
+		       &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  *type_die = type_die_buf;
+  return SP_OK;
+}
+
+enum { TYPE_ALLOC = 32 };
+
+/*
+ Allocate the buffer to create a new tree of type nodes.
+
+ On success, `SP_OK` is returned, and the members of
+ `type` are set to represent the allocation.
+
+ On error, `SP_ERR` is returned, and `type` stays untouched.
+
+ `type` must not be `NULL`.
+*/
+SprayResult alloc_type(SdType *type) {
+  SdType buf = {
+    .n_nodes = 0,
+    .n_alloc = TYPE_ALLOC,
+  };
+  buf.nodes = calloc(buf.n_alloc, sizeof(*buf.nodes));
+  if (buf.nodes == NULL) {
+    return SP_ERR;
+  } else {
+    *type = buf;
+    return SP_OK;
+  }
+}
+
+void del_type(SdType *type) {
+  if (type != NULL) {
+    free(type->nodes);
+    type->nodes = NULL;
+  }
+}
+
+/*
+ Allocate a new node in `type`, increasing the buffer
+ size if required.
+
+ On success, the pointer to the new node is returned.
+
+ On error, `NULL` is returned.
+
+ `type` must not be `NULL`.
+*/
+SdTypenode *alloc_node(SdType *type) {
+  if (type == NULL) {
+    return NULL;
+  }
+
+
+  if (type->n_nodes + 1 >= type->n_alloc) {
+    type->n_alloc += TYPE_ALLOC;
+    type->nodes = realloc(type->nodes, sizeof(*type->nodes) * type->n_alloc);
+    if (type->nodes == NULL) {
+      return NULL;
+    }
+  }
+
+  return &type->nodes[type->n_nodes ++];
+}
+
+/*
+ Recursion mechanism employed by `sd_variable_type` to
+ build the representation of a `type`. Here `die` must
+ be some DIE that's used in DWARF to represent variable
+ types (e.g. `DW_TAG_base_type`, `DW_TAG_const_type`, etc.).
+
+ On success, `SP_OK` is returned and `type` may be changed,
+ including changes to its memory buffer allocation.
+
+ On error, `SP_ERR` is returned. `type` may still have changed.
+
+ `dbg`, `die`, and `type` must not be `NULL`.
+*/
+SprayResult sd_build_type(Dwarf_Debug dbg,
+			  Dwarf_Die die,
+			  SdType *type) {
+  if (dbg == NULL || die == NULL || type == NULL) {
+    return SP_ERR;
+  }
+
+  int res = DW_DLV_OK;
+  Dwarf_Error error = NULL;
+
+  SdTypenode *node = alloc_node(type);
+  if (node == NULL)
+    return SP_ERR;
+    
+
+  Dwarf_Half tag = 0;
+  res = dwarf_tag(die, &tag, &error);
+
+  if (res != DW_DLV_OK) {
+    if (res == DW_DLV_ERROR) {
+      dwarf_dealloc_error(dbg, error);
+    }
+    return SP_ERR;
+  }
+
+  Dwarf_Die type_die = NULL;
+  
+  switch (tag) {
+  case DW_TAG_base_type:	/* See DWARF 5 standard 5.1 */
+    /* Recursion stops at base types. */
+    return sd_build_base_type(dbg, die, node);
+  case DW_TAG_atomic_type:
+  case DW_TAG_const_type:
+  case DW_TAG_pointer_type:
+  case DW_TAG_restrict_type:
+  case DW_TAG_volatile_type:
+    if (sd_type_die(dbg, die, &type_die) == SP_ERR) {
+      /*
+       Clang stops at the `DW_TAG_pointer_type` DIE in case of
+       `void *`. Thus, recursion may end here prematurely, too.
+       This is not allowed by the DWARF 5 standard, which mandates
+       that a type modifier entry must have the `DW_AT_type` attribute
+       (see p. 109, l. 8). The correct behavior would be to make the
+       `void` pointer's entry point to a `DW_TAG_unspecified`
+       (see p. 108, l. 19).
+      */
+      if (tag == DW_TAG_pointer_type) {
+	node->tag = NODE_MODIFIER;
+	node->modifier = TYPE_MOD_POINTER;
+	return SP_OK;
+      } else {
+	return SP_ERR;
+      }
+    }
+
+    /*
+     All DIE tags that lead to this path map to their
+     respective variants of the `SdTypemod` enumeration.
+    */
+    node->tag = NODE_MODIFIER;
+    node->modifier = tag;
+
+    /* Recursively add more nodes. */
+    return sd_build_type(dbg, type_die, type);
+  case DW_TAG_rvalue_reference_type:
+  case DW_TAG_reference_type:
+  case DW_TAG_shared_type:
+  case DW_TAG_immutable_type:
+  case DW_TAG_packed_type:
+    spray_err("DIE tag %d is not a supported type modifier, "
+	      "because it's not usually used in C code", tag);
+    return SP_ERR;
+  default:
+    spray_err("Unknown DIE tag %d for type", tag);
+    return SP_ERR;
+  }
+}
+
+/*
+ Build a data structure representing the
+ type of the runtime variable that's referred to by
+ `die`. `die` must have the attribute `DW_AT_type`.
+
+ On success, `SP_OK` is returned and `type` is set
+ to the newly constructed type.
+
+ On error, `SP_ERR` is returned and `type` stays untouched.
+
+ `dbg`, `die`, and `type` must not be `NULL`.
+*/
+SprayResult sd_variable_type(Dwarf_Debug dbg,
+			     Dwarf_Die die,
+			     SdType *type) {
+  if (dbg == NULL || die == NULL || type == NULL)
+    return SP_ERR;
+
+  if (!sd_has_at(dbg, die, DW_AT_type))
+    return SP_ERR;
+
+  /* Retrieve the initial DIE referenced by `DW_AT_type`. */
+  Dwarf_Die type_die = NULL;
+  if (sd_type_die(dbg, die, &type_die) == SP_ERR)
+    return SP_ERR;
+
+  if (alloc_type(type) == SP_ERR)
+    return SP_ERR;
+  
+  SprayResult ret = sd_build_type(dbg, type_die, type);
+
+  dwarf_dealloc_die(type_die);
+
+  return ret;
+}
+
+
+/*
+ While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
+ keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
+ PC we are looking for.
+ Once we find another DIE with a PC range, we update the search
+ findings depending on whether or not the PC is still in this range.
+ Only if the given PC is currently in the range of the DIEs, do we consider
+ looking for the variable or formal parameter. Otherwise, we are not in the
+ right scope.
+*/
+
+typedef struct {
   dbg_addr pc;
   bool use_scope;		/* Don't try to find the variable in the scope
 				   of `func_name` if this is set to `false`. */
   const char *var_name;
-} VarLocSearchFor;
+} VarattrSearchFor;
 
-typedef struct VarLocSearchFindings {
+typedef struct {
   bool in_scope;
   unsigned scope_level;
   SdLocattr loc_attr;
+  SdType type;
   char *decl_file;
   unsigned decl_line;
-} VarLocSearchFindings;
+} VarattrSearchFindings;
 
 /* Search callback used in combination with `sd_search_dwarf_die` that
    retrieves the location attribute of a `DW_TAG_variable` DIE with a
    given variable name. */
-bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
-					      Dwarf_Die die,
-					      SearchFor search_for,
-					      SearchFindings search_findings) {
+bool callback__find_runtime_variable(Dwarf_Debug dbg,
+				     Dwarf_Die die,
+				     SearchFor search_for,
+				     SearchFindings search_findings) {
   int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
 
-  VarLocSearchFor *var_search_for = (VarLocSearchFor *) search_for.data;
-  VarLocSearchFindings *var_search_findings = (VarLocSearchFindings *) search_findings.data;
+  const VarattrSearchFor *var_search_for =
+    (const VarattrSearchFor *) search_for.data;
+  VarattrSearchFindings *var_search_findings =
+    (VarattrSearchFindings *) search_findings.data;
 
   /* Do we need to keep track of the current scope? */
   if (var_search_for->use_scope) {
@@ -1143,9 +1487,6 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
     */
     if (correct_tag && location_attr) {
       const char *var_name = var_search_for->var_name;
-
-      int res = DW_DLV_OK;
-      Dwarf_Error error = NULL;
 
       char *die_var_name = NULL;  /* Don't free the string returned by `dwarf_diename`. */
       res = dwarf_diename(die, &die_var_name, &error);
@@ -1227,9 +1568,17 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 	}
 	unsigned decl_line = decl_line_buf;
 
+	/*
+	 3. Retrieve the type of this variable.
+	*/
+	SdType type_buf = {0};
+	SprayResult type_res = sd_variable_type(dbg, die, &type_buf);
+	if (type_res == SP_ERR) {
+	  return false;
+	}
 
 	/*
-	 3. Retrieve the `location` attribute of this DIE.
+	 4. Retrieve the `location` attribute of this DIE.
 	*/
 	Dwarf_Attribute loc_attr = NULL;
 	res = dwarf_attr(die, DW_AT_location, &loc_attr, &error);
@@ -1252,9 +1601,10 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
 					   loc_attr,
 					   &loc_attr_buf);
 	if (res == SP_OK) {
-	  var_search_findings->loc_attr = loc_attr_buf;
 	  var_search_findings->decl_file = decl_file;
 	  var_search_findings->decl_line = decl_line;
+	  var_search_findings->loc_attr = loc_attr_buf;
+	  var_search_findings->type = type_buf;
 	  return true;
 	} else {
 	  return false;
@@ -1277,29 +1627,27 @@ bool callback__find_location_by_variable_name(Dwarf_Debug dbg,
   }
 }
 
-/* Return the `DW_AT_location` attribute from the
-   DIE of the variable with the given name. */
-SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
-					   dbg_addr pc,
-					   const char *var_name,
-					   SdLocattr *loc_attr,
-					   char **decl_file,
-					   unsigned *decl_line) {
+SprayResult sd_runtime_variable(Dwarf_Debug dbg,
+				dbg_addr pc,
+				const char *var_name,
+				SdVarattr *attr,
+				char **decl_file,
+				unsigned *decl_line) {
   assert(dbg != NULL);
   assert(var_name != NULL);
-  assert(loc_attr != NULL);
+  assert(attr != NULL);
   assert(decl_file != NULL);
   assert(decl_line != NULL);
 
   Dwarf_Error error = NULL;
 
-  VarLocSearchFor search_for = {
+  VarattrSearchFor search_for = {
     .pc = pc,
     .var_name = var_name,
     .use_scope = true,
   };
 
-  VarLocSearchFindings search_findings = {
+  VarattrSearchFindings search_findings = {
     .in_scope = false,
     .loc_attr = {0},
     .decl_file = NULL,		/* `malloc`'d in the callback on success. */
@@ -1308,7 +1656,7 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
 
   int res = sd_search_dwarf_dbg(dbg,
 				&error,
-				callback__find_location_by_variable_name,
+				callback__find_runtime_variable,
 				&search_for,
 				&search_findings);
 
@@ -1324,7 +1672,7 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
     search_for.use_scope = false;
     res = sd_search_dwarf_dbg(dbg,
 			      &error,
-			      callback__find_location_by_variable_name,
+			      callback__find_runtime_variable,
 			      &search_for,
 			      &search_findings);
 
@@ -1334,17 +1682,23 @@ SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
       }
       return SP_ERR;
     } else {
-      *loc_attr = search_findings.loc_attr;
+      attr->loc = search_findings.loc_attr;
+      attr->type = search_findings.type;
       *decl_file = search_findings.decl_file;
       *decl_line = search_findings.decl_line;
       return SP_OK;
     }
   } else {
-    *loc_attr = search_findings.loc_attr;
+    attr->loc = search_findings.loc_attr;
+    attr->type = search_findings.type;
     *decl_file = search_findings.decl_file;
     *decl_line = search_findings.decl_line;
     return SP_OK;
   }
+}
+
+void del_var_attr(SdVarattr *attr) {
+  del_type(&attr->type);
 }
 
 #ifndef UNIT_TESTS

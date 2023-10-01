@@ -9,6 +9,7 @@
 #include "spray_elf.h" /* `ElfFile` in `SdLocEvalCtx` */
 #include "registers.h" /* `x86_reg` in `SdLocation` */
 
+#include <dwarf.h>
 #include <libdwarf-0/libdwarf.h>
 #include <stdbool.h>
 
@@ -74,16 +75,78 @@ typedef struct SdLoclist {
   SdLocRange *ranges;
 } SdLoclist;
 
-/* `DW_AT_location` of DIEs that represent runtime variables.
-   It can be used in combination with `sd_init_loclist` to
-   initialize a new location list.
+/*
+ `DW_AT_location` of DIEs that represent runtime variables.
+  It can be used in combination with `sd_init_loclist` to
+  initialize a new location list.
 
-   `sd_init_loc_attr` is the only way to initialize this struct,
-   because this function ensures that the form bounds are met for
-   the `loc_attr` field. */
-typedef struct SdLocattr {
+  `sd_init_loc_attr` is the only way to initialize this struct,
+  because this function ensures that the form bounds are met for
+  the `loc_attr` field.
+*/
+typedef struct {
   Dwarf_Attribute loc;		/* `DW_AT_location` attribute. */
 } SdLocattr;
+
+typedef struct {
+  enum {
+    BASE_TYPE_CHAR,
+    BASE_TYPE_SIGNED_CHAR,
+    BASE_TYPE_UNSIGNED_CHAR,
+    BASE_TYPE_SHORT,
+    BASE_TYPE_UNSIGNED_SHORT,
+    BASE_TYPE_INT,
+    BASE_TYPE_UNSIGNED_INT,
+    BASE_TYPE_LONG,
+    BASE_TYPE_UNSIGNED_LONG,
+    BASE_TYPE_LONG_LONG,
+    BASE_TYPE_UNSIGNED_LONG_LONG,
+    BASE_TYPE_FLOAT,
+    BASE_TYPE_DOUBLE,
+    BASE_TYPE_LONG_DOUBLE,
+  } tag;
+  unsigned char size;		/* Number of bytes used to represent this base type. */
+} SdBasetype;
+
+/* See the DWARF 5 standard 5.3. */
+typedef enum {
+  TYPE_MOD_ATOMIC = DW_TAG_atomic_type,
+  TYPE_MOD_CONST = DW_TAG_const_type,
+  TYPE_MOD_POINTER = DW_TAG_pointer_type,
+  TYPE_MOD_RESTRICT = DW_TAG_restrict_type,
+  TYPE_MOD_VOLATILE = DW_TAG_volatile_type,
+} SdTypemod;
+
+/* Single node in the representation variable types. */
+typedef struct {
+  enum {
+    NODE_BASE_TYPE,
+    NODE_MODIFIER,
+  } tag;			/* Kind of this node. */
+  union {
+    SdBasetype base_type;
+    SdTypemod modifier;
+  };
+} SdTypenode;
+
+/* Host structure for variable types. */
+typedef struct {
+  SdTypenode *nodes;		/* Buffer of nodes. */
+  size_t n_nodes;		/* First `n` nodes in use. */
+  size_t n_alloc;		/* Maximum number of nodes. */
+} SdType;
+
+void del_type(SdType *type);
+
+/*
+ Representation of runtime variables. They are used to find the
+ location of the variable's value in the running program, and
+ to find out what type the variable has.
+*/
+typedef struct {
+  SdLocattr loc;		/* Runtime location. */
+  SdType type;		/* Type. */
+} SdVarattr;
 
 SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
 			     Dwarf_Die die,
@@ -91,8 +154,8 @@ SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
 			     SdLocattr *attr_dest);
 
 /*
-  Get the location description attribute, and the file and
-  line where it was declared of the variable the given name.
+  Get the attributes describing the variable with the given
+  name, and the file and line where this variable was declared.
   `pc` is used to choose the closest variable if the variable
   name occurs more than once.
 
@@ -106,12 +169,14 @@ SprayResult sd_init_loc_attr(Dwarf_Debug dbg,
   `dbg`, `var_name`, `attr`, `decl_file`, and `decl_line` must
   not be `NULL`.
 */
-SprayResult sd_location_from_variable_name(Dwarf_Debug dbg,
-					   dbg_addr pc,
-					   const char *var_name,
-					   SdLocattr *attr,
-					   char **decl_file,
-					   unsigned *decl_line);
+SprayResult sd_runtime_variable(Dwarf_Debug dbg,
+				dbg_addr pc,
+				const char *var_name,
+				SdVarattr *attr,
+				char **decl_file,
+				unsigned *decl_line);
+
+void del_var_attr(SdVarattr *attr);
 
 /*
  Initialize a location list from the location

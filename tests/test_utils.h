@@ -22,6 +22,7 @@
 #define POINTERS_BIN "tests/assets/pointers.bin"
 #define INCLUDE_VARIABLE_BIN "tests/assets/include-variable.bin"
 #define WRONG_COMPILER_BIN "tests/assets/wrong-compiler.bin"
+#define TYPE_EXAMPLES_OBJ "tests/assets/type-examples.o"
 
 // Create a test
 #define TEST(name) \
