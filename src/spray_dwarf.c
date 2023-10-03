@@ -1689,10 +1689,6 @@ SprayResult sd_runtime_variable(Dwarf_Debug dbg,
   }
 }
 
-void del_var_attr(SdVarattr *attr) {
-  del_type(&attr->type);
-}
-
 #ifndef UNIT_TESTS
 
 typedef Dwarf_Small SdOperator;

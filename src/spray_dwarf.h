@@ -142,6 +142,9 @@ void del_type(SdType *type);
  Representation of runtime variables. They are used to find the
  location of the variable's value in the running program, and
  to find out what type the variable has.
+
+ `SdLocattr`'s memory is handled by `libdwarf`. Only `SdType`
+ must be deleted after it's been used by the caller.
 */
 typedef struct {
   SdLocattr loc;		/* Runtime location. */
@@ -175,8 +178,6 @@ SprayResult sd_runtime_variable(Dwarf_Debug dbg,
 				SdVarattr *attr,
 				char **decl_file,
 				unsigned *decl_line);
-
-void del_var_attr(SdVarattr *attr);
 
 /*
  Initialize a location list from the location

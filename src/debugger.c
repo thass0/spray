@@ -479,13 +479,13 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
   assert(dbg != NULL);
   assert(var_name != NULL);
 
-  VarLocation *var_loc = init_var_loc(get_dbg_pc(dbg),
-				      dbg->load_address,
-				      var_name,
-				      dbg->pid,
-				      dbg->info);
+  RuntimeVariable *var = init_var(get_dbg_pc(dbg),
+				  dbg->load_address,
+				  var_name,
+				  dbg->pid,
+				  dbg->info);
 
-  if (var_loc == NULL) {
+  if (var == NULL) {
     dbg_err("Failed to find a variable called %s", var_name);
     return;
   }
@@ -494,48 +494,47 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
   SprayResult read_res = SP_ERR;
 
   /* Is this location a memory address? */
-  if (var_loc_addr(var_loc)) {
-    real_addr loc_addr = *var_loc_addr(var_loc);
+  if (is_addr_loc(var)) {
+    real_addr loc_addr = var_loc_addr(var);
     read_res = pt_read_memory(dbg->pid, loc_addr, &value);
   }
 
   /* Is this location a register number? */
-  if (var_loc_reg(var_loc)) {
-    x86_reg loc_reg = *var_loc_reg(var_loc);
+  if (is_reg_loc(var)) {
+    x86_reg loc_reg = var_loc_reg(var);
     read_res = get_register_value(dbg->pid, loc_reg, &value);
   }
 
   if (read_res == SP_ERR) {
-    dbg_err("Fount a variable %s, but failed to read its value", var_name);
+    dbg_err("Found a variable %s, but failed to read its value", var_name);
   } else {
     printf(MEM_READ_INDENT);
-
-    print_filtered(value, filter);
-
+    print_var_value(var, value, filter);
     printf(" (");
-
-    print_var_loc(var_loc);
-
+    print_var_loc(var);
     printf(")\n");
   }
 
-  free_var_loc(var_loc);
+  del_var(var);
 }
 
 #define SET_VAR_WRITE_ERR "Found a variable %s, but failed to write its value"
 #define SET_VAR_READ_ERR "Wrote to variable %s, but failed to read its new value for validation"
 
-void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value, PrintFilter filter) {
+void execmd_set_variable(Debugger *dbg,
+			 const char *var_name,
+			 uint64_t value,
+			 PrintFilter filter) {
   assert(dbg != NULL);
   assert(var_name != NULL);
 
-  VarLocation *var_loc = init_var_loc(get_dbg_pc(dbg),
-				      dbg->load_address,
-				      var_name,
-				      dbg->pid,
-				      dbg->info);
+  RuntimeVariable *var = init_var(get_dbg_pc(dbg),
+				  dbg->load_address,
+				  var_name,
+				  dbg->pid,
+				  dbg->info);
 
-  if (var_loc == NULL) {
+  if (var == NULL) {
     dbg_err("Failed to find a variable called %s", var_name);
     return;
   }
@@ -544,49 +543,49 @@ void execmd_set_variable(Debugger *dbg, const char *var_name, uint64_t value, Pr
   SprayResult res = SP_ERR;
 
   /* Is this location a memory address? */
-  if (var_loc_addr(var_loc)) {
-    real_addr loc_addr = *var_loc_addr(var_loc);
+  if (is_addr_loc(var)) {
+    real_addr loc_addr = var_loc_addr(var);
     res = pt_write_memory(dbg->pid, loc_addr, value);
     if (res == SP_ERR) {
       dbg_err(SET_VAR_WRITE_ERR, var_name);
+      del_var(var);
       return;
     }
 
     res = pt_read_memory(dbg->pid, loc_addr, &value_after);
     if (res == SP_ERR) {
       dbg_err(SET_VAR_READ_ERR, var_name);
+      del_var(var);
       return;
     }
   }
 
   /* Is this location a register number? */
-  if (var_loc_reg(var_loc)) {
-    x86_reg loc_reg = *var_loc_reg(var_loc);
+  if (is_reg_loc(var)) {
+    x86_reg loc_reg = var_loc_reg(var);
     res = set_register_value(dbg->pid, loc_reg, value);
     if (res == SP_ERR) {
       dbg_err(SET_VAR_WRITE_ERR, var_name);
+      del_var(var);
       return;
     }
 
     res = get_register_value(dbg->pid, loc_reg, &value_after);
     if (res == SP_ERR) {
       dbg_err(SET_VAR_READ_ERR, var_name);
+      del_var(var);
       return;
     }
   }
 
   /* Print the value that's been read after the write. */
   printf(MEM_READ_INDENT);
-
-  print_filtered(value, filter);
-
+  print_var_value(var, value, filter);
   printf(" " WRITE_READ_MSG " (");
-
-  print_var_loc(var_loc);
-
+  print_var_loc(var);
   printf(")\n");
 
-  free_var_loc(var_loc);
+  del_var(var);
 }
 
 void execmd_break(Breakpoints *breakpoints, real_addr addr) {

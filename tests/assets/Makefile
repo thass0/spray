@@ -14,7 +14,7 @@ CUSTOM_TYPES = custom_types.c
 VARIABLES = recurring_variables.c
 POINTERS = pointers.c
 TYPE_EXAMPLES = type_examples.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin extern-variables.bin include-variable.bin wrong-compiler.bin type-examples.o
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin extern-variables.bin include-variable.bin wrong-compiler.bin type-examples.bin
 
 all: $(TARGETS)
 
@@ -48,8 +48,8 @@ include-variable.bin: $(INCLUDE_VARIABLE)
 	$(CC) $(CFLAGS) $< -o $@
 wrong-compiler.bin: $(SIMPLE)
 	gcc $(CFLAGS) $< -o $@
-type-examples.o: $(TYPE_EXAMPLES)
-	$(CC) $(CFLAGS) $< -c -o $@
+type-examples.bin: $(TYPE_EXAMPLES)
+	$(CC) $(CFLAGS) $< -o $@
 
 
 clean:

@@ -209,12 +209,12 @@ TEST(sd_line_entry_at_works) {
     }                                                                          \
                                                                                \
     free(unused_decl_file);                                                    \
-    del_var_attr(&var_attr);                                                   \
+    del_type(&var_attr.type);						\
   }
 
 TEST(finding_basic_variable_types_works) {
   Dwarf_Error error = NULL;
-  Dwarf_Debug dbg = sd_dwarf_init(TYPE_EXAMPLES_OBJ, &error);
+  Dwarf_Debug dbg = sd_dwarf_init(TYPE_EXAMPLES_BIN, &error);
   assert_ptr_not_null(dbg);
 
   /* There is no executable code in this CU. */
@@ -301,7 +301,7 @@ TEST(finding_basic_variable_types_works) {
     assert_int(loclist.exprs[0].operations[0].operand3, ==, (op3));            \
     assert_string_equal(decl_file, (file));                                    \
     free(decl_file);                                                           \
-    del_var_attr(&var_attr);                                                   \
+    del_type(&var_attr.type);                                                   \
     del_loclist(&loclist);                                                     \
   }
 
@@ -465,7 +465,7 @@ TEST(type_attribute_form) {
   assert_int(res, ==, SP_OK);
 
   dwarf_finish(dbg);
-  del_var_attr(&var_attr);
+  del_type(&var_attr.type);
   free(decl_file);
 
   return MUNIT_OK;

@@ -463,50 +463,51 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
   return SP_OK;
 }
 
-typedef struct VarLocation {
+typedef struct RuntimeVariable {
   SdLocation loc;
   char *decl_file;		/* The file where the variable was declared. */
   unsigned decl_line;		/* The line where the variable was declared. */
-} VarLocation;
+  SdType type;
+} RuntimeVariable;
 
-const real_addr *var_loc_addr(VarLocation *loc) {
-  if ((loc != NULL) && (loc->loc.tag == LOC_ADDR)) {
-    return &loc->loc.addr;
+real_addr var_loc_addr(RuntimeVariable *var) {
+  if ((var != NULL) && (var->loc.tag == LOC_ADDR)) {
+    return var->loc.addr;
   } else {
-    return NULL;
+    return (real_addr){0};
   }
 }
 
-const x86_reg *var_loc_reg(VarLocation *loc) {
-  if ((loc != NULL) && (loc->loc.tag == LOC_REG)) {
-    return &loc->loc.reg;
+x86_reg var_loc_reg(RuntimeVariable *var) {
+  if ((var != NULL) && (var->loc.tag == LOC_REG)) {
+    return var->loc.reg;
   } else {
-    return NULL;
+    return 0;
   }
 }
 
-bool is_addr_loc(VarLocation *loc) {
-  return (loc != NULL) && (loc->loc.tag == LOC_ADDR);
+bool is_addr_loc(RuntimeVariable *var) {
+  return (var != NULL) && (var->loc.tag == LOC_ADDR);
 }
-bool is_reg_loc(VarLocation *loc) {
-  return (loc != NULL) && (loc->loc.tag == LOC_REG);
-}
-
-const char *var_loc_path(VarLocation *loc) {
-  assert(loc != NULL);
-  return loc->decl_file;
+bool is_reg_loc(RuntimeVariable *var) {
+  return (var != NULL) && (var->loc.tag == LOC_REG);
 }
 
-unsigned var_loc_line(VarLocation *loc) {
-  assert(loc != NULL);
-  return loc->decl_line;
+const char *var_loc_path(RuntimeVariable *var) {
+  assert(var != NULL);
+  return var->decl_file;
 }
 
-void print_var_loc(VarLocation *loc) {
-  if (loc == NULL) {
+unsigned var_loc_line(RuntimeVariable *var) {
+  assert(var != NULL);
+  return var->decl_line;
+}
+
+void print_var_loc(RuntimeVariable *var) {
+  if (var == NULL) {
     printf("<?>:<?>");
   } else {
-    const char *var_path = var_loc_path(loc);
+    const char *var_path = var_loc_path(var);
     if (var_path != NULL) {
       print_as_relative_filepath(var_path);
     } else {
@@ -515,7 +516,7 @@ void print_var_loc(VarLocation *loc) {
 
     printf(":");
 
-    unsigned var_line = var_loc_line(loc);
+    unsigned var_line = var_loc_line(var);
     if (var_line > 0) {		/* Line numbers start at 1! */
       printf("%u", var_line);
     } else {
@@ -524,7 +525,110 @@ void print_var_loc(VarLocation *loc) {
   }
 }
 
-VarLocation *init_var_loc(dbg_addr pc,
+void print_base_type(SdBasetype base_type,
+		     uint64_t value,
+		     PrintFilter filter) {
+  /*
+   `-1` starts out being all ones. By shifting it to the
+   left by `base_type.size * 8` bits, the first
+   `base_type.size` bits become `0`. Lastly all bits are
+   flipped so that we get a mask for the `base_type.size`
+   lowest bytes. If `base_type.size` is greater than 8,
+   the mask will select everything.
+  */
+  unsigned shift_by = base_type.size * 8;
+  uint64_t mask = -1;		/* All ones. */
+  if (shift_by < (sizeof(mask) * 8)) {
+    /* A left-shift by `>= sizeof(type) * 8` bits is UB. */
+    mask = ~(mask << shift_by);
+  }
+  value &= mask;
+
+  if (filter == PF_NONE) {
+    switch (base_type.tag) {
+    case BASE_TYPE_CHAR:
+      printf("'%c'", (char) value);
+      break;
+    case BASE_TYPE_SIGNED_CHAR:
+      printf("%hhd", (signed char) value);
+      break;
+    case BASE_TYPE_UNSIGNED_CHAR:
+      printf("%hhu", (signed char) value);
+      break;
+    case BASE_TYPE_SHORT:
+      printf("%hd", (short) value);
+      break;
+    case BASE_TYPE_UNSIGNED_SHORT:
+      printf("%hu", (unsigned short) value);
+      break;
+    case BASE_TYPE_INT:
+      printf("%d", (int) value);
+      break;
+    case BASE_TYPE_UNSIGNED_INT:
+      printf("%u", (int) value);
+      break;
+    case BASE_TYPE_LONG:
+      printf("%ld", (long) value);
+      break;
+    case BASE_TYPE_UNSIGNED_LONG:
+      printf("%lu", (unsigned long) value);
+      break;
+    case BASE_TYPE_LONG_LONG:
+      printf("%lld", (long long) value);
+      break;
+    case BASE_TYPE_UNSIGNED_LONG_LONG:
+      printf("%llu", (unsigned long long) value);
+      break;
+    case BASE_TYPE_FLOAT:
+      printf("%f", (float) value);
+      break;
+    case BASE_TYPE_DOUBLE:
+      printf("%f", (double) value);
+      break;
+    case BASE_TYPE_LONG_DOUBLE:
+      printf("%Lf", (long double) value);
+      break;
+    }
+  } else {
+    print_filtered(value, filter);
+  }
+}
+
+void print_var_value(RuntimeVariable *var,
+		     uint64_t value,
+		     PrintFilter filter) {
+  if (var == NULL) {
+    print_filtered(value, filter);
+    printf(" (no type!)");
+  } else {
+    SdTypenode *node = NULL;
+    for (size_t i = 0; i < var->type.n_nodes; i++) {
+      node = &var->type.nodes[i];
+      switch (node->tag) {
+      case NODE_BASE_TYPE:
+	print_base_type(node->base_type, value, filter);
+	return;
+      case NODE_MODIFIER:
+	if (node->modifier == TYPE_MOD_POINTER) {
+	  /* Only stop at pointers. */
+	  printf("%p", (void *) value);
+	  return;
+	}
+	/* Continue iterating, until a printable node has been found. */
+	break;
+      }
+    }
+
+    /*
+     The loop returns from this function after printing the value.
+     Thus, if we get here, the value could not be printed with any node.
+    */
+    print_filtered(value, filter);
+    printf(" (no applicable type!)");
+  }
+}
+
+RuntimeVariable *init_var(dbg_addr pc,
 			  real_addr load_address,
 			  const char *var_name,
 			  pid_t pid,
@@ -559,25 +663,28 @@ VarLocation *init_var_loc(dbg_addr pc,
     .load_address = load_address,
   };
 
-  VarLocation *location = malloc(sizeof(*location));
-  assert(location != NULL);
+  RuntimeVariable *var = malloc(sizeof(*var));
+  assert(var != NULL);
+
+  var->type = var_attr.type;
 
   /*
    `decl_line` and `decl_file` are both optional, and
    may be `0` or `NULL` respectively.
   */
-  location->decl_line = decl_line;
-  location->decl_file = decl_file;
+  var->decl_line = decl_line;
+  var->decl_file = decl_file;
 
-  res = sd_eval_loclist(info->dbg, ctx, loclist, &location->loc);
+  /* Evaluate the location description and store it in `loc`. */
+  res = sd_eval_loclist(info->dbg, ctx, loclist, &var->loc);
   del_loclist(&loclist);
-  del_var_attr(&var_attr);
 
-  return location;
+  return var;
 }
 
-void free_var_loc(VarLocation *loc) {
+void del_var(RuntimeVariable *loc) {
   if (loc != NULL) {
+    del_type(&loc->type);
     free(loc->decl_file);
     free(loc);
   }

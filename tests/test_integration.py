@@ -13,6 +13,7 @@ MULTI_FILE_BIN = 'tests/assets/multi-file.bin'
 PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
 COMMENTED_BIN = 'tests/assets/commented.bin'
 CUSTOM_TYPES_BIN = 'tests/assets/custom-types.bin'
+TYPE_EXAMPLES_BIN = 'tests/assets/type-examples.bin'
 
 
 def random_string() -> str:
@@ -185,6 +186,34 @@ class TestFilters:
         assert_ends_with('t a 0x10 |hex', 'Trailing characters in command')
         assert_ends_with('t a 0x10 |', 'Invalid filter')
         assert_ends_with('t a 0x10 | blah-invalid-filter', 'Invalid filter')
+
+
+class TestTypedPrint():
+    def test_print_typed_variables(self):
+        assert_ends_with('b tests/assets/type_examples.c:18\nc\np a\np b\np c\n p d\np e\np f\np g\np h\np i\np j\np k\np l\np m\n', """
+         1 (tests/assets/type_examples.c:1)
+         2 (tests/assets/type_examples.c:2)
+         0x3 (tests/assets/type_examples.c:3)
+         0x4 (tests/assets/type_examples.c:4)
+         0x5 (tests/assets/type_examples.c:5)
+         0x6 (tests/assets/type_examples.c:6)
+         0x7 (tests/assets/type_examples.c:7)
+         'a' (tests/assets/type_examples.c:11)
+         98 (tests/assets/type_examples.c:12)
+         99 (tests/assets/type_examples.c:13)
+         'd' (tests/assets/type_examples.c:14)
+         101 (tests/assets/type_examples.c:15)
+         102 (tests/assets/type_examples.c:16)
+""", TYPE_EXAMPLES_BIN)
+
+    def test_filter_typed_variables(self):
+        assert_ends_with('b tests/assets/type_examples.c:18\nc\np i\np i | bytes\np i | hex\np n\np n | bytes\n', """
+         98 (tests/assets/type_examples.c:12)
+         00 00 00 00 00 00 00 62 (tests/assets/type_examples.c:12)
+         0x62 (tests/assets/type_examples.c:12)
+         9223372036854775808 (tests/assets/type_examples.c:17)
+         80 00 00 00 00 00 00 00 (tests/assets/type_examples.c:17)
+""", TYPE_EXAMPLES_BIN)
 
 
 class TestBreakpointCommands:

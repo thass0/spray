@@ -7,4 +7,3 @@ compile_commands.json
 *~
 *.import.scm
 /libdwarf-code/
-**/*.o

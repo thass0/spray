@@ -36,15 +36,15 @@ TEST(breakpoints_work) {
     ExecResult wait_res = wait_for_signal(&dbg);			\
     assert_int(wait_res.type, ==, SP_OK);				\
 									\
-    VarLocation *location = init_var_loc(pc,				\
-					 dbg.load_address,		\
-					 (var_name),			\
-					 dbg.pid,			\
-					 dbg.info);			\
-    assert_ptr_not_null(location);					\
-    assert_ptr_not_null(var_loc_addr(location));			\
-    real_addr loc_addr = *var_loc_addr(location);			\
-    free_var_loc(location);						\
+    RuntimeVariable *var = init_var(pc,					\
+				    dbg.load_address,			\
+				    (var_name),				\
+				    dbg.pid,				\
+				    dbg.info);				\
+    assert_ptr_not_null(var);						\
+    assert_true(is_addr_loc(var));					\
+    real_addr loc_addr = var_loc_addr(var);				\
+    del_var(var);							\
 									\
     uint64_t value = 0;							\
     SprayResult mem_res = pt_read_memory(dbg.pid, loc_addr, &value);	\

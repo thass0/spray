@@ -105,62 +105,85 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
                                       Breakpoints *breakpoints,
                                       real_addr **to_del, size_t *n_to_del);
 
-// Location of a variable.
-//
-// This includes a description of where to find this variable
-// in the memory of the running debugee process, the path to
-// the file where the variable is declared and line number in
-// this file.
-//
-// It does not include the name the variable is declared as.
-// The name should be easily accessible since it's required
-// to create an instance of `VarLocation`.
-typedef struct VarLocation VarLocation;
+/*
+ Information about runtime variables.
 
-/* Return a pointer to the address of the location or `NULL`
-   if the location doesn't represent an address. */
-const real_addr *var_loc_addr(VarLocation *loc);
+ This includes a description of where to find this variable
+ in the memory of the running debugee process, the path to
+ the file where the variable is declared and line number in
+ this file.
 
-/* Return a pointer to the register location stands for
-   or `NULL` if the location doesn't represent a register. */
-const x86_reg *var_loc_reg(VarLocation *loc);
+ It also includes information on the type of the variable.
+ This way, the value of the variable can be printed
+ according to the type.
 
-/* Check the type of a location. */
-bool is_addr_loc(VarLocation *loc);
-bool is_reg_loc(VarLocation *loc);
+ It does not include the name the variable is declared as.
+ The name should be easily accessible since it's required
+ to create an instance of `RuntimeVariable`.
+*/
+typedef struct RuntimeVariable RuntimeVariable;
 
-// Return the path of the file and the line number in the file
-// where the variable described by `loc` was declared.
-//
-// Both of them are optional. `0` indicates that there is no
-// line number (since line numbers start at 1!), and `NULL` is
-// returned if there is no path.
-const char *var_loc_path(VarLocation *loc);
-unsigned var_loc_line(VarLocation *loc);
+/*
+ Return the location of the variable as a runtime address.
+ The return value is meaningless if `is_addr_loc == false`.
+ Check that that's not the case first!
+*/
+real_addr var_loc_addr(RuntimeVariable *var);
 
-// Print the path and the line of the given variable.
-//
-// This function uses the values as `var_loc_path` and
-// `var_loc_line` return.
-//
-// `loc` must not be `NULL`.
-void print_var_loc(VarLocation *loc);
+/*
+ Return the location of the variable as a register.
+ The return value is meaningless if `is_reg_loc == false`.
+ Check that that's not the case first!
+*/
+x86_reg var_loc_reg(RuntimeVariable *var);
 
-// Get the location of the variable with the
-// given name in the scope around `pc`.
-//
-// On success, a new heap-allocated location is returned.
-// This location must be manually `free`'d (TODO: make
-// happen automatically when `info` is destroyed).
-//
-// `NULL` is returned on error.
-VarLocation *init_var_loc(dbg_addr pc,
-			 real_addr load_address,
-			 const char *var_name,
-			 pid_t pid,
-			 const DebugInfo *info);
+/* Check the type of a location description. */
+bool is_addr_loc(RuntimeVariable *var);
+bool is_reg_loc(RuntimeVariable *var);
 
-// Delete a `VarLocation` pointer as returned by `init_var_loc`.
-void free_var_loc(VarLocation *loc);
+/*
+ Return the path of the file and the line number in the file
+ where the variable described by `var` was declared.
+
+ Both of them are optional. `0` indicates that there is no
+ line number (since line numbers start at 1!), and `NULL` is
+ returned if there is no path.
+*/
+const char *var_loc_path(RuntimeVariable *var);
+unsigned var_loc_line(RuntimeVariable *var);
+
+/*
+ Print the path and the line of the given variable.
+
+ This function uses the values as `var_loc_path` and
+ `var_loc_line` return.
+
+ `var` must not be `NULL`.
+*/
+void print_var_loc(RuntimeVariable *var);
+
+/* Use the type of the variable to print it. */
+void print_var_value(RuntimeVariable *var,
+		     uint64_t value,
+		     PrintFilter filter);
+
+/*
+ Get the location of the variable with the
+ given name in the scope around `pc`.
+
+ On success, a new heap-allocated location is returned.
+ This location must be manually `free`'d (TODO: make
+ happen automatically when `info` is destroyed).
+
+ `NULL` is returned on error.
+*/
+RuntimeVariable *init_var(dbg_addr pc,
+			  real_addr load_address,
+			  const char *var_name,
+			  pid_t pid,
+			  const DebugInfo *info);
+
+/* Delete a `RuntimeVariable` pointer as returned by `init_var`. */
+void del_var(RuntimeVariable *var);
 
 #endif // _SPRAY_INFO_H_
