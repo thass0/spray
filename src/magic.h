@@ -7,6 +7,7 @@
 
 #include <stdint.h>		/* `uint64_t` for address values. */
 #include <stdio.h>		/* `printf` for `print_addr`. */
+#include <stdbool.h>
 
 #define unused(x) (void) (x);
 
@@ -48,6 +49,9 @@ unsigned n_digits(double num);
 /* Print n space characters to standard out. */
 void indent_by(unsigned n_spaces);
 
+/* Helper to test if two strings are equal (`strcmp(...) == 0`) */
+bool str_eq(const char *restrict a, const char *restrict b);
+
 typedef struct {
   uint64_t value;
 } real_addr;
@@ -56,15 +60,17 @@ typedef struct {
   uint64_t value;
 } dbg_addr;
 
-/* The runtime addresses in *position independent executables*
-   may all be offset by a particular value from the addresses
-   which are stored in the binary file itself.
-   The addresses found in the DWARF debug information are such
-   permanently stored addresses. `dbg_addr` represents them.
-   Addresses retrieved from the running process or addresses from
-   the debug addresses, which have been offset by the load address,
-   are represented by `real_addr`. The are also referred to as *real*
-   addresses. */
+/*
+ The runtime addresses in *position independent executables*
+ may all be offset by a particular value from the addresses
+ which are stored in the binary file itself.
+ The addresses found in the DWARF debug information are such
+ permanently stored addresses. `dbg_addr` represents them.
+ Addresses retrieved from the running process or addresses from
+ the debug addresses, which have been offset by the load address,
+ are represented by `real_addr`. The are also referred to as *real*
+ addresses.
+*/
 
 /* Convert a real address to a debug address. */
 dbg_addr real_to_dbg(real_addr offset, real_addr real);
@@ -72,6 +78,8 @@ dbg_addr real_to_dbg(real_addr offset, real_addr real);
 /* Convert a debug address to a real address. */
 real_addr dbg_to_real(real_addr offset, dbg_addr dwarf);
 
+/* `printf` format string for addresses. */
+#define ADDR_FORMAT "0x%016lx"
 
 /* Filters to format the output. */
 
@@ -86,20 +94,18 @@ typedef enum PrintFilter {
 
 PrintFilter parse_filter(const char *filter_str);
 
-// Turn `current` into `_default` if `_default` is `PF_NONE`.
+/* Turn `current` into `_default` if `current` is `PF_NONE`. */
 PrintFilter default_filter(PrintFilter current, PrintFilter _default);
 
-void print_as_addr(uint64_t addr);
 void print_filtered(uint64_t value, PrintFilter filter);
 
-// Print an address.
-#define print_addr(x) print_as_addr((x).value)
-#define print_addr_filtered(x) print_as_addr_filtered((x).value)
+/*
+ Print `filepath` as relative to the current working directory.
 
-// Print `filepath` as relative to the current working directory.
-//
-// `filepath` must not be `NULL`.
+ `filepath` must not be `NULL`.
+*/
 void print_as_relative_filepath(const char *filepath);
+
 
 /*
  FORMAT OF MESSAGES
@@ -127,12 +133,15 @@ void print_as_relative_filepath(const char *filepath);
                                       It only adds visual clutter.
 */
 
-/* Print an error message. */
+/* Print messages not tied to the UI to stderr */
 void spray_err(const char *msg, ...);
-/* Print a warning. */
 void spray_warn(const char *msg, ...);
-/* Print a hint. */
 void spray_hint(const char *msg, ...);
+
+/* Print messages tied to the debugger REPL to stdout */
+void dbg_err(const char *msg, ...);
+void dbg_warn(const char *msg, ...);
+void dbg_hint(const char *msg, ...);
 
 
 #endif  // _SPRAY_MAGIC_H_

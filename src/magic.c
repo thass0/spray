@@ -23,6 +23,10 @@ void indent_by(unsigned n_spaces) {
   }
 }
 
+bool str_eq(const char *restrict a, const char *restrict b) {
+  return strcmp(a, b) == 0;
+}
+
 dbg_addr real_to_dbg(real_addr offset, real_addr real) {
   return (dbg_addr){real.value - offset.value};
 }
@@ -38,17 +42,17 @@ PrintFilter parse_filter(const char *filter_str) {
   const char *dec_filter = "dec";
   const char *bytes_filter = "bytes";
   if (filter_str != NULL) {
-    if (strcmp(filter_str, hex_filter) == 0) {
+    if (str_eq(filter_str, hex_filter)) {
       return PF_HEX;
-    } else if (strcmp(filter_str, hex_filter) == 0) {
+    } else if (str_eq(filter_str, hex_filter)) {
       return PF_HEX;
-    } else if (strcmp(filter_str, bits_filter) == 0) {
+    } else if (str_eq(filter_str, bits_filter)) {
       return PF_BITS;
-    } else if (strcmp(filter_str, addr_filter) == 0) {
+    } else if (str_eq(filter_str, addr_filter)) {
       return PF_ADDR;
-    } else if (strcmp(filter_str, dec_filter) == 0) {
+    } else if (str_eq(filter_str, dec_filter)) {
       return PF_DEC;
-    } else if (strcmp(filter_str, bytes_filter) == 0) {
+    } else if (str_eq(filter_str, bytes_filter)) {
       return PF_BYTES;
     } else {
       return PF_NONE;
@@ -65,8 +69,6 @@ PrintFilter default_filter(PrintFilter current, PrintFilter _default) {
     return current;
   }
 }
-
-void print_as_addr(uint64_t addr) { print_filtered(addr, PF_ADDR); }
 
 /* Macros for printing binary numbers. https://stackoverflow.com/a/25108449 */
 #define PRINTF_BITS_PATTERN_INT8 "%c%c%c%c%c%c%c%c"
@@ -94,10 +96,6 @@ void print_as_addr(uint64_t addr) { print_filtered(addr, PF_ADDR); }
 #define PRINTF_BITS_INT64(i)				\
   PRINTF_BITS_INT32((i) >> 32), PRINTF_BITS_INT32(i)
 
-#define HEX_FORMAT "0x%lx"
-#define DEC_FORMAT "%ld"
-#define ADDR_FORMAT "0x%016lx"
-
 /* Macros for printing bytes made up of two hexadecimal digits each. */
 #define PRINTF_BYTES_PATTERN_INT8 "%02hx"
 #define PRINTF_BYTES_PATTERN_INT16                                              \
@@ -109,6 +107,9 @@ void print_as_addr(uint64_t addr) { print_filtered(addr, PF_ADDR); }
 #define PRINTF_BYTES_INT16(i) ((uint8_t)((i) >> 8) & 0xff), ((uint8_t)(i) & 0xff)
 #define PRINTF_BYTES_INT32(i) PRINTF_BYTES_INT16((i) >> 16), PRINTF_BYTES_INT16(i)
 #define PRINTF_BYTES_INT64(i) PRINTF_BYTES_INT32((i) >> 32), PRINTF_BYTES_INT32(i)
+
+#define HEX_FORMAT "0x%lx"
+#define DEC_FORMAT "%ld"
 
 void print_filtered(uint64_t value, PrintFilter filter) {
   switch (filter) {
@@ -185,7 +186,7 @@ void print_as_relative_filepath(const char *filepath) {
   }
 }
 
-void spray_msg(const char *kind, const char *fmt, va_list argp) {
+void print_msg(FILE *stream, const char *kind, const char *fmt, va_list argp) {
   assert(kind != NULL);
   assert(fmt != NULL);
   assert(argp != NULL);
@@ -203,7 +204,7 @@ void spray_msg(const char *kind, const char *fmt, va_list argp) {
   */
   assert(n_printed == (len - 1));
 
-  vfprintf(stderr, fmt_buf, argp);
+  vfprintf(stream, fmt_buf, argp);
 
   free(fmt_buf);
 }
@@ -211,20 +212,41 @@ void spray_msg(const char *kind, const char *fmt, va_list argp) {
 void spray_err(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
-  spray_msg("ERR", fmt, argp);
+  print_msg(stderr, "ERR", fmt, argp);
   va_end(argp);
 }
 
 void spray_warn(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
-  spray_msg("WARN", fmt, argp);
+  print_msg(stderr, "WARN", fmt, argp);
   va_end(argp);
 }
 
 void spray_hint(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
-  spray_msg("HINT", fmt, argp);
+  print_msg(stderr, "HINT", fmt, argp);
+  va_end(argp);
+}
+
+void dbg_err(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  print_msg(stdout, "ERR", fmt, argp);
+  va_end(argp);
+}
+
+void dbg_warn(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  print_msg(stdout, "WARN", fmt, argp);
+  va_end(argp);
+}
+
+void dbg_hint(const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  print_msg(stdout, "HINT", fmt, argp);
   va_end(argp);
 }

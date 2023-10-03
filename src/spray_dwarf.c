@@ -1054,14 +1054,6 @@ SprayResult sd_get_subprog_loc_attr(Dwarf_Debug dbg,
 }
 
 /*
- Helper for type-related functions that need to
- compare type name strings quite a lot.
-*/
-bool str_eq(const char *restrict a, const char *restrict b) {
-  return strcmp(a, b) == 0;
-}
-
-/*
  Populate a `NODE_BASE_TYPE` node using the data from
  a DIE `DW_TAG_base_type` DIE. It is assumed that `die`
  has this tag.

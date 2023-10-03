@@ -161,9 +161,7 @@ void print_backtrace(CallFrame *call_frame) {
     while (call_frame != NULL) {
       location = &call_frame->location;
 
-      printf("  ");
-      print_addr(location->pc);
-      printf(" ");
+      printf("  " ADDR_FORMAT " ", location->pc.value);
 
       if (location->function) {
         printf("%s", location->function);

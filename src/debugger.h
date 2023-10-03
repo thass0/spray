@@ -3,7 +3,7 @@
 #ifndef _SPRAY_DEBUGGER_H_
 #define _SPRAY_DEBUGGER_H_
 
-// Required to use `sigabbrev_np`
+/* Required to use `sigabbrev_np` */
 #define _GNU_SOURCE
 
 #include <stdlib.h>
@@ -21,22 +21,31 @@ typedef struct {
   History history;           /* Command history of recent commands. */
 } Debugger;
 
-// Setup a debugger. This forks the child process.
-// `store` is only modified on success. The values
-// it initially has are never read.
-// This launches the debuggee process and immediately stops it.
-int setup_debugger(const char *prog_name, char *prog_argv[], Debugger *store);
+/*
+ Setup a debugger. This forks the child process, launches
+ and immediately stops it.
 
-// Run a debugger. Starts at the beginning of
-// the `main` function.
+ On success, `dbg` is modified to accommodate the changes.
+
+ On error, `dbg` stays untouched, and `-1` is returned.
+*/
+int setup_debugger(const char *prog_name, char *prog_argv[], Debugger *dbg);
+
+/*
+ Run the debugger. Starts debugging at the beginning
+ of the `main` function of the child process.
+
+ Call `setup_debugger` on `dbg` before calling this function.
+ After `run_debugger` returns, `dbg` is still allocated and
+ must be deleted using `del_debugger`.
+*/
 void run_debugger(Debugger dbg);
 
-// Free memory allocated by the debugger.
-// Called by `run_debugger`. Returns `SP_ERR`
-// if the memory mapped ELF file couldn't be
-// unmapped.
-SprayResult free_debugger(Debugger dbg);
-
+/*
+ Free memory allocated by the debugger. Returns
+ `SP_ERR` if some resource couldn't be deleted.
+*/
+SprayResult del_debugger(Debugger dbg);
 
 #ifdef UNIT_TESTS
 

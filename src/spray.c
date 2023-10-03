@@ -30,5 +30,8 @@ int main(int argc, char **argv) {
 
   run_debugger(debugger);
 
+  if (del_debugger(debugger) == SP_ERR)
+    return -1;
+
   return 0;
 }

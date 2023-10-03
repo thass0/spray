@@ -31,6 +31,7 @@ def assert_lit(cmd: str,
                debugee: Optional[str] = SIMPLE_64BIT_BIN,
                args: Optional[list[str]] = [""]):
     stdout = run_cmd(cmd, debugee, ['--no-color'], args)
+    print(stdout)
     assert out in stdout
 
 
@@ -49,7 +50,7 @@ def assert_ends_with(cmd: str,
 class TestStepCommands:
     def test_single_step(self):
         assert_lit('b 0x0040116b\nc\ns',
-                   '💢 Failed to find another line to step to')
+                   'ERR: Failed to find another line to step to')
 
         assert_ends_with('b 0x0040115d\nc\ns\ns\ns\ns\ns\ns', """\
    12 ->   int c = weird_sum(a, b);
@@ -114,7 +115,7 @@ class TestRegisterCommands:
         assert_lit('t %rax', 'Missing value to set the location to')
         assert_lit('t %rax ' + random_string(), 'Invalid value to set the location to')
         assert_lit('t %rax 0xc0ffee 0xbeef', 'Trailing characters in command')
-        assert_lit('ste %rax 0x31', 'I don\'t know that')
+        assert_lit('ste %rax 0x31', 'Unknown command')
 
     def test_register_write(self):
         assert_lit('t %rax 123',
@@ -124,9 +125,9 @@ class TestRegisterCommands:
 
     def test_register_name_conflict(self):
         assert_ends_with('p rax', """\
-WARN: The variable name 'rax' is also the name of a register.
-HINT: All register names start with a '%'. Use '%rax' to read the rax register instead.
-💢 Failed to find a variable called rax
+WARN: The variable name 'rax' is also the name of a register
+HINT: All register names start with a '%'. Use '%rax' to access the 'rax' register instead
+ERR: Failed to find a variable called rax
 """)
 
 class TestMemoryCommands:
@@ -140,7 +141,7 @@ class TestMemoryCommands:
         assert_lit('t 0x123', 'Missing value to set the location to')
         assert_lit('t 0x123 ' + random_string(), 'Invalid value to set the location to')
         assert_lit('t 0x123 0xc0ffee 0xbeef', 'Trailing characters in command')
-        assert_lit('ste 0xc0ffee 0x31', 'I don\'t know that')
+        assert_lit('ste 0xc0ffee 0x31', 'Unknown command')
 
     def test_memory_write(self):
         assert_lit('t 0x00007ffff7fe53b0 0xdecafbad',

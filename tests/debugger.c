@@ -17,7 +17,7 @@ TEST(breakpoints_work) {
   disable_breakpoint(dbg.breakpoints, bp_addr1);
   assert_false(lookup_breakpoint(dbg.breakpoints, bp_addr1));
 
-  free_debugger(dbg);
+  del_debugger(dbg);
 
   return MUNIT_OK;
 }
@@ -52,7 +52,7 @@ TEST(breakpoints_work) {
 									\
     assert_int(value, ==, (expect));					\
 									\
-    free_debugger(dbg);							\
+    del_debugger(dbg);							\
 									\
     return MUNIT_OK;							\
   }
