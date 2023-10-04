@@ -93,10 +93,10 @@ void print_current_source(Debugger *dbg) {
 
     SprayResult res = print_source(filepath, pos->line, 3);
     if (res == SP_ERR) {
-      dbg_err("Failed to read source file %s. Can't print source", filepath);
+      repl_err("Failed to read source file %s. Can't print source", filepath);
     }
   } else {
-    dbg_err("No source info for PC " ADDR_FORMAT, pc.value);
+    repl_err("No source info for PC " ADDR_FORMAT, pc.value);
   }
 }
 
@@ -232,7 +232,7 @@ SprayResult wait_for_signal(Debugger *dbg) {
       return SP_OK;
     }
   } else {
-    dbg_err("Received invalid wait status %d", wait_status);
+    repl_err("Received invalid wait status %d", wait_status);
     return SP_ERR;
   }
 }
@@ -326,7 +326,7 @@ SprayResult single_step_line(Debugger *dbg) {
     */
     pos = addr_position(get_dbg_pc(dbg), dbg->info);
     if (pos == NULL || n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT) {
-      dbg_err("Failed to find another line to step to");
+      repl_err("Failed to find another line to step to");
       return SP_ERR;
     }
   }
@@ -346,7 +346,7 @@ SprayResult step_over(Debugger *dbg) {
 
   const DebugSymbol *func = sym_by_addr(get_dbg_pc(dbg), dbg->info);
   if (func == NULL) {
-    dbg_err("Failed to find current function");
+    repl_err("Failed to find current function");
     return SP_ERR;
   }
 
@@ -361,7 +361,7 @@ SprayResult step_over(Debugger *dbg) {
 			      &to_del,
 			      &n_to_del);
   if (set_res == SP_ERR) {
-    dbg_err("Failed to set breakpoints in current scope");
+    repl_err("Failed to set breakpoints in current scope");
     return SP_ERR;
   }
 
@@ -412,14 +412,14 @@ void execmd_print_memory(pid_t pid, real_addr addr, PrintFilter filter) {
     print_filtered(read, default_filter(filter, PF_BYTES));
     printf("\n");
   } else {
-    dbg_err("Failed to read from child memory at address " ADDR_FORMAT, addr.value);
+    repl_err("Failed to read from child memory at address " ADDR_FORMAT, addr.value);
   }
 }
 
 void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word, PrintFilter filter) {
   SprayResult write_res = pt_write_memory(pid, addr, word);
   if (write_res == SP_ERR) {
-    dbg_err("Failed to write to child memory at address " ADDR_FORMAT, addr.value);
+    repl_err("Failed to write to child memory at address " ADDR_FORMAT, addr.value);
     return;
   }
 
@@ -431,7 +431,7 @@ void execmd_set_memory(pid_t pid, real_addr addr, uint64_t word, PrintFilter fil
     print_filtered(stored, default_filter(filter, PF_BYTES));
     printf(" " WRITE_READ_MSG "\n");
   } else {
-    dbg_err("Failed to read from child memory to confirm "
+    repl_err("Failed to read from child memory to confirm "
 	      "a write at address " ADDR_FORMAT, addr.value);
   }
 }
@@ -447,7 +447,7 @@ void execmd_print_register(pid_t pid,
     print_filtered(reg_word, default_filter(filter, PF_BYTES));
     printf("\n");
   } else {
-    dbg_err("Failed to read from child register '%s'", get_name_from_register(reg));
+    repl_err("Failed to read from child register '%s'", get_name_from_register(reg));
   }
 }
 
@@ -458,7 +458,7 @@ void execmd_set_register(pid_t pid,
 			 PrintFilter filter) {
   SprayResult write_res = set_register_value(pid, reg, word);
   if (write_res == SP_ERR) {
-    dbg_err("Failed to write to child register '%s'", get_name_from_register(reg));
+    repl_err("Failed to write to child register '%s'", get_name_from_register(reg));
   }
 
   /* Print readout of write result: */
@@ -469,7 +469,7 @@ void execmd_set_register(pid_t pid,
     print_filtered(written, default_filter(filter, PF_BYTES));
     printf(" " WRITE_READ_MSG "\n");
   } else {
-    dbg_err("Failed to read from child register to "
+    repl_err("Failed to read from child register to "
 	      "confirm a write to child register '%s'",
 	      get_name_from_register(reg));
   }
@@ -486,7 +486,7 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
 				  dbg->info);
 
   if (var == NULL) {
-    dbg_err("Failed to find a variable called %s", var_name);
+    repl_err("Failed to find a variable called %s", var_name);
     return;
   }
 
@@ -506,7 +506,7 @@ void execmd_print_variable(Debugger *dbg, const char *var_name, PrintFilter filt
   }
 
   if (read_res == SP_ERR) {
-    dbg_err("Found a variable %s, but failed to read its value", var_name);
+    repl_err("Found a variable %s, but failed to read its value", var_name);
   } else {
     printf(MEM_READ_INDENT);
     print_var_value(var, value, filter);
@@ -535,7 +535,7 @@ void execmd_set_variable(Debugger *dbg,
 				  dbg->info);
 
   if (var == NULL) {
-    dbg_err("Failed to find a variable called %s", var_name);
+    repl_err("Failed to find a variable called %s", var_name);
     return;
   }
 
@@ -547,14 +547,14 @@ void execmd_set_variable(Debugger *dbg,
     real_addr loc_addr = var_loc_addr(var);
     res = pt_write_memory(dbg->pid, loc_addr, value);
     if (res == SP_ERR) {
-      dbg_err(SET_VAR_WRITE_ERR, var_name);
+      repl_err(SET_VAR_WRITE_ERR, var_name);
       del_var(var);
       return;
     }
 
     res = pt_read_memory(dbg->pid, loc_addr, &value_after);
     if (res == SP_ERR) {
-      dbg_err(SET_VAR_READ_ERR, var_name);
+      repl_err(SET_VAR_READ_ERR, var_name);
       del_var(var);
       return;
     }
@@ -565,14 +565,14 @@ void execmd_set_variable(Debugger *dbg,
     x86_reg loc_reg = var_loc_reg(var);
     res = set_register_value(dbg->pid, loc_reg, value);
     if (res == SP_ERR) {
-      dbg_err(SET_VAR_WRITE_ERR, var_name);
+      repl_err(SET_VAR_WRITE_ERR, var_name);
       del_var(var);
       return;
     }
 
     res = get_register_value(dbg->pid, loc_reg, &value_after);
     if (res == SP_ERR) {
-      dbg_err(SET_VAR_READ_ERR, var_name);
+      repl_err(SET_VAR_READ_ERR, var_name);
       del_var(var);
       return;
     }
@@ -646,7 +646,7 @@ void execmd_backtrace(Debugger *dbg) {
 					dbg->pid,
 					dbg->info);
   if (backtrace == NULL) {
-    dbg_err("Failed to determine backtrace");
+    repl_err("Failed to determine backtrace");
   } else {
     print_backtrace(backtrace);
   }
@@ -673,7 +673,7 @@ static inline bool end_of_tokens(char *const *tokens, size_t i) {
   if (tokens[i] == NULL) {
     return true;
   } else {
-    dbg_err("Trailing characters in command");
+    repl_err("Trailing characters in command");
     return false;
   }
 }
@@ -850,8 +850,8 @@ void warn_register_name_conflict(const char *ident) {
   x86_reg _reg_buf = 0;	/* Not used. */
   bool valid_reg = get_register_from_name(ident, &_reg_buf);
   if (valid_reg) {
-    dbg_warn("The variable name '%s' is also the name of a register", ident);
-    dbg_hint("All register names start with a '%%'. Use '%%%s' to "
+    repl_warn("The variable name '%s' is also the name of a register", ident);
+    repl_hint("All register names start with a '%%'. Use '%%%s' to "
 	       "access the '%s' register instead",
 	       ident, ident);
   }
@@ -871,7 +871,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
     } else if (is_command(cmd, 'b', "break")) {
       const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
-	dbg_err("Missing location for 'break'");
+	repl_err("Missing location for 'break'");
       } else {
         dbg_addr addr = { 0 };
         if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
@@ -880,13 +880,13 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	  }
           execmd_break(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
-	  dbg_err("Invalid location for 'break'");
+	  repl_err("Invalid location for 'break'");
         }
       }
     } else if (is_command(cmd, 'd', "delete")) {
       const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
-	dbg_err("Missing location for 'delete'");
+	repl_err("Missing location for 'delete'");
       } else {
         dbg_addr addr = { 0 };
         if (parse_break_location(*dbg, loc_str, &addr) == SP_OK) {
@@ -894,7 +894,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
             break;
           execmd_delete(dbg->breakpoints, dbg_to_real(dbg->load_address, addr));
         } else {
-	  dbg_err("Invalid location for 'delete'");
+	  repl_err("Invalid location for 'delete'");
         }
       }
     }
@@ -902,7 +902,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
     else if (is_command(cmd, 'p', "print")) {
       const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
-	dbg_err("Missing location to print the value of");
+	repl_err("Missing location to print the value of");
 	break;
       }
 
@@ -912,11 +912,11 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	if (is_filter_delim(delim_str)) {
 	  filter = parse_filter(next_token(tokens, &i));
 	  if (filter == PF_NONE) {
-	    dbg_err("Invalid filter");
+	    repl_err("Invalid filter");
             break;
 	  }
 	} else {
-	  dbg_err("Trailing characters in command");
+	  repl_err("Trailing characters in command");
 	  break;
 	}
       }
@@ -934,7 +934,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	if (valid_reg) {
 	  execmd_print_register(dbg->pid, reg, reg_name, filter);
 	} else {
-	  dbg_err("Invalid register name");
+	  repl_err("Invalid register name");
 	}
       } else if (is_valid_identifier(loc_str)) {
 	warn_register_name_conflict(loc_str);
@@ -942,18 +942,18 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
 	execmd_print_memory(dbg->pid, addr, filter);
       } else {
-	dbg_err("Invalid location to print the value of");
+	repl_err("Invalid location to print the value of");
       }
     } else if (is_command(cmd, 't', "set")) {
       const char *loc_str = next_token(tokens, &i);
       if (loc_str == NULL) {
-	dbg_err("Missing location to set the value of");
+	repl_err("Missing location to set the value of");
 	break;
       }
 
       const char *value_str = next_token(tokens, &i);
       if (value_str == NULL) {
-	dbg_err("Missing value to set the location to");
+	repl_err("Missing value to set the location to");
 	break;
       }
 
@@ -963,12 +963,12 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	if (is_filter_delim(delim_str)) {
 	  filter = parse_filter(next_token(tokens, &i));
 	  if (filter == PF_NONE) {
-	    dbg_err("Invalid filter");
+	    repl_err("Invalid filter");
 	    break;
 	  }
 
 	} else {
-	  dbg_err("Trailing characters in command");
+	  repl_err("Trailing characters in command");
 	  break;
 	}
       }
@@ -985,7 +985,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
       } else if (parse_base16(value_str, &value) == SP_OK) {
 	filter = default_filter(filter, PF_HEX);
       } else {
-	dbg_err("Invalid value to set the location to");
+	repl_err("Invalid value to set the location to");
 	break;	
       }
 
@@ -997,14 +997,14 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
 	if (valid_reg) {
 	  execmd_set_register(dbg->pid, reg, reg_name, value, filter);
 	} else {
-	  dbg_err("Invalid register name");
+	  repl_err("Invalid register name");
 	}
       } else if (is_valid_identifier(loc_str)) {
 	execmd_set_variable(dbg, loc_str, value, filter);
       } else if (parse_base16(loc_str, &addr.value) == SP_OK) {
 	execmd_set_memory(dbg->pid, addr, value, filter);
       } else {
-	dbg_err("Invalid location to set the value of");
+	repl_err("Invalid location to set the value of");
       }
     }
 
@@ -1023,7 +1023,7 @@ void handle_debug_command_tokens(Debugger* dbg, char *const *tokens) {
     } else if (is_command(cmd, 'a', "backtrace")) {
       execmd_backtrace(dbg);
     } else {
-      dbg_err("Unknown command");
+      repl_err("Unknown command");
     }
   } while (0); /* Only run this block once. The
      loop is only used to make `break` available
@@ -1047,7 +1047,7 @@ void handle_debug_command(Debugger *dbg, const char *line) {
       tokens = get_command_tokens(last_command);
       free(last_command);
     } else {
-      dbg_err("No command to repeat");
+      repl_err("No command to repeat");
       return;
     }
   } else {
@@ -1104,13 +1104,13 @@ int setup_debugger(const char *prog_name, char *prog_argv[], Debugger* store) {
   assert(prog_name != NULL);
 
   if (access(prog_name, F_OK) != 0) {
-    dbg_err("File %s doesn't exist", prog_name);
+    repl_err("File %s doesn't exist", prog_name);
     return -1;
   }
 
   DebugInfo *info = init_debug_info(prog_name);
   if (info == NULL) {
-    dbg_err("Failed to initialize debugging information");
+    repl_err("Failed to initialize debugging information");
     return -1;
   }
 

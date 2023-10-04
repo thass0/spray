@@ -139,9 +139,9 @@ void spray_warn(const char *msg, ...);
 void spray_hint(const char *msg, ...);
 
 /* Print messages tied to the debugger REPL to stdout */
-void dbg_err(const char *msg, ...);
-void dbg_warn(const char *msg, ...);
-void dbg_hint(const char *msg, ...);
+void repl_err(const char *msg, ...);
+void repl_warn(const char *msg, ...);
+void repl_hint(const char *msg, ...);
 
 
 #endif  // _SPRAY_MAGIC_H_

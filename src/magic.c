@@ -230,21 +230,21 @@ void spray_hint(const char *fmt, ...) {
   va_end(argp);
 }
 
-void dbg_err(const char *fmt, ...) {
+void repl_err(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
   print_msg(stdout, "ERR", fmt, argp);
   va_end(argp);
 }
 
-void dbg_warn(const char *fmt, ...) {
+void repl_warn(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
   print_msg(stdout, "WARN", fmt, argp);
   va_end(argp);
 }
 
-void dbg_hint(const char *fmt, ...) {
+void repl_hint(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
   print_msg(stdout, "HINT", fmt, argp);
