@@ -190,7 +190,7 @@ class TestFilters:
 
 class TestTypedPrint():
     def test_print_typed_variables(self):
-        assert_ends_with('b tests/assets/type_examples.c:18\nc\np a\np b\np c\n p d\np e\np f\np g\np h\np i\np j\np k\np l\np m\n', """
+        assert_ends_with('b tests/assets/type_examples.c:24\nc\np a\np b\np c\n p d\np e\np f\np g\np h\np i\np j\np k\np l\np m\n', """
          1 (tests/assets/type_examples.c:1)
          2 (tests/assets/type_examples.c:2)
          0x3 (tests/assets/type_examples.c:3)
@@ -207,12 +207,19 @@ class TestTypedPrint():
 """, TYPE_EXAMPLES_BIN)
 
     def test_filter_typed_variables(self):
-        assert_ends_with('b tests/assets/type_examples.c:18\nc\np i\np i | bytes\np i | hex\np n\np n | bytes\n', """
+        assert_ends_with('b tests/assets/type_examples.c:24\nc\np i\np i | bytes\np i | hex\np n\np n | bytes\n', """
          98 (tests/assets/type_examples.c:12)
          00 00 00 00 00 00 00 62 (tests/assets/type_examples.c:12)
          0x62 (tests/assets/type_examples.c:12)
          9223372036854775808 (tests/assets/type_examples.c:17)
          80 00 00 00 00 00 00 00 (tests/assets/type_examples.c:17)
+""", TYPE_EXAMPLES_BIN)
+
+    def test_typedef_variables(self):
+        assert_ends_with('b tests/assets/type_examples.c:24\nc\np o\np p\np p | bytes\n', """
+         -123456789 (tests/assets/type_examples.c:20)
+         255 (tests/assets/type_examples.c:22)
+         00 00 00 00 00 00 00 ff (tests/assets/type_examples.c:22)
 """, TYPE_EXAMPLES_BIN)
 
 

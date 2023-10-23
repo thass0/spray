@@ -16,5 +16,10 @@ int main(void) {
   const signed char m = 'f';
   unsigned long long n = (unsigned long long) 1 << 63;
 
+  typedef long i64;
+  i64 o = -123456789;
+  typedef unsigned char byte;
+  byte p = 0xff;
+
   return 0;
 }

@@ -1150,7 +1150,7 @@ SprayResult sd_build_base_type(Dwarf_Debug dbg,
  Get the DIE referenced by the given DIE's `DW_AT_type` attribute.
 
  On success, `SP_OK` is returned and `type_die` is a newly allocated
- DIE that must be `free`'d by the caller using `dwarf_dealloc_die`.
+ DIE that should be `free`'d by the caller using `dwarf_dealloc_die`.
 
  On error, `SP_ERR` is returned and `type_die` remains untouched.
 
@@ -1244,7 +1244,6 @@ SdTypenode *alloc_node(SdType *type) {
     return NULL;
   }
 
-
   if (type->n_nodes + 1 >= type->n_alloc) {
     type->n_alloc += TYPE_ALLOC;
     type->nodes = realloc(type->nodes, sizeof(*type->nodes) * type->n_alloc);
@@ -1258,9 +1257,8 @@ SdTypenode *alloc_node(SdType *type) {
 
 /*
  Recursion mechanism employed by `sd_variable_type` to
- build the representation of a `type`. Here `die` must
- be some DIE that's used in DWARF to represent variable
- types (e.g. `DW_TAG_base_type`, `DW_TAG_const_type`, etc.).
+ build the representation of a `type`. Here `prev_die` must
+ must be some DIE with a `DW_AT_type` attribute.
 
  On success, `SP_OK` is returned and `type` may be changed,
  including changes to its memory buffer allocation.
@@ -1270,11 +1268,14 @@ SdTypenode *alloc_node(SdType *type) {
  `dbg`, `die`, and `type` must not be `NULL`.
 */
 SprayResult sd_build_type(Dwarf_Debug dbg,
-			  Dwarf_Die die,
+			  Dwarf_Die prev_die,
 			  SdType *type) {
-  if (dbg == NULL || die == NULL || type == NULL) {
+  if (dbg == NULL || prev_die == NULL || type == NULL) {
     return SP_ERR;
   }
+
+  if (!sd_has_at(dbg, prev_die, DW_AT_type))
+    return SP_ERR;
 
   int res = DW_DLV_OK;
   Dwarf_Error error = NULL;
@@ -1282,10 +1283,15 @@ SprayResult sd_build_type(Dwarf_Debug dbg,
   SdTypenode *node = alloc_node(type);
   if (node == NULL)
     return SP_ERR;
-    
 
+  /* Retrieve the next type DIE. */
+  Dwarf_Die next_die = NULL;
+  if (sd_type_die(dbg, prev_die, &next_die) == SP_ERR)
+    return SP_ERR;
+
+  /* Retrieve its tag. It describes what sort of type DIE this is. */
   Dwarf_Half tag = 0;
-  res = dwarf_tag(die, &tag, &error);
+  res = dwarf_tag(next_die, &tag, &error);
 
   if (res != DW_DLV_OK) {
     if (res == DW_DLV_ERROR) {
@@ -1294,36 +1300,27 @@ SprayResult sd_build_type(Dwarf_Debug dbg,
     return SP_ERR;
   }
 
-  Dwarf_Die type_die = NULL;
-  
   switch (tag) {
   case DW_TAG_base_type:	/* See DWARF 5 standard 5.1 */
     /* Recursion stops at base types. */
-    return sd_build_base_type(dbg, die, node);
+    return sd_build_base_type(dbg, next_die, node);
+  case DW_TAG_pointer_type:
+    /*
+      Clang stops at the `DW_TAG_pointer_type` DIE in case of
+      `void *`. Thus, recursion may end here prematurely, too.
+      This is not allowed by the DWARF 5 standard, which mandates
+      that a type modifier entry must have the `DW_AT_type` attribute
+      (see p. 109, l. 8). The correct behavior would be to make the
+      `void` pointer's entry point to a `DW_TAG_unspecified`
+      (see p. 108, l. 19).
+    */
+    node->tag = NODE_MODIFIER;
+    node->modifier = TYPE_MOD_POINTER;
+    return SP_OK;
   case DW_TAG_atomic_type:
   case DW_TAG_const_type:
-  case DW_TAG_pointer_type:
   case DW_TAG_restrict_type:
   case DW_TAG_volatile_type:
-    if (sd_type_die(dbg, die, &type_die) == SP_ERR) {
-      /*
-       Clang stops at the `DW_TAG_pointer_type` DIE in case of
-       `void *`. Thus, recursion may end here prematurely, too.
-       This is not allowed by the DWARF 5 standard, which mandates
-       that a type modifier entry must have the `DW_AT_type` attribute
-       (see p. 109, l. 8). The correct behavior would be to make the
-       `void` pointer's entry point to a `DW_TAG_unspecified`
-       (see p. 108, l. 19).
-      */
-      if (tag == DW_TAG_pointer_type) {
-	node->tag = NODE_MODIFIER;
-	node->modifier = TYPE_MOD_POINTER;
-	return SP_OK;
-      } else {
-	return SP_ERR;
-      }
-    }
-
     /*
      All DIE tags that lead to this path map to their
      respective variants of the `SdTypemod` enumeration.
@@ -1332,7 +1329,7 @@ SprayResult sd_build_type(Dwarf_Debug dbg,
     node->modifier = tag;
 
     /* Recursively add more nodes. */
-    return sd_build_type(dbg, type_die, type);
+    return sd_build_type(dbg, next_die, type);
   case DW_TAG_rvalue_reference_type:
   case DW_TAG_reference_type:
   case DW_TAG_shared_type:
@@ -1341,6 +1338,14 @@ SprayResult sd_build_type(Dwarf_Debug dbg,
     spray_err("DIE tag %d is not a supported type modifier, "
 	      "because it's not usually used in C code", tag);
     return SP_ERR;
+  case DW_TAG_typedef:
+    /*
+     Record that a typedef has been found and continue with the next node.
+     The information in `DW_TAG_typedef`s isn't interesting, if the type
+     of the variable is not printed. All `DW_TAG_typedef`s point to another type.
+    */
+    node->tag = NODE_TYPEDEF;
+    return sd_build_type(dbg, next_die, type);
   default:
     spray_err("Unknown DIE tag %d for type", tag);
     return SP_ERR;
@@ -1348,9 +1353,9 @@ SprayResult sd_build_type(Dwarf_Debug dbg,
 }
 
 /*
- Build a data structure representing the
- type of the runtime variable that's referred to by
- `die`. `die` must have the attribute `DW_AT_type`.
+ Build a data structure representing the type of the
+ runtime variable that's referred to by `die`. `die`
+ must have the attribute `DW_AT_type`.
 
  On success, `SP_OK` is returned and `type` is set
  to the newly constructed type.
@@ -1368,17 +1373,12 @@ SprayResult sd_variable_type(Dwarf_Debug dbg,
   if (!sd_has_at(dbg, die, DW_AT_type))
     return SP_ERR;
 
-  /* Retrieve the initial DIE referenced by `DW_AT_type`. */
-  Dwarf_Die type_die = NULL;
-  if (sd_type_die(dbg, die, &type_die) == SP_ERR)
-    return SP_ERR;
-
   if (alloc_type(type) == SP_ERR)
     return SP_ERR;
   
-  SprayResult ret = sd_build_type(dbg, type_die, type);
+  SprayResult ret = sd_build_type(dbg, die, type);
 
-  dwarf_dealloc_die(type_die);
+  dwarf_dealloc_die(die);
 
   return ret;
 }

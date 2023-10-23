@@ -122,6 +122,8 @@ typedef struct {
   enum {
     NODE_BASE_TYPE,
     NODE_MODIFIER,
+    NODE_UNSPECIFIED,		/* See the DWARF 5 standard 5.2. */
+    NODE_TYPEDEF,		/* See the DWARF 5 standard 5.4. */
   } tag;			/* Kind of this node. */
   union {
     SdBasetype base_type;
@@ -212,7 +214,6 @@ typedef struct SdLocation {
     real_addr addr;
     x86_reg reg;
   };
-  /* ... the pain in my heart of not being able to use tagged-enums in C. */
 } SdLocation;
 
 /* Create an address instance of `SdLocation`. */

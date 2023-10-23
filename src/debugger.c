@@ -1166,6 +1166,8 @@ void run_debugger(Debugger dbg) {
   printf("🐛🐛🐛 %d 🐛🐛🐛\n", dbg.pid);
 
   const DebugSymbol *main = sym_by_name("main", dbg.info);
+  if (main == NULL)
+    return;
 
   dbg_addr start_main = {0};
   if (function_start_addr(main, dbg.info, &start_main) == SP_OK) {

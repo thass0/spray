@@ -616,6 +616,10 @@ void print_var_value(RuntimeVariable *var,
 	}
 	/* Continue iterating, until a printable node has been found. */
 	break;
+      case NODE_UNSPECIFIED:
+	break;
+      case NODE_TYPEDEF:
+	break;
       }
     }
 
