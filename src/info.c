@@ -654,6 +654,7 @@ RuntimeVariable *init_var(dbg_addr pc,
     return NULL;
   }
 
+  /* Evaluate the location description and store it in `loc`. */
   SdLoclist loclist = {0};
   res = sd_init_loclist(info->dbg, var_attr.loc, &loclist);
   if (res == SP_ERR) {
@@ -667,21 +668,22 @@ RuntimeVariable *init_var(dbg_addr pc,
     .load_address = load_address,
   };
 
+  SdLocation loc = {0};
+  res = sd_eval_loclist(info->dbg, ctx, loclist, &loc);
+  del_loclist(&loclist);
+  if (res == SP_ERR) {
+    return NULL;
+  }
+
   RuntimeVariable *var = malloc(sizeof(*var));
   assert(var != NULL);
 
   var->type = var_attr.type;
-
-  /*
-   `decl_line` and `decl_file` are both optional, and
-   may be `0` or `NULL` respectively.
-  */
+  var->loc = loc;
+  /* `decl_line` and `decl_file` are both optional, and may
+     be `0` or `NULL` respectively. */
   var->decl_line = decl_line;
   var->decl_file = decl_file;
-
-  /* Evaluate the location description and store it in `loc`. */
-  res = sd_eval_loclist(info->dbg, ctx, loclist, &var->loc);
-  del_loclist(&loclist);
 
   return var;
 }

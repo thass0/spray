@@ -65,7 +65,7 @@ typedef enum {
   ELF_PARSE_IO_ERR,   /* Error during I/O. */
   ELF_PARSE_INVALID,  /* Invalid file. */
   ELF_PARSE_DISLIKE,  /* Theoretically a valid ELF file but
-                         some feature used is not suppored. */
+                         some feature used is not supported. */
 } ElfParseResult;
 
 const char *elf_parse_result_name(ElfParseResult res);

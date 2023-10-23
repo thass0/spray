@@ -19,10 +19,13 @@ enum {
 // large to be stored in the `Elf64_Ehdr`. Then they are set to
 // `CHECK_SECTION_HEADER` to signal that they should be read from
 // the inital section header.
-ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src, ElfFile *elf_dest,
+ElfParseResult parse_elf_header(const Elf64_Ehdr *elf_src,
+				ElfFile *elf_dest,
                                 uint64_t *prog_table_off,
-                                uint64_t *sect_table_off, uint32_t *n_prog_hdrs,
-                                uint32_t *n_sect_hdrs, uint32_t *shstrtab_idx) {
+                                uint64_t *sect_table_off,
+				uint32_t *n_prog_hdrs,
+                                uint32_t *n_sect_hdrs,
+				uint32_t *shstrtab_idx) {
   assert(elf_dest != NULL);
   assert(prog_table_off != NULL);
   assert(sect_table_off != NULL);
@@ -181,21 +184,25 @@ void parse_init_section(const Elf64_Shdr *init_section_header,
 bool is_set(int value, int mask) { return (value & mask) != 0; }
 bool is_unset(int value, int mask) { return (value & mask) == 0; }
 
-bool is_valid_symtab(Elf64_Shdr *shdr) {
-  return shdr->sh_type == SHT_SYMTAB &&
-         // `SHF_ALLOC` is always set for .dynsym.
-         is_unset(shdr->sh_flags, SHF_ALLOC) &&
-         shdr->sh_entsize == sizeof(Elf64_Sym);
+bool is_valid_symtab(Elf64_Shdr *shdr, const char *name) {
+  return str_eq(name, ".symtab") &&
+    shdr->sh_type == SHT_SYMTAB &&
+    // `SHF_ALLOC` is always set for .dynsym.
+    is_unset(shdr->sh_flags, SHF_ALLOC) &&
+    shdr->sh_entsize == sizeof(Elf64_Sym);
 }
 
-bool is_valid_strtab(Elf64_Shdr *shdr) {
-  return shdr->sh_type == SHT_STRTAB && is_unset(shdr->sh_flags, SHF_ALLOC);
+bool is_valid_strtab(Elf64_Shdr *shdr, const char *name) {
+  return str_eq(name, ".strtab") &&
+    shdr->sh_type == SHT_STRTAB &&
+    is_unset(shdr->sh_flags, SHF_ALLOC);
 }
 
-SprayResult parse_table_indices(Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
-                                uint32_t shstrtab_idx, uint32_t *symtab_idx,
+SprayResult find_table_sections(Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
+                                const char *shstrtab, uint32_t *symtab_idx,
                                 uint32_t *strtab_idx) {
   assert(sect_headers != NULL);
+  assert(shstrtab != NULL);
   assert(symtab_idx != NULL);
   assert(strtab_idx != NULL);
 
@@ -205,12 +212,13 @@ SprayResult parse_table_indices(Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
   // cannot be used for any of the entries we are looking for.
 
   Elf64_Shdr *cur_hdr = NULL;
+  const char *name = NULL;
   for (uint32_t i = 0; i < n_sect_hdrs; i++) {
     cur_hdr = &sect_headers[i];
-    if (is_valid_symtab(cur_hdr) && *symtab_idx == 0) {
+    name = &shstrtab[cur_hdr->sh_name];
+    if (is_valid_symtab(cur_hdr, name) && *symtab_idx == 0) {
       *symtab_idx = i;
-    } else if (is_valid_strtab(cur_hdr) && i != shstrtab_idx &&
-               *strtab_idx == 0) {
+    } else if (is_valid_strtab(cur_hdr, name) && *strtab_idx == 0) {
       *strtab_idx = i;
     }
   }
@@ -317,12 +325,21 @@ ElfParseResult se_parse_elf(const char *filepath, ElfFile *elf_store) {
 
   // Fill-in missing values if they weren't found in the ELF header.
   parse_init_section(sect_headers, &n_prog_hdrs, &n_sect_hdrs, &shstrtab_idx);
+  
 
   // Find the section headers for the symbol table and the string table.
   uint32_t symtab_idx = 0;
   uint32_t strtab_idx = 0;
-  SprayResult tables_res = parse_table_indices(
-      sect_headers, n_sect_hdrs, shstrtab_idx, &symtab_idx, &strtab_idx);
+  /* Get the section header string table that contains the names of
+     the sections in the section header table. `sh_name` is an index into
+     that table, and thus the table can be used to read the names of the
+     different sections. */
+  Elf64_Shdr *shstrtab_hdr = &sect_headers[shstrtab_idx];
+  const char *shstrtab = strtab_at(bytes, shstrtab_hdr->sh_offset);
+  
+  SprayResult tables_res = find_table_sections(sect_headers, n_sect_hdrs,
+					       shstrtab, &symtab_idx,
+					       &strtab_idx);
 
   if (tables_res == SP_ERR) {
     if (munmap(bytes, n_bytes) == -1) {

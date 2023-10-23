@@ -10,7 +10,7 @@ TEST(accept_valid_executable) {
   assert_int(res, ==, ELF_PARSE_OK);
 
   assert_int(elf_file.prog_table.n_headers, ==, 13);
-  assert_int(elf_file.sect_table.n_headers, ==, 33);
+  assert_int(elf_file.sect_table.n_headers, ==, 34);
 
   // Compare some randomly chosen values to those
   // returned by `readelf(1)`.
@@ -37,15 +37,15 @@ TEST(accept_valid_executable) {
   assert_int(eh_frame_ph.p_flags, ==, PF_R);
   assert_int(eh_frame_ph.p_align, ==, 0x4);
 
-  Elf64_Shdr symtab_sh = elf_file.sect_table.headers[30];
+  Elf64_Shdr symtab_sh = elf_file.sect_table.headers[31];
   assert_int(symtab_sh.sh_type, ==, SHT_SYMTAB);
   assert_int(symtab_sh.sh_addr, ==, 0x0);
-  assert_int(symtab_sh.sh_offset, ==, 18856);
-  assert_int(symtab_sh.sh_size, ==, 0x630);
+  assert_int(symtab_sh.sh_offset, ==, 0x3550);
+  assert_int(symtab_sh.sh_size, ==, 0x330);
   assert_int(symtab_sh.sh_entsize, ==, 0x18);
   assert_int(symtab_sh.sh_flags, ==, 0);
-  assert_int(symtab_sh.sh_link, ==, 31);
-  assert_int(symtab_sh.sh_info, ==, 50);
+  assert_int(symtab_sh.sh_link, ==, 32);
+  assert_int(symtab_sh.sh_info, ==, 18);
   assert_int(symtab_sh.sh_addralign, ==, 8);
 
   se_free_elf(elf_file);
