@@ -102,7 +102,7 @@ const char *get_name_from_register(x86_reg reg) {
 bool get_register_from_name(const char *name, x86_reg *store) {
   size_t i = 0;
   for ( ; i < N_REGISTERS; i++) {
-    if (strcmp(reg_descriptors[i].name, name) == 0) {
+    if (str_eq(reg_descriptors[i].name, name)) {
       break;
     }
   }

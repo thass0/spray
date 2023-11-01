@@ -683,7 +683,7 @@ bool is_command(const char *restrict in,
 		const char *restrict long_form) {
   if (in != NULL) {
     return (strlen(in) == 1 && in[0] == short_form)
-      || (strcmp(in, long_form) == 0);
+      || (str_eq(in, long_form));
   } else {
     return false;
   }

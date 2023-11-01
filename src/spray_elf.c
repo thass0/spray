@@ -400,7 +400,7 @@ const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf) {
   uint64_t n_symbols = symtab_hdr->sh_size / symtab_hdr->sh_entsize;
 
   for (uint64_t i = 0; i < n_symbols; i++) {
-    if (strcmp(se_symbol_name(&symtab[i], elf), name) == 0) {
+    if (str_eq(se_symbol_name(&symtab[i], elf), name)) {
       return &symtab[i];
     }
   }

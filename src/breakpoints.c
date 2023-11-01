@@ -22,8 +22,8 @@ int breakpoint_compare(const void *a, const void *b, void *udata) {
   unused(udata);
   const Breakpoint *breakpoint_a = (Breakpoint *) a;
   const Breakpoint *breakpoint_b = (Breakpoint *) b;
-  /* `compare` assumes that strings are used. Just like
-     `strcmp` we return 0 to signal equality. */
+  /* `compare` assumes that strings are used in its implementation.
+     Mimicking `strcmp`, 0 is returned when the keys are equal. */
   return !(breakpoint_a->addr.value == breakpoint_b->addr.value);
 }
 

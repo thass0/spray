@@ -783,7 +783,7 @@ bool sd_is_subprog_with_name(Dwarf_Debug dbg, Dwarf_Die die, const char *name) {
     }
 
     /* Do the names match? */
-    if (strcmp(fn_name_buf, name) == 0) {
+    if (str_eq(fn_name_buf, name)) {
       return true;
     } else {
       return false;
@@ -1151,6 +1151,8 @@ SprayResult sd_build_base_type(Dwarf_Debug dbg,
 
  On success, `SP_OK` is returned and `type_die` is a newly allocated
  DIE that should be `free`'d by the caller using `dwarf_dealloc_die`.
+ If it's not `free`'d then it will stay alive until the given instance
+ of `Dwarf_Debug` is `free`'d.
 
  On error, `SP_ERR` is returned and `type_die` remains untouched.
 
@@ -1486,7 +1488,7 @@ bool callback__find_runtime_variable(Dwarf_Debug dbg,
       char *die_var_name = NULL;  /* Don't free the string returned by `dwarf_diename`. */
       res = dwarf_diename(die, &die_var_name, &error);
 
-      if (res == DW_DLV_OK && strcmp(var_name, die_var_name) == 0) {
+      if (res == DW_DLV_OK && str_eq(var_name, die_var_name)) {
 	/*
 	 1. Retrieve the path to the file where this variables was declared.
 	*/
@@ -2681,7 +2683,7 @@ bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
     char *filepath_cpy = strdup(filepath);
     char *expect_file_name = basename(filepath_cpy);
 
-    bool equal_names = strcmp(expect_file_name, file_name) == 0;
+    bool equal_names = str_eq(expect_file_name, file_name);
 
     free(filepath_cpy);
     free(die_filepath);
@@ -2691,8 +2693,8 @@ bool sd_is_die_from_file(Dwarf_Debug dbg, Dwarf_Die die, const char *filepath) {
     char *expect_file_name = basename(full_filepath);
     char *expect_dir_name = dirname(full_filepath);
 
-    bool equal_names = strcmp(file_name, expect_file_name) == 0;
-    bool equal_dirs = strcmp(dir_name, expect_dir_name) == 0;
+    bool equal_names = str_eq(file_name, expect_file_name);
+    bool equal_dirs = str_eq(dir_name, expect_dir_name);
 
     free(full_filepath);
     free(die_filepath);
