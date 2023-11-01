@@ -10,34 +10,32 @@
 ![Spray debugging itself](.assets/using_spray.png) 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
 
-Spray is a debugger targeted at C code that includes a core set of debugging tasks. All functionality is supposed to be as simple as possible and fit comfortably in your head.
+Spray is a debugger targeted at C code that includes a core set of debugging features. All functionality is supposed to be as simple as possible and should be easy to grasp.
 
-This also means that Spray only fulfills a small set of needs. It's inspired by the typical local debugging workflow that I do most of the time.
+This also means that Spray only fulfills a small set of needs. It's inspired by the typical debugging workflow that I do most of the time.
 
-I started working on Spray out of frustration with the complexity of GDB and a general interest in how debuggers work.
+I started working on Spray out of frustration with the complexity of debugging and a general interest in how debuggers work.
 
 ## 🦾 Features
 
 - [x] Breakpoints on functions, on lines in files and on addresses
-- [x] Reading and writing variables, memory at addresses and registers
+- [x] Printing and setting variables, memory at addresses and registers
 - [x] C syntax highlighting
 - [x] Backtraces
 - [x] Instruction, function and line level stepping
 - [x] Filters to format command output
 
-## 🚀 Roadmap 
+## 🚀 Roadmap
 
-- [ ] Interacting with variables through their original types
-- [ ] Improved backtraces based on DWARF info
-- [ ] [redis-cli](https://redis.io/docs/ui/cli/)-like command auto-completion
+- [ ] Printing and modifying complex structures
+- [ ] Syntax highlighting for complex structures
+- [ ] Backtraces based on DWARF instead of frame pointers
+- [ ] Inlined functions
 
 ## 💿️ Installation
 
-Parts of the Spray frontend are written in Scheme and embedded into the application
-using [CHICKEN Scheme](https://www.call-cc.org/) which compiles Scheme to C. Currently,
-you need to have [CHICKEN installed](https://code.call-cc.org/#download) to build Spray.
-In the future it's possible that the generated C files are provided instead so that you
-only need a C compiler.
+Parts of the Spray frontend are written in Scheme and embedded into the application using [CHICKEN Scheme](https://www.call-cc.org/) which compiles Scheme to C. Currently, you need to have [CHICKEN installed](https://code.call-cc.org/#download) to build Spray.
+In the future it's possible that the generated C files are provided instead so that you only need a C compiler.
 
 Spray depends on [libdwarf](https://github.com/davea42/libdwarf-code/releases)
 so if you want to build Spray, you need to install libdwarf first.
