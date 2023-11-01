@@ -916,6 +916,7 @@ SprayResult sd_get_die_source_files(Dwarf_Debug dbg,
   return SP_OK;
 }
 
+
 /* Check to see if the given attribute has a DWARF form
    that can be used with `dwarf_get_loclist_c`.
 
@@ -2391,7 +2392,7 @@ void print_loclist(SdLoclist loclist) {
   }
 }
 
-
+/* Create an address instance of `SdLocation`. */
 SdLocation sd_loc_addr(real_addr addr) {
   return (SdLocation) {
     .tag = LOC_ADDR,
@@ -2406,6 +2407,7 @@ SdLocation sd_loc_as_addr(uint64_t addr) {
   };
 }
 
+/* Create a register instance of `SdLocation`. */
 SdLocation sd_loc_reg(x86_reg reg) {
   return (SdLocation) {
     .tag = LOC_REG,
@@ -2971,7 +2973,7 @@ LineEntry sd_line_entry_at(Dwarf_Debug dbg, const char *filepath,
     sd_free_line_table(&line_table);
     return (LineEntry) { .is_ok=false };
   } else {
-    LineEntry ret =  line_table.lines[line_idx];
+    LineEntry ret = line_table.lines[line_idx];
     sd_free_line_table(&line_table);
     return ret;    
   }
@@ -3040,10 +3042,10 @@ SubprogPcRange sd_get_subprog_pc_range(Dwarf_Debug dbg, const char *fn_name) {
   }
 }
 
-SprayResult sd_for_each_line_in_subprog(Dwarf_Debug dbg, const char *fn_name,
-                                        const char *filepath,
-                                        LineCallback callback,
-                                        void *const init_data) {
+SprayResult sd_for_each_line(Dwarf_Debug dbg, const char *fn_name,
+			     const char *filepath,
+			     LineCallback callback,
+			     void *const init_data) {
   assert(dbg != NULL);
   assert(fn_name != NULL);
   assert(filepath != NULL);

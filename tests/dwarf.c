@@ -60,8 +60,8 @@ TEST(iterating_lines_works)  {
   unsigned lines[5];
 
   char *filepath = realpath(SIMPLE_SRC, NULL);
-  sd_for_each_line_in_subprog(dbg, "main", filepath, callback__store_line,
-                              &lines);
+  sd_for_each_line(dbg, "main", filepath, callback__store_line,
+		   &lines);
   dwarf_finish(dbg);
   free(filepath);
 

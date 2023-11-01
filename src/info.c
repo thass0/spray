@@ -454,8 +454,8 @@ SprayResult set_step_over_breakpoints(const DebugSymbol *func,
     return SP_ERR;
   }
 
-  sd_for_each_line_in_subprog(info->dbg, func_name, filepath,
-                              callback__set_dwarf_line_breakpoint, &data);
+  sd_for_each_line(info->dbg, func_name, filepath,
+		   callback__set_dwarf_line_breakpoint, &data);
 
   *n_to_del = data.to_del_idx;
   *to_del_ptr = data.to_del;
