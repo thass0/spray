@@ -360,8 +360,8 @@ class TestBacktrace:
         assert_ends_with('b add\nc\nbacktrace', """\
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df5c4b <?>
-  0x00007ffff7df5b8a <?>
+  0x00007ffff7df4c4b <?>
+  0x00007ffff7df4b8a <?>
   0x00000000004011be main:17
   0x0000000000401183 mul:11
   0x000000000040113a add:4
@@ -374,7 +374,7 @@ HINT: Try to compile again with `-fno-omit-frame-pointer`.
 
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df5c4b <?>
+  0x00007ffff7df4c4b <?>
   0x0000000000401138 add:4
 """, NO_FRAME_POINTER_BIN)
 
