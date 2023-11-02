@@ -13,106 +13,141 @@
    `/usr/include/sys/user.h`. Hence, `x86_reg` can
    index both of them. */
 
-SprayResult get_register_value(pid_t pid, x86_reg reg, uint64_t *read) {
-  assert(read != NULL);
+SprayResult
+get_register_value (pid_t pid, x86_reg reg, uint64_t *read)
+{
+  assert (read != NULL);
 
-  struct user_regs_struct regs;  // Register buffer
-  SprayResult res = pt_read_registers(pid, &regs);
-  if (res == SP_ERR) {
-    return SP_ERR;
-  } else {
-    uint64_t *regs_as_array = (uint64_t*) &regs;
-    *read = regs_as_array[reg];
-    return SP_OK;
-  }
-}
-
-SprayResult set_register_value(pid_t pid, x86_reg reg, uint64_t write) {
-  struct user_regs_struct regs;
-  SprayResult res = pt_read_registers(pid, &regs);
-  if (res ==  SP_ERR) {
-    return SP_ERR;
-  } else { 
-    uint64_t *regs_as_array = (uint64_t*) &regs;
-    regs_as_array[reg] = write;
-    return pt_write_registers(pid, &regs);
-  }
-}
-
-bool dwarf_regnum_to_x86_reg(uint8_t dwarf_regnum, x86_reg *store) {
-  assert(store != NULL);
-
-  size_t i  = 0;
-  for ( ; i < N_REGISTERS; i++) {
-    if (reg_descriptors[i].dwarf_r == (int) dwarf_regnum) {
-      break;
+  struct user_regs_struct regs;	// Register buffer
+  SprayResult res = pt_read_registers (pid, &regs);
+  if (res == SP_ERR)
+    {
+      return SP_ERR;
     }
-  }
+  else
+    {
+      uint64_t *regs_as_array = (uint64_t *) & regs;
+      *read = regs_as_array[reg];
+      return SP_OK;
+    }
+}
 
-  if (i == N_REGISTERS) {
-    /* We searched the entire array
-     * without finding a match. : (
-     */
-    return false;
-  } else {
-    *store = reg_descriptors[i].r;
-    return true;
-  }
+SprayResult
+set_register_value (pid_t pid, x86_reg reg, uint64_t write)
+{
+  struct user_regs_struct regs;
+  SprayResult res = pt_read_registers (pid, &regs);
+  if (res == SP_ERR)
+    {
+      return SP_ERR;
+    }
+  else
+    {
+      uint64_t *regs_as_array = (uint64_t *) & regs;
+      regs_as_array[reg] = write;
+      return pt_write_registers (pid, &regs);
+    }
+}
+
+bool
+dwarf_regnum_to_x86_reg (uint8_t dwarf_regnum, x86_reg *store)
+{
+  assert (store != NULL);
+
+  size_t i = 0;
+  for (; i < N_REGISTERS; i++)
+    {
+      if (reg_descriptors[i].dwarf_r == (int) dwarf_regnum)
+	{
+	  break;
+	}
+    }
+
+  if (i == N_REGISTERS)
+    {
+      /* We searched the entire array
+       * without finding a match. : (
+       */
+      return false;
+    }
+  else
+    {
+      *store = reg_descriptors[i].r;
+      return true;
+    }
 }
 
 /* NOTE: All DWARF register numbers are small unsigned integers.
  * Negative values for `dwarf_r` in `reg_descriptors` are used
  * to make those registers  inaccessible via a DWARF register number. */
 
-bool get_dwarf_register_value(pid_t pid, int8_t dwarf_regnum, uint64_t *read) {
-  assert(read != NULL);
-  
+bool
+get_dwarf_register_value (pid_t pid, int8_t dwarf_regnum, uint64_t *read)
+{
+  assert (read != NULL);
+
   x86_reg associated_reg;
 
   bool regnum_was_translated =
-    dwarf_regnum_to_x86_reg(dwarf_regnum, &associated_reg);
+    dwarf_regnum_to_x86_reg (dwarf_regnum, &associated_reg);
 
-  if (regnum_was_translated) {
-    SprayResult res = get_register_value(pid, associated_reg, read);
-    if (res == SP_OK) {
-      return true;
-    } else {
+  if (regnum_was_translated)
+    {
+      SprayResult res = get_register_value (pid, associated_reg, read);
+      if (res == SP_OK)
+	{
+	  return true;
+	}
+      else
+	{
+	  return false;
+	}
+    }
+  else
+    {
       return false;
     }
-  } else {
-    return false;
-  }
 }
 
-const char *get_name_from_register(x86_reg reg) {
+const char *
+get_name_from_register (x86_reg reg)
+{
   size_t i = 0;
-  for ( ; i < N_REGISTERS; i++) {
-    if (reg_descriptors[i].r == reg) {
-      break;
+  for (; i < N_REGISTERS; i++)
+    {
+      if (reg_descriptors[i].r == reg)
+	{
+	  break;
+	}
     }
-  }
 
   // `reg_descriptors` maps all possible values
   // of `reg`. Therefore the name *must* be found.
-  assert(i != N_REGISTERS);
+  assert (i != N_REGISTERS);
 
   return reg_descriptors[i].name;
 }
 
-bool get_register_from_name(const char *name, x86_reg *store) {
+bool
+get_register_from_name (const char *name, x86_reg *store)
+{
   size_t i = 0;
-  for ( ; i < N_REGISTERS; i++) {
-    if (str_eq(reg_descriptors[i].name, name)) {
-      break;
+  for (; i < N_REGISTERS; i++)
+    {
+      if (str_eq (reg_descriptors[i].name, name))
+	{
+	  break;
+	}
     }
-  }
 
-  if (i == N_REGISTERS) {
-    /* Couldn't find a register named `name`. */
-    return false;
-  } else {
-    *store = reg_descriptors[i].r;
-    return true;
-  }
+  if (i == N_REGISTERS)
+    {
+      /* Couldn't find a register named `name`. */
+      return false;
+    }
+  else
+    {
+      *store = reg_descriptors[i].r;
+      return true;
+    }
 }
-
