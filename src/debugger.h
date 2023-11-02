@@ -21,30 +21,24 @@ typedef struct {
   History history;           /* Command history of recent commands. */
 } Debugger;
 
-/*
- Setup a debugger. This forks the child process, launches
- and immediately stops it.
-
- On success, `dbg` is modified to accommodate the changes.
-
- On error, `dbg` stays untouched, and `-1` is returned.
-*/
+/* Setup a debugger. This forks the child process, launches
+ * and immediately stops it.
+ *
+ * On success, `dbg` is modified to accommodate the changes.
+ *
+ On error, `dbg` stays untouched, and `-1` is returned. */
 int setup_debugger(const char *prog_name, char *prog_argv[], Debugger *dbg);
 
-/*
- Run the debugger. Starts debugging at the beginning
- of the `main` function of the child process.
-
- Call `setup_debugger` on `dbg` before calling this function.
- After `run_debugger` returns, `dbg` is still allocated and
- must be deleted using `del_debugger`.
-*/
+/* Run the debugger. Starts debugging at the beginning
+ * of the `main` function of the child process.
+ *
+ * Call `setup_debugger` on `dbg` before calling this function.
+ * After `run_debugger` returns, `dbg` is still allocated and
+ * must be deleted using `del_debugger`. */
 void run_debugger(Debugger dbg);
 
-/*
- Free memory allocated by the debugger. Returns
- `SP_ERR` if some resource couldn't be deleted.
-*/
+/* Free memory allocated by the debugger. Returns
+ * `SP_ERR` if some resource couldn't be deleted. */
 SprayResult del_debugger(Debugger dbg);
 
 #ifdef UNIT_TESTS
@@ -85,6 +79,6 @@ typedef struct {
 ExecResult continue_execution(Debugger *dbg);
 ExecResult wait_for_signal(Debugger *dbg);
 
-#endif  // UNIT_TESTS
+#endif  /* UNIT_TESTS */
 
-#endif  // _SPRAY_DEBUGGER_H_
+#endif  /* _SPRAY_DEBUGGER_H_ */

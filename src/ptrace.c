@@ -11,8 +11,7 @@ enum
  * requested data. Because the return value if
  * always used to indicate an error (by returning
  * -1), `errno` must be used to determine if the
- * result of the read is -1 or there is an error.
- */
+ * result of the read is -1 or there is an error. */
 
 SprayResult
 pt_read_memory (pid_t pid, real_addr addr, uint64_t *read)
@@ -52,8 +51,8 @@ SprayResult
 pt_read_registers (pid_t pid, struct user_regs_struct *regs)
 {
   assert (regs != NULL);
-  // `addr` is ignored here. `PTRACE_GETREGS` stores all
-  // of the tracee's general purpose registers in `regs`.
+  /* `addr` is ignored here. `PTRACE_GETREGS` stores all
+   * of the tracee's general purpose registers in `regs`. */
   if (ptrace (PTRACE_GETREGS, pid, NULL, regs) == PTRACE_ERROR)
     {
       return SP_ERR;

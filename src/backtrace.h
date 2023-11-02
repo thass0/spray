@@ -21,4 +21,4 @@ void print_backtrace(CallFrame *start_frame);
 /* Delete the call frame. */
 void free_backtrace(CallFrame *call_frame);
 
-#endif // _SPRAY_BACKTRACE_H_
+#endif  /* _SPRAY_BACKTRACE_H_ */

@@ -1,9 +1,7 @@
-/*
- * The `ptrace` API is ... special. This header
+/* The `ptrace` API is ... special. This header
  * wraps it up for use in the rest of this program.
  * If one of the functions here fails, `errno` will
- * hold the value set by `ptrace`.
- */
+ * hold the value set by `ptrace`. */
 
 #pragma once
 
@@ -30,5 +28,4 @@ SprayResult pt_single_step(pid_t pid);
 
 SprayResult pt_get_signal_info(pid_t pid, siginfo_t *siginfo);
 
-#endif // _SPRAY_PTRACE_H_
-
+#endif /* _SPRAY_PTRACE_H_ */

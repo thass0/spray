@@ -9,16 +9,16 @@
 #include <string.h>
 
 /* Both  `x86_reg` and `reg_descriptors` are laid
-   out the same way as `user_regs_struct` in
-   `/usr/include/sys/user.h`. Hence, `x86_reg` can
-   index both of them. */
+ * out the same way as `user_regs_struct` in
+ * `/usr/include/sys/user.h`. Hence, `x86_reg` can
+ * index both of them. */
 
 SprayResult
 get_register_value (pid_t pid, x86_reg reg, uint64_t *read)
 {
   assert (read != NULL);
 
-  struct user_regs_struct regs;	// Register buffer
+  struct user_regs_struct regs;	/* Register buffer */
   SprayResult res = pt_read_registers (pid, &regs);
   if (res == SP_ERR)
     {
@@ -66,8 +66,7 @@ dwarf_regnum_to_x86_reg (uint8_t dwarf_regnum, x86_reg *store)
   if (i == N_REGISTERS)
     {
       /* We searched the entire array
-       * without finding a match. : (
-       */
+       * without finding a match. : ( */
       return false;
     }
   else
@@ -121,8 +120,8 @@ get_name_from_register (x86_reg reg)
 	}
     }
 
-  // `reg_descriptors` maps all possible values
-  // of `reg`. Therefore the name *must* be found.
+  /* `reg_descriptors` maps all possible values
+   * of `reg`. Therefore the name *must* be found. */
   assert (i != N_REGISTERS);
 
   return reg_descriptors[i].name;

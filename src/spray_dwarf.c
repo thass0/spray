@@ -12,8 +12,8 @@
 
 
 /* NOTE: The function prefix `sd_` stands for 'Spray DWARF' and
-   is used for all of  Spray's functions that interface with
-   DWARF debug information (through libdwarf). */
+ * is used for all of  Spray's functions that interface with
+ * DWARF debug information (through libdwarf). */
 
 #ifndef UNIT_TESTS
 typedef struct SearchFor
@@ -30,7 +30,7 @@ typedef struct SearchFindings
 /* This type is defined in `spray_dwarf.h` if `UNIT_TESTS` is defined. */
 typedef bool (*SearchCallback) (Dwarf_Debug, Dwarf_Die, SearchFor,
 				SearchFindings);
-#endif // UNIT_TESTS
+#endif /* UNIT_TESTS */
 
 /* Only used for debugging (and tests). */
 const char *
@@ -58,20 +58,20 @@ sd_dwarf_init (const char *restrict filepath, Dwarf_Error *error)
   assert (error != NULL);
 
   /* Standard group number. Group numbers are relevant only if
-     DWARF debug information is split across multiple objects. */
+   * DWARF debug information is split across multiple objects. */
   unsigned group_number = DW_GROUPNUMBER_ANY;
 
   /* `true_path*` is used to store the path of alternate
-     DWARF-containing objects if debug info is split.
-     Setting both to 0 disables looking for separate info.
-     Use an array of size `MAX_PATHLEN` if `true_pathbuf`
-     is in use. */
+   * DWARF-containing objects if debug info is split.
+   * Setting both to 0 disables looking for separate info.
+   * Use an array of size `MAX_PATHLEN` if `true_pathbuf`
+   * is in use. */
   static char *true_pathbuf = NULL;
   unsigned true_pathlen = 0;
 
   /* Using the error handler is not recommended.
-     If it were used, `error_argument` could pass
-     the error handler callback some extra data. */
+   * If it were used, `error_argument` could pass
+   * the error handler callback some extra data. */
   Dwarf_Handler error_handler = NULL;
   Dwarf_Ptr error_argument = NULL;
 
@@ -81,7 +81,8 @@ sd_dwarf_init (const char *restrict filepath, Dwarf_Error *error)
   int res = dwarf_init_path (filepath,	/* Only external parameter. */
 			     true_pathbuf, true_pathlen,
 			     group_number,
-			     error_handler, error_argument,	/* Both `NULL` => unused. */
+			     /* Both `NULL` and thereby unused. */
+			     error_handler, error_argument,
 			     &dbg, error);
 
   if (res != DW_DLV_OK)
@@ -104,12 +105,12 @@ sd_dwarf_init (const char *restrict filepath, Dwarf_Error *error)
 }
 
 /* NOTE: The return values of `search_dwarf_die` and `search_dwarf_dbg`
-   only signals the outcome of the libdwarf calls. Therefore the return
-   value `DW_DLV_OK` doesn't mean that the search was successful in that
-   we found something. It only means that there wasn't a error with DWARF.
-   `search_findings` should be used to signal the outcome of the search instead.
-   On the other hand, if the return value is not `DW_DLV_OK`, the search was
-   never successful. E.g. if nothing was found, `DW_DLV_NO_ENTRY` is returned. */
+ * only signals the outcome of the libdwarf calls. Therefore the return
+ * value `DW_DLV_OK` doesn't mean that the search was successful in that
+ * we found something. It only means that there wasn't a error with DWARF.
+ * `search_findings` should be used to signal the outcome of the search instead.
+ * On the other hand, if the return value is not `DW_DLV_OK`, the search was
+ * never successful. E.g. if nothing was found, `DW_DLV_NO_ENTRY` is returned. */
 
 int
 sd_search_dwarf_die (Dwarf_Debug dbg,
@@ -207,8 +208,9 @@ sd_search_dwarf_die (Dwarf_Debug dbg,
 }
 
 /* Search the `Dwarf_Debug` instance. For each DIE `search_callback` is called
-   and passed instances of `SearchFor` and `SearchFindings`. Any time `search_callback`
-   returns `true`, the search ends. If it returns `false`, the search goes on. */
+ * and passed instances of `SearchFor` and `SearchFindings`. Any time
+ * `search_callback` returns `true`, the search ends. If it returns `false`,
+ * the search goes on. */
 int
 sd_search_dwarf_dbg (Dwarf_Debug dbg,
 		     Dwarf_Error *const error,
@@ -216,15 +218,19 @@ sd_search_dwarf_dbg (Dwarf_Debug dbg,
 		     const void *search_for_data, void *search_findings_data)
 {
   Dwarf_Half version_stamp = 0;	/* Store version number (2 - 5). */
-  Dwarf_Unsigned abbrev_offset = 0;	/* .debug_abbrev offset from CU just read. */
+  /* .debug_abbrev offset from CU just read. */
+  Dwarf_Unsigned abbrev_offset = 0;
   Dwarf_Half address_size = 0;	/* CU address size (4 or 8). */
   Dwarf_Half offset_size = 0;	/* Length of the size field in the CU header. */
-  Dwarf_Half extension_size = 0;	/* 4 for standard 64-bit DWARF. Zero otherwise. */
+  /* 4 for standard 64-bit DWARF. Zero otherwise. */
+  Dwarf_Half extension_size = 0;
   Dwarf_Sig8 signature;
   Dwarf_Unsigned typeoffset = 0;
-  Dwarf_Unsigned next_cu_header = 0;	/* Offset in section of next CU. Not of interest. */
+  /* Offset in section of next CU. Not of interest. */
+  Dwarf_Unsigned next_cu_header = 0;
   Dwarf_Half header_cu_type = 0;	/* Some DW_UT value. */
-  Dwarf_Bool is_info = true;	/* False only if reading through DWARF4 .debug_types. */
+  /* False only if reading through DWARF4 .debug_types. */
+  Dwarf_Bool is_info = true;
   int res = 0;
   bool search_finished = false;
 
@@ -252,7 +258,7 @@ sd_search_dwarf_dbg (Dwarf_Debug dbg,
 	  if (is_info == true)
 	    {
 	      /* Nothing left in .debug_info.
-	         Continue with .debug_types. */
+	       * Continue with .debug_types. */
 	      is_info = false;
 	      continue;
 	    }
@@ -271,15 +277,15 @@ sd_search_dwarf_dbg (Dwarf_Debug dbg,
       if (search_finished)
 	{
 	  /* If the search has finished, i.e. we found what
-	     we were looking for, we must continue to walk
-	     all of the CU headers to reset `dwarf_next_cu_header_d`
-	     to start at the first CU header again. This function
-	     won't otherwise work again with the same `Dwarf_Debug` instance. */
+	   * we were looking for, we must continue to walk
+	   * all of the CU headers to reset `dwarf_next_cu_header_d`
+	   * to start at the first CU header again. This function
+	   * won't otherwise work again with the same `Dwarf_Debug` instance. */
 	  continue;
 	}
 
-      /* Get the CU DIE. */
-      res = dwarf_siblingof_b (dbg, NULL,	/* <- Pass NULL to get the CU DIE. */
+      /* Get the CU DIE. Second argument is NULL to get the CU DIE. */
+      res = dwarf_siblingof_b (dbg, NULL,
 			       is_info, &cu_die, error);
 
       if (res == DW_DLV_ERROR)
@@ -353,11 +359,11 @@ sd_get_high_and_low_pc (Dwarf_Die die,
 }
 
 /* Sets `pc_in_die` to `true` if it finds that `pc` lies
-   between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE.
-
-   The libdwarf error code of the internal calls is returned.
-
-   `pc_in_die` stays untouched on error. */
+ * between `DW_AT_pc_low` and `DW_AT_pc_high` of the DIE.
+ *
+ * The libdwarf error code of the internal calls is returned.
+ *
+ * `pc_in_die` stays untouched on error. */
 int
 sd_check_pc_in_die (Dwarf_Die die, Dwarf_Error *const error, Dwarf_Addr pc,
 		    bool *pc_in_die)
@@ -429,10 +435,8 @@ callback__is_valid_compiler (Dwarf_Debug dbg,
 	    {
 	      dwarf_dealloc_error (dbg, error);
 	    }
-	  /*
-	     Stop the search, because we were not able to
-	     validate this CU's compiler.
-	   */
+	  /* Stop the search, because we were not able to
+	   * validate this CU's compiler. */
 	  return true;
 	}
 
@@ -468,18 +472,14 @@ sd_is_valid_compiler (Dwarf_Debug dbg)
   switch (res)
     {
     case DW_DLV_OK:
-      /*
-         The search ended prematurely. The callback only
-         ends the search if a CU's compiler could not be
-         validated or is invalid.
-       */
+      /* The search ended prematurely. The callback only
+       * ends the search if a CU's compiler could not be
+       * validated or is invalid. */
       return false;
     case DW_DLV_NO_ENTRY:
-      /*
-         All CU DIEs were searched without the callback
-         ever aborting the search. This means that all
-         CU's compiler could be validated successfully.
-       */
+      /* All CU DIEs were searched without the callback
+       * ever aborting the search. This means that all
+       * CU's compiler could be validated successfully. */
       return true;
     case DW_DLV_ERROR:
       dwarf_dealloc_error (dbg, error);
@@ -491,7 +491,7 @@ sd_is_valid_compiler (Dwarf_Debug dbg)
 }
 
 /* Used to find the name of the subprogram that contains a given PC.
-   Not in use right now. See `spray_elf.h` for the same functionality. */
+ * Not in use right now. See `spray_elf.h` for the same functionality. */
 bool
 callback__find_subprog_name_by_pc (Dwarf_Debug dbg,
 				   Dwarf_Die die,
@@ -551,39 +551,8 @@ callback__find_subprog_name_by_pc (Dwarf_Debug dbg,
     }
 }
 
-/* Get the name of the subprogram that contains the given PC.
-
-   On success, a heap-allocated string is returned that should
-   be `free`d.
-
-   `NULL` is returned if there was an error, or if no subprogram
-   was found that contains the PC. */
-/* char *sd_get_subprog_name_from_pc(Dwarf_Debug dbg, dbg_addr _pc) { */
-/*   assert(dbg != NULL); */
-
-/*   Dwarf_Addr pc = _pc.value; */
-/*   char *fn_name = NULL; */
-
-/*   Dwarf_Error error = NULL; */
-
-/*   int res = sd_search_dwarf_dbg(dbg, */
-/* 				&error, */
-/* 				callback__find_subprog_name_by_pc, */
-/* 				&pc, */
-/* 				&fn_name); */
-
-/*   if (res != DW_DLV_OK) { */
-/*     if (res == DW_DLV_ERROR) { */
-/*       dwarf_dealloc_error(dbg, error); */
-/*     } */
-/*     return NULL; */
-/*   } else { */
-/*     return fn_name; */
-/*   } */
-/* } */
-
 /* NOTE: Acquiring a `Dwarf_Line_Context` is only possible
-   if the given DIE is the compilation unit DIE. */
+ * if the given DIE is the compilation unit DIE. */
 bool
 sd_get_line_context (Dwarf_Debug dbg, Dwarf_Die cu_die,
 		     Dwarf_Line_Context *line_context)
@@ -594,7 +563,7 @@ sd_get_line_context (Dwarf_Debug dbg, Dwarf_Die cu_die,
   int res;
   Dwarf_Unsigned line_table_version = 0;
   Dwarf_Small line_table_count = 0;	/* 0 and 1 are normal. 2 means
-					   experimental two-level line table. */
+					 * experimental two-level line table. */
   Dwarf_Line_Context line_context_buf = NULL;
   Dwarf_Error error = NULL;
 
@@ -634,10 +603,10 @@ bool
 dwarf_bool_to_bool (Dwarf_Bool dwarf_bool)
 {
   /* The `libdwarf` docs say that `Dwarf_Bool` is
-     "A TRUE(non-zero)/FALSE(zero) data item."
-     This conversion ensures that libdwarf's
-     `TRUE` value is converted to stdbool's
-     `true` correctly. */
+   * "A TRUE(non-zero)/FALSE(zero) data item."
+   * This conversion ensures that libdwarf's
+   * `TRUE` value is converted to stdbool's
+   * `true` correctly. */
   return dwarf_bool == 0 ? false : true;
 }
 
@@ -722,7 +691,8 @@ sd_line_entry_from_dwarf_line (Dwarf_Line line,
   line_entry->is_ok = true;
   line_entry->new_statement = dwarf_bool_to_bool (new_statement);
   line_entry->prologue_end = dwarf_bool_to_bool (prologue_end);
-  line_entry->is_exact = false;	// `false` by default. Might be set by `sd_line_entry_from_pc`.
+  /* `false` by default. Might be set by `sd_line_entry_from_pc`. */
+  line_entry->is_exact = false;
   line_entry->ln = lineno;
   line_entry->cl = colno;
   line_entry->addr = (dbg_addr)
@@ -941,19 +911,17 @@ sd_is_subprog_with_name (Dwarf_Debug dbg, Dwarf_Die die, const char *name)
 }
 
 
-/*
-  Get the CU die of the CU that the given DIE is part of.
-  See section 9.50 in the libdwarf docs for the details
-  of how this works.
-
-  On success `SP_OK` is returned and `cu_die` is made to
-  point to the allocated CU DIE. Then, `cu_die` must be
-  free'd using `dwarf_dealloc_die`.
-
-  On error `SP_ERR` is returned and `cu_die` remains unchanged.
-
-  `dbg`, `die` and `cu_die` must not be `NULL`.
-*/
+/* Get the CU die of the CU that the given DIE is part of.
+ * See section 9.50 in the libdwarf docs for the details
+ * of how this works.
+ *
+ * On success `SP_OK` is returned and `cu_die` is made to
+ * point to the allocated CU DIE. Then, `cu_die` must be
+ * free'd using `dwarf_dealloc_die`.
+ *
+ * On error `SP_ERR` is returned and `cu_die` remains unchanged.
+ *
+ * `dbg`, `die` and `cu_die` must not be `NULL`. */
 SprayResult
 sd_get_cu_of_die (Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *cu_die)
 {
@@ -979,10 +947,8 @@ sd_get_cu_of_die (Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *cu_die)
   Dwarf_Die cu_die_buf = NULL;
   res = dwarf_offdie_b (dbg, cu_offset, true, &cu_die_buf, &error);
 
-  /*
-     Try again, this time checking `.debug_types` instead of
-     `.debug_info` if there was no entry found in `.debug_info`.
-   */
+  /* Try again, this time checking `.debug_types` instead of
+   * `.debug_info` if there was no entry found in `.debug_info`. */
   if (res == DW_DLV_NO_ENTRY)
     {
       res = dwarf_offdie_b (dbg, cu_offset, false, &cu_die_buf, &error);
@@ -1003,22 +969,20 @@ sd_get_cu_of_die (Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *cu_die)
 }
 
 
-/*
-  Retrieve the list of source files which is found
-  in the line table header of the line table for the
-  given DIE.
-
-  On success `SP_OK` is returned, `files` is set to point
-  to an array of file paths, and `n_files` is set to the
-  length of that array. Each `files` itself, and each
-  `files[i]` must be free'd using `dwarf_dealloc`. See
-  section 9.59 of the libdwarf docs for details.
-
-  On error `SP_ERR` is returned, and both `files` and
-  `n_files` remain unchanged.
-
-  `dbg`, `die`, `files`, and `n_files` most not be `NULL`.
- */
+/* Retrieve the list of source files which is found
+ * in the line table header of the line table for the
+ * given DIE.
+ *
+ * On success `SP_OK` is returned, `files` is set to point
+ * to an array of file paths, and `n_files` is set to the
+ * length of that array. Each `files` itself, and each
+ * `files[i]` must be free'd using `dwarf_dealloc`. See
+ * section 9.59 of the libdwarf docs for details.
+ *
+ * On error `SP_ERR` is returned, and both `files` and
+ * `n_files` remain unchanged.
+ *
+ * `dbg`, `die`, `files`, and `n_files` most not be `NULL`. */
 SprayResult
 sd_get_die_source_files (Dwarf_Debug dbg,
 			 Dwarf_Die die, char ***files, unsigned *n_files)
@@ -1028,9 +992,7 @@ sd_get_die_source_files (Dwarf_Debug dbg,
   assert (files != NULL);
   assert (n_files != NULL);
 
-  /*
-     Get the CU DIE of the CU that the given DIE is part of.
-   */
+  /* Get the CU DIE of the CU that the given DIE is part of. */
   Dwarf_Die cu_die = NULL;
   SprayResult cu_res = sd_get_cu_of_die (dbg, die, &cu_die);
   if (cu_res == SP_ERR)
@@ -1041,10 +1003,8 @@ sd_get_die_source_files (Dwarf_Debug dbg,
   int res = 0;
   Dwarf_Error error = NULL;
 
-  /*
-     Get the list of source files found in
-     this CU's line table program header.
-   */
+  /* Get the list of source files found in
+   * this CU's line table program header. */
   char **files_buf = NULL;
   Dwarf_Signed n_files_buf = 0;
   res = dwarf_srcfiles (cu_die, &files_buf, &n_files_buf, &error);
@@ -1058,10 +1018,8 @@ sd_get_die_source_files (Dwarf_Debug dbg,
       return SP_ERR;
     }
 
-  /*
-     The libdwarf docs say that `n_files_buf` is non-negative
-     (see the parameter description of dw_filecount in section 9.11.2.1).
-   */
+  /* The libdwarf docs say that `n_files_buf` is non-negative
+   * (see the parameter description of dw_filecount in section 9.11.2.1). */
   assert (n_files_buf >= 0);
 
   *files = files_buf;
@@ -1072,10 +1030,10 @@ sd_get_die_source_files (Dwarf_Debug dbg,
 
 
 /* Check to see if the given attribute has a DWARF form
-   that can be used with `dwarf_get_loclist_c`.
-
-   The libdwarf docs for `dwarf_get_loclist_c` describe
-   how this function works. */
+ * that can be used with `dwarf_get_loclist_c`.
+ *
+ * The libdwarf docs for `dwarf_get_loclist_c` describe
+ * how this function works. */
 SprayResult
 sd_init_loc_attr (Dwarf_Debug dbg,
 		  Dwarf_Die die, Dwarf_Attribute loc, SdLocattr *attr_dest)
@@ -1196,10 +1154,11 @@ callback_find_subprog_loc_attr_by_subprog_name (Dwarf_Debug dbg,
 }
 
 /* Find any location attribute (`attr_num`) of a subprogram DIE with given name.
-
-   On success the location attribute is stored in `loc_dest` and `SP_OK` is returned.
-
-   `SP_ERR` is returned on error and `loc_dest` stays untouched. */
+ *
+ *  On success the location attribute is stored in `loc_dest` and `SP_OK`
+ * is returned.
+ *
+ * `SP_ERR` is returned on error and `loc_dest` stays untouched. */
 SprayResult
 sd_get_subprog_loc_attr (Dwarf_Debug dbg,
 			 const char *subprog_name,
@@ -1237,18 +1196,16 @@ sd_get_subprog_loc_attr (Dwarf_Debug dbg,
     }
 }
 
-/*
- Populate a `NODE_BASE_TYPE` node using the data from
- a DIE `DW_TAG_base_type` DIE. It is assumed that `die`
- has this tag.
-
- On success, `SP_OK` is returned and `node` is populated
- with `tag` set to `NODE_BASE_TYPE`.
-
- On error, `SP_ERR` is returned and `node` stays untouched.
-
- `die`, die`, and `node` must not be `NULL`.
-*/
+/* Populate a `NODE_BASE_TYPE` node using the data from
+ * a DIE `DW_TAG_base_type` DIE. It is assumed that `die`
+ * has this tag.
+ *
+ * On success, `SP_OK` is returned and `node` is populated
+ * with `tag` set to `NODE_BASE_TYPE`.
+ *
+ * On error, `SP_ERR` is returned and `node` stays untouched.
+ *
+ * `die`, die`, and `node` must not be `NULL`. */
 SprayResult
 sd_build_base_type (Dwarf_Debug dbg, Dwarf_Die die, SdTypenode *node)
 {
@@ -1335,10 +1292,8 @@ sd_build_base_type (Dwarf_Debug dbg, Dwarf_Die die, SdTypenode *node)
       return SP_ERR;
     }
 
-  /*
-     `DW_AT_encoding` is ignored. The default base
-     type encodings of C are assumed.
-   */
+  /* `DW_AT_encoding` is ignored. The default base
+   * type encodings of C are assumed. */
 
   Dwarf_Unsigned byte_size = 0;
   res = dwarf_bytesize (die, &byte_size, &error);
@@ -1367,18 +1322,16 @@ sd_build_base_type (Dwarf_Debug dbg, Dwarf_Die die, SdTypenode *node)
   return SP_OK;
 }
 
-/*
- Get the DIE referenced by the given DIE's `DW_AT_type` attribute.
-
- On success, `SP_OK` is returned and `type_die` is a newly allocated
- DIE that should be `free`'d by the caller using `dwarf_dealloc_die`.
- If it's not `free`'d then it will stay alive until the given instance
- of `Dwarf_Debug` is `free`'d.
-
- On error, `SP_ERR` is returned and `type_die` remains untouched.
-
- `dbg`, `die`, and `type_die` must not be `NULL`.
-*/
+/* Get the DIE referenced by the given DIE's `DW_AT_type` attribute.
+ *
+ * On success, `SP_OK` is returned and `type_die` is a newly allocated
+ * DIE that should be `free`'d by the caller using `dwarf_dealloc_die`.
+ * If it's not `free`'d then it will stay alive until the given instance
+ * of `Dwarf_Debug` is `free`'d.
+ *
+ * On error, `SP_ERR` is returned and `type_die` remains untouched.
+ *
+ * `dbg`, `die`, and `type_die` must not be `NULL`. */
 SprayResult
 sd_type_die (Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *type_die)
 {
@@ -1423,16 +1376,14 @@ sd_type_die (Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die *type_die)
 enum
 { TYPE_ALLOC = 32 };
 
-/*
- Allocate the buffer to create a new tree of type nodes.
-
- On success, `SP_OK` is returned, and the members of
- `type` are set to represent the allocation.
-
- On error, `SP_ERR` is returned, and `type` stays untouched.
-
- `type` must not be `NULL`.
-*/
+/* Allocate the buffer to create a new tree of type nodes.
+ *
+ * On success, `SP_OK` is returned, and the members of
+ * `type` are set to represent the allocation.
+ *
+ * On error, `SP_ERR` is returned, and `type` stays untouched.
+ *
+ * `type` must not be `NULL`. */
 SprayResult
 alloc_type (SdType *type)
 {
@@ -1462,16 +1413,14 @@ del_type (SdType *type)
     }
 }
 
-/*
- Allocate a new node in `type`, increasing the buffer
- size if required.
-
- On success, the pointer to the new node is returned.
-
- On error, `NULL` is returned.
-
- `type` must not be `NULL`.
-*/
+/* Allocate a new node in `type`, increasing the buffer
+ * size if required.
+ *
+ * On success, the pointer to the new node is returned.
+ *
+ * On error, `NULL` is returned.
+ *
+ * `type` must not be `NULL`. */
 SdTypenode *
 alloc_node (SdType *type)
 {
@@ -1494,20 +1443,18 @@ alloc_node (SdType *type)
   return &type->nodes[type->n_nodes++];
 }
 
-/*
- Recursion mechanism employed by `sd_variable_type` to
- build the representation of a `type`. Here `prev_die` must
- must be some DIE with a `DW_AT_type` attribute. `prev_tag`
- is only used to check if the previous type as a `DW_TAG_pointer_type`
- DIE. Its value doesn't matter besides that.
-
- On success, `SP_OK` is returned and `type` may be changed,
- including changes to its memory buffer allocation.
-
- On error, `SP_ERR` is returned. `type` may still have changed.
-
- `dbg`, `die`, and `type` must not be `NULL`.
-*/
+/* Recursion mechanism employed by `sd_variable_type` to
+ * build the representation of a `type`. Here `prev_die` must
+ * must be some DIE with a `DW_AT_type` attribute. `prev_tag`
+ * is only used to check if the previous type as a `DW_TAG_pointer_type`
+ * DIE. Its value doesn't matter besides that.
+ *
+ * On success, `SP_OK` is returned and `type` may be changed,
+ * including changes to its memory buffer allocation.
+ *
+ * On error, `SP_ERR` is returned. `type` may still have changed.
+ *
+ * `dbg`, `die`, and `type` must not be `NULL`. */
 SprayResult
 sd_build_type (Dwarf_Debug dbg,
 	       Dwarf_Die prev_die, Dwarf_Half prev_tag, SdType *type)
@@ -1522,12 +1469,12 @@ sd_build_type (Dwarf_Debug dbg,
       if (prev_tag == DW_TAG_pointer_type)
 	{
 	  /* Clang stops at the `DW_TAG_pointer_type` DIE in case of
-	     `void *`. Thus, recursion may end here prematurely, too.
-	     This is not allowed by the DWARF 5 standard, which mandates
-	     that a type modifier entry must have the `DW_AT_type` attribute
-	     (see p. 109, l. 8). The correct behavior would be to make the
-	     `void` pointer's entry point to a `DW_TAG_unspecified`
-	     (see p. 108, l. 19). */
+	   * `void *`. Thus, recursion may end here prematurely, too.
+	   * This is not allowed by the DWARF 5 standard, which mandates
+	   * that a type modifier entry must have the `DW_AT_type` attribute
+	   * (see p. 109, l. 8). The correct behavior would be to make the
+	   * `void` pointer's entry point to a `DW_TAG_unspecified`
+	   * (see p. 108, l. 19). */
 	  return SP_OK;
 	}
       else
@@ -1574,7 +1521,7 @@ sd_build_type (Dwarf_Debug dbg,
     case DW_TAG_restrict_type:
     case DW_TAG_volatile_type:
       /* All DIE tags that lead to this path map to their
-         respective variants of the `SdTypemod` enumeration. */
+       * respective variants of the `SdTypemod` enumeration. */
       node->tag = NODE_MODIFIER;
       node->modifier = tag;
 
@@ -1589,11 +1536,10 @@ sd_build_type (Dwarf_Debug dbg,
 		 "because it's not usually used in C code", tag);
       return SP_ERR;
     case DW_TAG_typedef:
-      /*
-         Record that a typedef has been found and continue with the next node.
-         The information in `DW_TAG_typedef`s isn't interesting, if the type
-         of the variable is not printed. All `DW_TAG_typedef`s point to another type.
-       */
+      /* Record that a typedef has been found and continue with the next node.
+       * The information in `DW_TAG_typedef`s isn't interesting, if the type
+       * of the variable is not printed. All `DW_TAG_typedef`s point to another
+       * type. */
       node->tag = NODE_TYPEDEF;
       return sd_build_type (dbg, next_die, 0, type);
     default:
@@ -1602,18 +1548,16 @@ sd_build_type (Dwarf_Debug dbg,
     }
 }
 
-/*
- Build a data structure representing the type of the
- runtime variable that's referred to by `die`. `die`
- must have the attribute `DW_AT_type`.
-
- On success, `SP_OK` is returned and `type` is set
- to the newly constructed type.
-
- On error, `SP_ERR` is returned and `type` stays untouched.
-
- `dbg`, `die`, and `type` must not be `NULL`.
-*/
+/* Build a data structure representing the type of the
+ * runtime variable that's referred to by `die`. `die`
+ * must have the attribute `DW_AT_type`.
+ *
+ * On success, `SP_OK` is returned and `type` is set
+ * to the newly constructed type.
+ *
+ * On error, `SP_ERR` is returned and `type` stays untouched.
+ *
+ * `dbg`, `die`, and `type` must not be `NULL`. */
 SprayResult
 sd_variable_type (Dwarf_Debug dbg, Dwarf_Die die, SdType *type)
 {
@@ -1634,22 +1578,20 @@ sd_variable_type (Dwarf_Debug dbg, Dwarf_Die die, SdType *type)
 }
 
 
-/*
- While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
- keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
- PC we are looking for.
- Once we find another DIE with a PC range, we update the search
- findings depending on whether or not the PC is still in this range.
- Only if the given PC is currently in the range of the DIEs, do we consider
- looking for the variable or formal parameter. Otherwise, we are not in the
- right scope.
-*/
+/* While traversing the DIE tree, we use `in_scope` in `VarLocSearchFindings` to
+ * keep track of whether the most recent `DW_TAG_subprogram` DIE contained the
+ * PC we are looking for.
+ * Once we find another DIE with a PC range, we update the search
+ * findings depending on whether or not the PC is still in this range.
+ * Only if the given PC is currently in the range of the DIEs, do we consider
+ * looking for the variable or formal parameter. Otherwise, we are not in the
+ * right scope. */
 
 typedef struct
 {
   dbg_addr pc;
   bool use_scope;		/* Don't try to find the variable in the scope
-				   of `func_name` if this is set to `false`. */
+				 * of `func_name` if this is set to `false`. */
   const char *var_name;
 } VarattrSearchFor;
 
@@ -1664,8 +1606,8 @@ typedef struct
 } VarattrSearchFindings;
 
 /* Search callback used in combination with `sd_search_dwarf_die` that
-   retrieves the location attribute of a `DW_TAG_variable` DIE with a
-   given variable name. */
+ * retrieves the location attribute of a `DW_TAG_variable` DIE with a
+ * given variable name. */
 bool
 callback__find_runtime_variable (Dwarf_Debug dbg,
 				 Dwarf_Die die,
@@ -1687,8 +1629,8 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
       if (!(search_for.level > var_search_findings->scope_level))
 	{
 	  /* Any scope is only active as long as the current level is deeper
-	     (higher value) than that of the scope's subprogram DIE. Otherwise,
-	     the current DIE is either above or next to the scope. */
+	   * (higher value) than that of the scope's subprogram DIE. Otherwise,
+	   * the current DIE is either above or next to the scope. */
 	  var_search_findings->in_scope = false;
 	}
 
@@ -1721,11 +1663,9 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 	}
     }
 
-  /*
-     If the scope is used we must be in scope to look
-     for a variable. Otherwise, if the scope is ignored,
-     it doesn't matter if we're in scope.
-   */
+  /* If the scope is used we must be in scope to look
+   * for a variable. Otherwise, if the scope is ignored,
+   * it doesn't matter if we're in scope. */
   if (!var_search_for->use_scope
       || (var_search_for->use_scope && var_search_findings->in_scope))
     {
@@ -1735,44 +1675,38 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 
       bool location_attr = sd_has_at (dbg, die, DW_AT_location);
 
-      /*
-         Is the given DIE a `DW_TAG_variable` and does
-         it contain the `DW_AT_location` attribute?
-       */
+      /* Is the given DIE a `DW_TAG_variable` and does
+       * it contain the `DW_AT_location` attribute? */
       if (correct_tag && location_attr)
 	{
 	  const char *var_name = var_search_for->var_name;
 
-	  char *die_var_name = NULL;	/* Don't free the string returned by `dwarf_diename`. */
+	  /* Don't free the string returned by `dwarf_diename`. */
+	  char *die_var_name = NULL;
 	  res = dwarf_diename (die, &die_var_name, &error);
 
 	  if (res == DW_DLV_OK && str_eq (var_name, die_var_name))
 	    {
-	      /*
-	         1. Retrieve the path to the file where this variables was declared.
-	       */
+	      /* 1. Retrieve the path to the file where
+	       * this variables was declared. */
 	      Dwarf_Attribute file_attr = NULL;
 	      res = dwarf_attr (die, DW_AT_decl_file, &file_attr, &error);
 
-	      /*
-	         Here the error is ignored. `decl_file` can just stay
-	         NULL, indicating that we couldn't find it. The same
-	         is true for the line number. Both are optional.
-	       */
+	      /* Here the error is ignored. `decl_file` can just stay
+	       * NULL, indicating that we couldn't find it. The same
+	       * is true for the line number. Both are optional. */
 	      if (res == DW_DLV_ERROR)
 		{
 		  dwarf_dealloc_error (dbg, error);
 		  error = NULL;
 		}
 
-	      /*
-	         DWARF 5 standard section 2.14:
-	         [...] The value of the DW_AT_decl_file attribute corresponds
-	         to a file number from the line number information table for
-	         the [CU] containing the [DIE] and represents the source file
-	         in which the declaration appeared [...]. The value 0 indicates
-	         that no source file has been specified. [...]
-	       */
+	      /* DWARF 5 standard section 2.14:
+	       * [...] The value of the DW_AT_decl_file attribute corresponds
+	       * to a file number from the line number information table for
+	       * the [CU] containing the [DIE] and represents the source file
+	       * in which the declaration appeared [...]. The value 0 indicates
+	       * that no source file has been specified. [...] */
 
 	      Dwarf_Unsigned decl_file_num = 0;
 	      res = dwarf_formudata (file_attr, &decl_file_num, &error);
@@ -1791,11 +1725,9 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		  SprayResult res =
 		    sd_get_die_source_files (dbg, die, &files, &n_files);
 
-		  /*
-		     `DW_AT_decl_file` starts counting at 1, but clang doesn't
-		     include an additional entry at the start to make the file
-		     path list 1-based. Only `gcc` does.
-		   */
+		  /* `DW_AT_decl_file` starts counting at 1, but clang doesn't
+		   * include an additional entry at the start to make the file
+		   * path list 1-based. Only `gcc` does. */
 		  Dwarf_Unsigned files_idx = decl_file_num - 1;
 		  if (res == SP_OK && files_idx < n_files)
 		    {
@@ -1813,9 +1745,8 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		}
 
 
-	      /*
-	         2. Retrieve the line number where this variable was declared.
-	       */
+	      /* 2. Retrieve the line number where this
+	       * variable was declared. */
 	      Dwarf_Attribute line_attr = NULL;
 	      res = dwarf_attr (die, DW_AT_decl_line, &line_attr, &error);
 	      if (res == DW_DLV_ERROR)
@@ -1833,9 +1764,7 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		}
 	      unsigned decl_line = decl_line_buf;
 
-	      /*
-	         3. Retrieve the type of this variable.
-	       */
+	      /* 3. Retrieve the type of this variable. */
 	      SdType type_buf = { 0 };
 	      SprayResult type_res = sd_variable_type (dbg, die, &type_buf);
 	      if (type_res == SP_ERR)
@@ -1843,9 +1772,7 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		  return false;
 		}
 
-	      /*
-	         4. Retrieve the `location` attribute of this DIE.
-	       */
+	      /* 4. Retrieve the `location` attribute of this DIE. */
 	      Dwarf_Attribute loc_attr = NULL;
 	      res = dwarf_attr (die, DW_AT_location, &loc_attr, &error);
 
@@ -1858,11 +1785,9 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		  return false;
 		}
 
-	      /*
-	         Ensure that the attribute we found has the right
-	         form, too. This should never fail for the `location`
-	         attribute of `variable` and `formal_parameter` DIEs.
-	       */
+	      /* Ensure that the attribute we found has the right
+	       * form, too. This should never fail for the `location`
+	       * attribute of `variable` and `formal_parameter` DIEs. */
 	      SdLocattr loc_attr_buf;
 	      SprayResult res = sd_init_loc_attr (dbg,
 						  die,
@@ -1888,7 +1813,7 @@ callback__find_runtime_variable (Dwarf_Debug dbg,
 		  dwarf_dealloc_error (dbg, error);
 		}
 	      /* This is a `DW_TAG_variable` DIE but it
-	         doesn't have the given variable name. */
+	       * doesn't have the given variable name. */
 	      return false;
 	    }
 	}
@@ -1945,11 +1870,9 @@ sd_runtime_variable (Dwarf_Debug dbg,
     }
   else if (res == DW_DLV_NO_ENTRY)
     {
-      /*
-         Try again, this time ignoring the scope. Thereby,
-         the first global variable with the given name is
-         chosen.
-       */
+      /* Try again, this time ignoring the scope. Thereby,
+       * the first global variable with the given name is
+       * chosen. */
       search_for.use_scope = false;
       res = sd_search_dwarf_dbg (dbg,
 				 &error,
@@ -1993,7 +1916,7 @@ typedef struct SdOperation
 {
   SdOperator opcode;
   /* The operands 1-3 can be addressed either as single
-     struct members or as elements in an array. */
+   * struct members or as elements in an array. */
   union
   {
     struct
@@ -2013,11 +1936,11 @@ typedef struct SdExpression
   SdOperation *operations;
 } SdLocdesc;
 
-#endif // UNIT_TESTS
+#endif /* UNIT_TESTS */
 
 /* Initialize an `SdExpression` from the given location description entry.
-   Returns a regular libdwarf error code. `error` must be handled if a libdwarf
-   error is returned. `expr_dest` is only changed on success. */
+ * Returns a regular libdwarf error code. `error` must be handled if a libdwarf
+ * error is returned. `expr_dest` is only changed on success. */
 int
 sd_init_loc_expression (Dwarf_Locdesc_c locdesc_entry,
 			size_t locexpr_op_count,
@@ -2036,9 +1959,9 @@ sd_init_loc_expression (Dwarf_Locdesc_c locdesc_entry,
   for (size_t i = 0; i < n_operations; i++)
     {
       /* Byte offset of the operator in the entire expression. It's
-         suggested to use this to validate the correctness of branching
-         operations. I image that you'd check if this value reflects the
-         expected offset after performing a branch. */
+       * suggested to use this to validate the correctness of branching
+       * operations. I image that you'd check if this value reflects the
+       * expected offset after performing a branch. */
       Dwarf_Unsigned offset_for_branch = 0;
       SdOperation *op = operations + i;
 
@@ -2220,20 +2143,28 @@ sd_what_operator (SdOperator opcode)
     [DW_OP_breg31] = "DW_OP_breg31",	/* Base register 31.  */
     [DW_OP_regx] = "DW_OP_regx",	/* Unsigned LEB128 register.  */
     [DW_OP_fbreg] = "DW_OP_fbreg",	/* Signed LEB128 offset.  */
-    [DW_OP_bregx] = "DW_OP_bregx",	/* ULEB128 register followed by SLEB128 off. */
+    /* ULEB128 register followed by SLEB128 off. */
+    [DW_OP_bregx] = "DW_OP_bregx",
     [DW_OP_piece] = "DW_OP_piece",	/* ULEB128 size of piece addressed. */
-    [DW_OP_deref_size] = "DW_OP_deref_size",	/* 1-byte size of data retrieved.  */
-    [DW_OP_xderef_size] = "DW_OP_xderef_size",	/* 1-byte size of data retrieved.  */
+    /* 1-byte size of data retrieved.  */
+    [DW_OP_deref_size] = "DW_OP_deref_size",
+    /* 1-byte size of data retrieved.  */
+    [DW_OP_xderef_size] = "DW_OP_xderef_size",
     [DW_OP_nop] = "DW_OP_nop",
     [DW_OP_push_object_address] = "DW_OP_push_object_address",
     [DW_OP_call2] = "DW_OP_call2",
     [DW_OP_call4] = "DW_OP_call4",
     [DW_OP_call_ref] = "DW_OP_call_ref",
-    [DW_OP_form_tls_address] = "DW_OP_form_tls_address",	/* TLS offset to address in current thread */
-    [DW_OP_call_frame_cfa] = "DW_OP_call_frame_cfa",	/* CFA as determined by CFI.  */
-    [DW_OP_bit_piece] = "DW_OP_bit_piece",	/* ULEB128 size and ULEB128 offset in bits.  */
-    [DW_OP_implicit_value] = "DW_OP_implicit_value",	/* DW_FORM_block follows opcode.  */
-    [DW_OP_stack_value] = "DW_OP_stack_value",	/* No operands, special like [DW_OP_piece.  */
+    /* TLS offset to address in current thread */
+    [DW_OP_form_tls_address] = "DW_OP_form_tls_address",
+    /* CFA as determined by CFI.  */
+    [DW_OP_call_frame_cfa] = "DW_OP_call_frame_cfa",
+    /* ULEB128 size and ULEB128 offset in bits.  */
+    [DW_OP_bit_piece] = "DW_OP_bit_piece",
+    /* DW_FORM_block follows opcode.  */
+    [DW_OP_implicit_value] = "DW_OP_implicit_value",
+    /* No operands, special like [DW_OP_piece.  */
+    [DW_OP_stack_value] = "DW_OP_stack_value",
 
     [DW_OP_implicit_pointer] = "DW_OP_implicit_pointer",
     [DW_OP_addrx] = "DW_OP_addrx",
@@ -2246,7 +2177,7 @@ sd_what_operator (SdOperator opcode)
     [DW_OP_convert] = "DW_OP_convert",
     [DW_OP_reinterpret] = "DW_OP_reinterpret",
 
-    /* GNU extensions.  */
+    /* GNU extensions. */
     [DW_OP_GNU_push_tls_address] = "DW_OP_GNU_push_tls_address",
     [DW_OP_GNU_uninit] = "DW_OP_GNU_uninit",
     [DW_OP_GNU_encoded_addr] = "DW_OP_GNU_encoded_addr",
@@ -2265,15 +2196,21 @@ sd_what_operator (SdOperator opcode)
 
     [DW_OP_GNU_variable_value] = "DW_OP_GNU_variable_value",
 
-    /* The start of the implementation-defined range is used by `DW_OP_GNU_push_tls_address` already. */
-    /* [DW_OP_lo_user] = "DW_OP_lo_user", *//* Implementation-defined range start.  */
-    [DW_OP_hi_user] = "DW_OP_hi_user",	/* Implementation-defined range end.  */
+    /* The start of the implementation-defined range is
+     * used by `DW_OP_GNU_push_tls_address` already. */
 
-    /* Unused values. See `/usr/include/dwarf.h` for the values of the opcodes. */
-    /* 169 is the last DWARF opcode. The implementation-defined range starts at 224. */
+    /* Implementation-defined range start.  */
+    /* [DW_OP_lo_user] = "DW_OP_lo_user", */
+    [DW_OP_hi_user] = "DW_OP_hi_user",
+    /* Implementation-defined range end. */
+
+    /* Unused values. See `/usr/include/dwarf.h` for the values
+     * of the opcodes.
+     * 169 is the last DWARF opcode. The implementation-defined
+     * range starts at 224. */
     [170 ... 223] = "<invalid opcode>",
-    /* After `DW_OP_GNU_push_tls_address`, the implementation-defined range is unused
-       except for the indices from 240 to 253. */
+    /* After `DW_OP_GNU_push_tls_address`, the implementation-defined
+     * range is unused except for the indices from 240 to 253. */
     [225 ... 239] = "<unused implementation-defined opcode>",
     [254] = "<unused implementation-defined opcode>",
   };
@@ -2285,8 +2222,8 @@ uint8_t
 sd_n_operands (SdOperator opcode)
 {
   /* The information about the number of operands the
-     different opcodes have comes from section 2.5 of
-     the DWARF 5 standard. */
+   * different opcodes have comes from section 2.5 of
+   * the DWARF 5 standard. */
 
   static uint8_t n_operands[256] = {
     [DW_OP_addr] = 1,		/* Constant address.  */
@@ -2331,9 +2268,10 @@ sd_n_operands (SdOperator opcode)
     [DW_OP_lt] = 0,
     [DW_OP_ne] = 0,
     [DW_OP_skip] = 1,		/* Signed 2-byte constant.  */
-    /* The literals encode the unsigned integer values from 0 through 31, inclusive.
-       While not mentioned explicitly, the only option that make sense here is that
-       they have 0 operands. */
+    /* The literals encode the unsigned integer values from 0 through 31,
+     * inclusive.
+     * While not mentioned explicitly, the only option that make sense here
+     * is that they have 0 operands. */
     [DW_OP_lit0] = 0,		/* Literal 0.  */
     [DW_OP_lit1] = 0,		/* Literal 1.  */
     [DW_OP_lit2] = 0,		/* Literal 2.  */
@@ -2441,7 +2379,8 @@ sd_n_operands (SdOperator opcode)
     [DW_OP_call2] = 1,
     [DW_OP_call4] = 1,
     [DW_OP_call_ref] = 1,
-    [DW_OP_form_tls_address] = 0,	/* TLS offset to address in current thread */
+    /* TLS offset to address in current thread */
+    [DW_OP_form_tls_address] = 0,
     [DW_OP_call_frame_cfa] = 0,	/* CFA as determined by CFI.  */
     [DW_OP_bit_piece] = 2,	/* ULEB128 size and ULEB128 offset in bits.  */
     [DW_OP_implicit_value] = 2,	/* DW_FORM_block follows opcode.  */
@@ -2458,10 +2397,12 @@ sd_n_operands (SdOperator opcode)
     [DW_OP_convert] = 1,
     [DW_OP_reinterpret] = 1,
 
-    /* Due to lack of documentation, the GNU extensions are not supported for now.
-       Instead three is used, such that all possible operands are displayed. */
+    /* Due to lack of documentation, the GNU extensions are
+     * not supported for now. Instead they are all set to three
+     * by default so that all arguments are displayed. */
     [170 ... 223] = 3,		/* Unused range. */
-    [DW_OP_lo_user ... DW_OP_hi_user] = 3,	/* Implementation-defined range.  */
+    /* Implementation-defined range.  */
+    [DW_OP_lo_user ... DW_OP_hi_user] = 3,
   };
 
   return n_operands[opcode];
@@ -2479,14 +2420,15 @@ dwarf_addr_to_dbg_addr (Dwarf_Addr addr)
 
 typedef struct SdLocRange
 {
-  bool meaningful;		/* Libdwarf returns all types of location descriptions through
-				   location list entries. The range specified by this struct are
-				   only meaningful for bounded location descriptions. */
+  /* Libdwarf returns all types of location descriptions through
+   * location list entries. The range specified by this struct are
+   * only meaningful for bounded location descriptions. */
+  bool meaningful;		
   dbg_addr lowpc;		/* Inclusive lower bound. */
   dbg_addr highpc;		/* Exclusive upper bound. */
 } SdLocRange;
 
-#endif // UNIT_TESTS
+#endif /* UNIT_TESTS */
 
 void
 sd_init_loc_range (Dwarf_Bool debug_addr_missing,
@@ -2497,11 +2439,13 @@ sd_init_loc_range (Dwarf_Bool debug_addr_missing,
   if (invalid_range_values || (lowpc == 0 && highpc == 0))
     {
       /* The range is meaningless in one of the following three cases:
-         1. `debug_addr_missing is true, so `lowpc` and `highpc` are invalid.
-         2. `lowpc` and `highpc` are both 0 because they were not set by the function call.
-         3. `lowpc` and `highpc` were both set to 0 because there is no range for the
-         current location description. (It seems that this is how libdwarf generally
-         indicates that a location description isn't bounded by any range.) */
+       * 1. `debug_addr_missing is true, so `lowpc` and `highpc` are invalid.
+       * 2. `lowpc` and `highpc` are both 0 because they were not set by
+       *    the function call.
+       * 3. `lowpc` and `highpc` were both set to 0 because there is no
+       *    range for the current location description. (It seems that this
+       *    is how libdwarf generally indicates that a location description
+       *    isn't bounded by any range.) */
       *range_dest = (SdLocRange)
       {
       .meaningful = false,.lowpc = { 0 },.highpc = { 0 },};
@@ -2516,8 +2460,8 @@ sd_init_loc_range (Dwarf_Bool debug_addr_missing,
 }
 
 /* Is the location description associated with this
-   location description range active for the given PC?
-   Returns `false` for all meaningless range bounds. */
+ * location description range active for the given PC?
+ * Returns `false` for all meaningless range bounds. */
 bool
 is_active_range (SdLocRange range, dbg_addr _pc)
 {
@@ -2554,7 +2498,7 @@ sd_init_loclist (Dwarf_Debug dbg, SdLocattr loc_attr, SdLoclist *loclist)
   /* Pointer to the start of the loclist created by `dwarf_get_loclist_c`. */
   Dwarf_Loc_Head_c loclist_head = NULL;
   /* Number of records in the loclist pointed to by `loclist_head`.
-     This number is 1 if the loclist  represents a location expression. */
+   * This number is 1 if the loclist  represents a location expression. */
   Dwarf_Unsigned loclist_count = 0;
 
   int res = dwarf_get_loclist_c (attr, &loclist_head, &loclist_count, &error);
@@ -2579,34 +2523,44 @@ sd_init_loclist (Dwarf_Debug dbg, SdLocattr loc_attr, SdLoclist *loclist)
 
       for (Dwarf_Unsigned i = 0; i < loclist_count; i++)
 	{
-	  Dwarf_Small _lle_value = 0;	/* DW_LLE value if applicable (TODO: find out what this is) */
-	  /* On success, the first and second operand of the expression respectively.
-	     Only applies if the expression has a first or second operand).
-	     TODO: This is weird, since the libdwarf docs call these variables `raw[low|hi]pc`.
-	     Check if the description above is correct by comparing it to the output of
-	     `dwarf_get_location_op_value_c`. */
+	  /* DW_LLE value if applicable (TODO: find out what this is) */
+	  Dwarf_Small _lle_value = 0;	
+	  /* On success, the first and second operand of the expression
+	   * respectively.
+	   * Only applies if the expression has a first or second operand).
+	   * TODO: This is weird, since the libdwarf docs call these variables
+	   * `raw[low|hi]pc`.
+	   * Check if the description above is correct by comparing it to
+	   * the output of `dwarf_get_location_op_value_c`. */
 	  Dwarf_Unsigned _raw_first_op = 0;
 	  Dwarf_Unsigned _raw_second_op = 0;
-	  /* Set to true if some required data is missing. Without this data, the cooked values are invalid. */
+	  /* Set to true if some required data is missing. Without this
+	   * data, the cooked values are invalid. */
 	  Dwarf_Bool debug_addr_missing = false;
-	  /* The lower (inclusive) and upper (exclusive) bound for a bounded location description
-	     in the location list. They represent the range of PC values in which the current
-	     location description is active. Location lists contain other entries besides location
-	     descriptions. Those include **base addresses**. Those entries should be used as the base
-	     address to the lower and upper PC bounds. Base address entries are only needed in CUs where
-	     the machine code is split over non-continuous regions (see bullet 'Base address' of section
-	     2.6.2 of the DWARF 5 standard). */
+	  /* The lower (inclusive) and upper (exclusive) bound for a
+	   * bounded location description in the location list. They
+	   * represent the range of PC values in which the current location
+	   * description is active. Location lists contain other entries
+	   * besides location descriptions. Those include **base addresses**.
+	   * Those entries should be used as the base address to the lower
+	   * and upper PC bounds. Base address entries are only needed in
+	   * CUs where the machine code is split over non-continuous regions
+	   * (see bullet 'Base address' of section 2.6.2 of the DWARF
+	   * 5 standard). */
 	  Dwarf_Addr low_pc = 0;
 	  Dwarf_Addr high_pc = 0;
 	  /* Number of operations in the expression */
 	  Dwarf_Unsigned locexpr_op_count = 0;
-	  /* Pointer to a specific location description. It points to the location description at the current index. */
+	  /* Pointer to a specific location description.
+	   * It points to the location description at the current index. */
 	  Dwarf_Locdesc_c locdesc_entry = NULL;
-	  /* The applicable DW_LKIND value for the location description (TODO: What is this?) */
+	  /* The applicable DW_LKIND value for the
+	   * location description (TODO: What is this?) */
 	  Dwarf_Small _locdesc_lkind = 0;
 	  /* Offset of the expression in the applicable section (?) */
 	  Dwarf_Unsigned _expression_offset = 0;
-	  /* Offset of the location description or zero for simple location expressions. */
+	  /* Offset of the location description or zero
+	   * for simple location expressions. */
 	  Dwarf_Unsigned _locdesc_offset = 0;
 	  res = dwarf_get_locdesc_entry_d (loclist_head,
 					   i,
@@ -2698,7 +2652,8 @@ print_loclist (SdLoclist loclist)
       unsigned n_range_chars = 0;
       if (range->meaningful)
 	{
-	  /* Print the active range for the following entry if it's meaningful. */
+	  /* Print the active range for the following
+	   * entry if it's meaningful. */
 	  printf ("PC: [0x%lx, 0x%lx) ", range->lowpc.value,
 		  range->highpc.value);
 	  n_range_chars =
@@ -2710,7 +2665,8 @@ print_loclist (SdLoclist loclist)
 	{
 	  if (j > 0)
 	    {
-	      /* Indent all subsequent expressions to the level of the first one. */
+	      /* Indent all subsequent expressions to the
+	       * level of the first one. */
 	      indent_by (n_index_chars + n_range_chars);
 	    }
 
@@ -2769,9 +2725,10 @@ typedef SdLocation SdStackElem;
 typedef struct LocEvalStack
 {
   SdStackElem *buf;		/* The stack itself */
-  size_t sp;			/* Pointer to the next unused element on the stack.
-				   (points one element past the top) */
-  size_t n_alloc;		/* Number of elements allocated but not necessarily used. */
+  /* Pointer to the next unused element on the stack. */
+  size_t sp;
+  /* Number of elements allocated but not necessarily used. */
+  size_t n_alloc;
 } LocEvalStack;
 
 enum
@@ -2793,12 +2750,12 @@ init_eval_stack (void)
 }
 
 /* Pop the top-most element off the stack.
-
-   If the stack is not empty, the value of the top
-   element is stored in `pop_into` and `SP_OK` is returned.
-
-   `SP_ERR` is returned if the stack is empty and `pop_into`
-   stays untouched. */
+ *
+ * If the stack is not empty, the value of the top
+ *  element is stored in `pop_into` and `SP_OK` is returned.
+ *
+ * `SP_ERR` is returned if the stack is empty and `pop_into`
+ * stays untouched. */
 SprayResult
 pop_eval_stack (LocEvalStack *stack, SdStackElem *pop_into)
 {
@@ -2932,7 +2889,7 @@ sd_eval_op_regn (Dwarf_Debug dbg,
   else
     {
       /* The DWARF register number doesn't represent a
-         (supported) register on x86. */
+       * (supported) register on x86. */
       return SP_ERR;
     }
 }
@@ -3023,9 +2980,9 @@ sd_eval_loclist (Dwarf_Debug dbg,
 		 SdLocEvalCtx ctx, SdLoclist loclist, SdLocation *location)
 {
   /* First, try to evaluate the first active bounded range that's found.
-     The DWARF 5 standard says that if two range bounds overlap, then the
-     object can be found at both locations at the same time. Hence, it doesn't
-     matter which active range is found first. */
+   * The DWARF 5 standard says that if two range bounds overlap, then the
+   * object can be found at both locations at the same time. Hence, it doesn't
+   * matter which active range is found first. */
   for (size_t i = 0; i < loclist.n_exprs; i++)
     {
       SdLocRange range = loclist.ranges[i];
@@ -3036,8 +2993,8 @@ sd_eval_loclist (Dwarf_Debug dbg,
     }
 
   /* If none of the bounded location descriptions in this location
-     list are active, evaluate the first location description that
-     doesn't have a range bound and is always active. */
+   * list are active, evaluate the first location description that
+   * doesn't have a range bound and is always active. */
   for (size_t i = 0; i < loclist.n_exprs; i++)
     {
       SdLocRange range = loclist.ranges[i];
@@ -3048,7 +3005,7 @@ sd_eval_loclist (Dwarf_Debug dbg,
     }
 
   /* There is no location description in this location
-     list that's active at the moment. */
+   * list that's active at the moment. */
   *location = sd_loc_as_addr (0x0);
   return SP_OK;
 }
@@ -3073,9 +3030,9 @@ sd_is_die_from_file (Dwarf_Debug dbg, Dwarf_Die die, const char *filepath)
   if (full_filepath == NULL && errno == ENOENT)
     {
       /* The given filename doesn't exist in the current directory.
-         Likely, this is the case because the user only gave a filename
-         from the source directory, not the proper relative file path.
-         We work around this by only comparing file names. */
+       * Likely, this is the case because the user only gave a filename
+       * from the source directory, not the proper relative file path.
+       * We work around this by only comparing file names. */
       char *filepath_cpy = strdup (filepath);
       char *expect_file_name = basename (filepath_cpy);
 
@@ -3124,8 +3081,8 @@ callback__get_filepaths (Dwarf_Debug dbg,
 
       char *this_filepath = sd_get_filepath (dbg, cu_die);
       /* Important: if `this_filepath` is `NULL` and is still
-         stored in the array, then all subsequent strings will
-         be leaked later on. */
+       * stored in the array, then all subsequent strings will
+       * be leaked later on. */
       if (this_filepath != NULL)
 	{
 	  if (filepaths->idx >= filepaths->nalloc)
@@ -3146,7 +3103,7 @@ callback__get_filepaths (Dwarf_Debug dbg,
 }
 
 /* Return a NULL-terminated array of the file paths of
-   all compilation units found in debug information. */
+ * all compilation units found in debug information. */
 char **
 sd_get_filepaths (Dwarf_Debug dbg)
 {
@@ -3174,7 +3131,7 @@ sd_get_filepaths (Dwarf_Debug dbg)
   else
     {
       /* `DW_DLV_NO_ENTRY` is expected because the search callback
-         never returns `true`, so that all DIEs are searched. */
+       * never returns `true`, so that all DIEs are searched. */
 
       /* `NULL`-terminate the array. */
       char **filepaths_arr =
@@ -3245,7 +3202,8 @@ callback__get_srclines (Dwarf_Debug dbg,
 		{
 		  dwarf_dealloc_error (dbg, error);
 		}
-	      free (line_entries);	/* <- Also free buffer on error. */
+	      /* Also free buffer on error. */
+	      free (line_entries);
 	      return false;
 	    }
 
@@ -3292,7 +3250,7 @@ sd_get_line_table (Dwarf_Debug dbg, const char *filepath)
 }
 
 /* Set `index_dest` to the line that
-   contains the address of `PC`. */
+ * contains the address of `PC`. */
 SprayResult
 get_line_table_index_of_pc (const LineTable line_table,
 			    dbg_addr pc, unsigned *index_dest)
@@ -3386,7 +3344,7 @@ sd_line_entry_from_pc (Dwarf_Debug dbg, dbg_addr pc)
     {
       LineEntry ret = line_table.lines[pc_line_idx];
       sd_free_line_table (&line_table);
-      // Does the line entry match the given PC exactly?
+      /* Does the line entry match the given PC exactly? */
       if (ret.is_ok && ret.addr.value == pc.value)
 	{
 	  ret.is_exact = true;
@@ -3430,17 +3388,17 @@ sd_line_entry_at (Dwarf_Debug dbg, const char *filepath, unsigned lineno)
 typedef struct
 {
   /* Addresses are unsigned and we should allow them
-     to have any value. Therefore `is_set` signals
-     whether or not they are set. The alternative of
-     using e.g. `-1` as the unset value doesn't work. */
+   * to have any value. Therefore `is_set` signals
+   * whether or not they are set. The alternative of
+   * using e.g. `-1` as the unset value doesn't work. */
   bool is_set;
   dbg_addr lowpc;
   dbg_addr highpc;
 } SubprogPcRange;
 
 /* Search callback that looks for a DIE describing the
-   subprogram with the name `search_for` and stores the
-   attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
+ * subprogram with the name `search_for` and stores the
+ * attributes `AT_low_pc` and `AT_high_pc` in `search_findings`. */
 bool
 callback__find_subprog_pc_range_by_subprog_name (Dwarf_Debug dbg,
 						 Dwarf_Die die,
@@ -3603,7 +3561,7 @@ sd_effective_start_addr (Dwarf_Debug dbg,
 	      free (filepaths);
 
 	      /* Either find the prologue end line or pick the first
-	         line after the line of the low PC as the start. */
+	       * line after the line of the low PC as the start. */
 	      for (unsigned i = first_line;
 		   i < line_table.n_lines &&
 		   line_table.lines[i].addr.value <= function_end.value; i++)

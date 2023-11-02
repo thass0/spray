@@ -8,32 +8,32 @@
 
 struct DebugSymbol
 {
-  // This `Debug_Symbol`'s index into the `DebugSymbolBuf`
-  // that it was allocated by. This member can be used to
-  // get mutable access to a `const DebugSymbol *`.
+  /* This `Debug_Symbol`'s index into the `DebugSymbolBuf`
+   * that it was allocated by. This member can be used to
+   * get mutable access to a `const DebugSymbol *`. */
   const size_t buf_idx;
 
   const Elf64_Sym *elf;
 
-  // `Elf64_Sym` symbols only store an address range
-  // that belongs to the symbol. If the symbol was
-  // created with a specific address it is store in `addr`.
+  /* `Elf64_Sym` symbols only store an address range
+   * that belongs to the symbol. If the symbol was
+   * created with a specific address it is store in `addr`. */
   struct
   {
-    // NOTE: `has_addr` must always be checked before
-    // reading `addr`. If `has_addr` is false `addr`
-    // doesn't have a meaningful value.
+    /* NOTE: `has_addr` must always be checked before
+     * reading `addr`. If `has_addr` is false `addr`
+     * doesn't have a meaningful value. */
     bool has_addr;
     dbg_addr addr;
   };
 
-  // Information about the part of the source
-  // code that is the origin of the symbol.
+  /* Information about the part of the source
+   * code that is the origin of the symbol. */
   struct
   {
-    // NOTE: `has_position` must be true for `position`
-    // to have a meaningful value. Check it before
-    // reading `position`.
+    /* NOTE: `has_position` must be true for `position`
+     * to have a meaningful value. Check it before
+     * reading `position`. */
     bool has_position;
     Position position;
   };
@@ -73,7 +73,7 @@ init_symbol_buf (void)
   return buf;
 }
 
-// Allocate a new symbol. Set all its members to 0.
+/* Allocate a new symbol. Set all its members to 0. */
 DebugSymbol *
 alloc_symbol (DebugSymbolBuf *buf)
 {
@@ -88,9 +88,9 @@ alloc_symbol (DebugSymbolBuf *buf)
   DebugSymbol *sym = &buf->syms[buf->n_symbols];
   memset (sym, 0, sizeof (*sym));
 
-  // Initialize the const member `buf_idx` (it's not
-  // UB to cast const members of non-const memory like
-  // the memory returned by malloc).
+  /* Initialize the const member `buf_idx` (it's not
+   * UB to cast const members of non-const memory like
+   * the memory returned by malloc). */
   *(size_t *) &sym->buf_idx = buf->n_symbols;
 
   buf->n_symbols++;
@@ -118,9 +118,9 @@ free_symbol_buf (DebugSymbolBuf **bufp)
     }
 }
 
-// Return a non-const pointer to the same symbol. The pointer
-// returned by this function points to the exact same memory
-// as the const version does.
+/* Return a non-const pointer to the same symbol. The pointer
+ * returned by this function points to the exact same memory
+ * as the const version does. */
 DebugSymbol *
 mut_sym_ptr (const DebugSymbol *sym, DebugSymbolBuf *buf)
 {
@@ -337,19 +337,19 @@ sym_addr (const DebugSymbol *sym)
 	}
       else
 	{
-	  // Return the start of the range of addresses that
-	  // belongs to the symbol if the symbol doesn't have
-	  // a specific address.
+	  /* Return the start of the range of addresses that
+	   * belongs to the symbol if the symbol doesn't have
+	   * a specific address. */
 	  return sym_start_addr (sym);
 	}
     }
 }
 
-// Check to see if the symbol has a specific address or
-// was created from a name and thus only has a range of
-// addresses that belong to it.
-// `sym_addr == sym_start_addr` is true for the given symbol
-// if this function returns false.
+/* Check to see if the symbol has a specific address or
+ * was created from a name and thus only has a range of
+ * addresses that belong to it.
+ * `sym_addr == sym_start_addr` is true for the given symbol
+ * if this function returns false. */
 bool
 uses_specific_address (const DebugSymbol *sym)
 {
@@ -504,10 +504,10 @@ is_dyn_exec (const DebugInfo *info)
 }
 
 /* `break_scope_around_sym` places a breakpoint on each line
-   in the function belonging to the symbol `func`. The only
-   line that doesn't get a breakpoint is the line that `func`
-   itself refers to. This is used to implement stepping over
-   a line. */
+ *  in the function belonging to the symbol `func`. The only
+ * line that doesn't get a breakpoint is the line that `func`
+ * itself refers to. This is used to implement stepping over
+ * a line. */
 
 typedef struct
 {
@@ -551,9 +551,9 @@ callback__set_dwarf_line_breakpoint (LineEntry *line, void *const void_data)
 }
 
 /* Set breakpoints for `step_over`. If this function succeeds, it will
-   allocate an array in `*to_del_ptr` which holds the addresses of
-   `*n_to_del` breakpoints. The caller has to free `*to_del_ptr` and
-   delete all breakpoints. */
+ * allocate an array in `*to_del_ptr` which holds the addresses of
+ * `*n_to_del` breakpoints. The caller has to free `*to_del_ptr` and
+ * delete all breakpoints. */
 SprayResult
 set_step_over_breakpoints (const DebugSymbol *func,
 			   const DebugInfo *info,
@@ -696,14 +696,12 @@ print_var_loc (RuntimeVariable *var)
 void
 print_base_type (SdBasetype base_type, uint64_t value, PrintFilter filter)
 {
-  /*
-     `-1` starts out being all ones. By shifting it to the
-     left by `base_type.size * 8` bits, the first
-     `base_type.size` bits become `0`. Lastly all bits are
-     flipped so that we get a mask for the `base_type.size`
-     lowest bytes. If `base_type.size` is greater than 8,
-     the mask will select everything.
-   */
+  /* `-1` starts out being all ones. By shifting it to the
+   * left by `base_type.size * 8` bits, the first
+   * `base_type.size` bits become `0`. Lastly all bits are
+   * flipped so that we get a mask for the `base_type.size`
+   * lowest bytes. If `base_type.size` is greater than 8,
+   * the mask will select everything. */
   unsigned shift_by = base_type.size * 8;
   uint64_t mask = -1;		/* All ones. */
   if (shift_by < (sizeof (mask) * 8))
@@ -802,10 +800,8 @@ print_var_value (RuntimeVariable *var, uint64_t value, PrintFilter filter)
 	    }
 	}
 
-      /*
-         The loop returns from this function after printing the value.
-         Thus, if we get here, the value could not be printed with any node.
-       */
+      /* The loop returns from this function after printing the value.
+       * Thus, if we get here, the value could not be printed with any node. */
       print_filtered (value, filter);
       printf (" (no applicable type!)");
     }
@@ -864,7 +860,7 @@ init_var (dbg_addr pc,
   var->type = var_attr.type;
   var->loc = loc;
   /* `decl_line` and `decl_file` are both optional, and may
-     be `0` or `NULL` respectively. */
+   * be `0` or `NULL` respectively. */
   var->decl_line = decl_line;
   var->decl_file = decl_file;
 

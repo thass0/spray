@@ -16,7 +16,7 @@ void free_history(History history);
 void save_command(History history, const char *line);
 
 /* Copys the command to `line` (if there is a command)
-   using `malloc`. The caller must free the copy. */
+ * using `malloc`. The caller must free the copy. */
 SprayResult read_command(History history, char **line);
 
-#endif  // _SPRAY_HISTORY_H_
+#endif  /* _SPRAY_HISTORY_H_ */

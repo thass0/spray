@@ -10,7 +10,7 @@ init_print_source (void)
   CHICKEN_run (C_toplevel);
 }
 
-// Defined in `src/source-files.scm`.
+/* Defined in `src/source-files.scm`. */
 extern int print_source_extern (const char *filepath,
 				unsigned lineno,
 				unsigned n_context_lines, bool use_color);

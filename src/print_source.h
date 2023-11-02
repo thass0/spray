@@ -5,9 +5,9 @@
 
 #include "magic.h"
 
-// Call this to initialize `print_source`. The program
-// will crash if `print_source` is called without being
-// initialized.
+/* Call this to initialize `print_source`. The program
+ * will crash if `print_source` is called without being
+ * initialized. */
 void init_print_source(void);
 
 SprayResult print_source(
@@ -16,4 +16,4 @@ SprayResult print_source(
   unsigned n_context
 );
 
-#endif  // _SPRAY_PRINT_SOURCE_H_
+#endif  /* _SPRAY_PRINT_SOURCE_H_ */

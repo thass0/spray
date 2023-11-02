@@ -177,13 +177,13 @@ print_filtered (uint64_t value, PrintFilter filter)
     }
 }
 
-// Return the part of `abs_filepath` that's relative to
-// the present working directory. It is assumed that 
-//
-// On success, the pointer that's returned points into
-// `abs_filepath`.
-//
-// Otherwise, `NULL` is returned to signal an error.
+/* Return the part of `abs_filepath` that's relative to
+ * the present working directory. It is assumed that 
+ *
+ * On success, the pointer that's returned points into
+ * `abs_filepath`.
+ *
+ * Otherwise, `NULL` is returned to signal an error. */
 const char *
 relative_filepath (const char *abs_filepath)
 {
@@ -199,7 +199,7 @@ relative_filepath (const char *abs_filepath)
       return NULL;
     }
 
-  // Set `i` to the first index in `filepath` that's not part of the cwd.
+  /* Set `i` to the first index in `filepath` that's not part of the cwd. */
   size_t i = 0;
   while (cwd[i] == abs_filepath[i])
     {
@@ -210,17 +210,17 @@ relative_filepath (const char *abs_filepath)
 
   if (i == 0)
     {
-      // `abs_filepath` is a relative filepath and should
-      // be returned entirely.
+      /* `abs_filepath` is a relative filepath and
+       * should be returned entirely. */
       return abs_filepath;
     }
   else
     {
-      // Return the part of `filepath` that's not part of the cwd.
-      // `+ 1` removes the slash character at `abs_filepath[i]`.
-      // This slash is left because `cwd` doesn't have a trailing
-      // slash character. Hence, this character is the first one
-      // where `abs_filepath` and `cmd` differ.
+      /* Return the part of `filepath` that's not part of the cwd.
+       * `+ 1` removes the slash character at `abs_filepath[i]`.
+       * This slash is left because `cwd` doesn't have a trailing
+       * slash character. Hence, this character is the first one
+       * where `abs_filepath` and `cmd` differ. */
       return abs_filepath + i + 1;
     }
 }
@@ -255,12 +255,10 @@ print_msg (FILE *stream, const char *kind, const char *fmt, va_list argp)
   assert (fmt_buf != NULL);
 
   size_t n_printed = snprintf (fmt_buf, len, "%s: %s\n", kind, fmt);
-  /*
-     `snprintf` writes a maximum of `len` bytes, including the
-     `\0` byte, and returns the number of bytes written,
-     excluding the `\0` byte. Thus, `len` was too small and the
-     output was truncated  if `n_printed >= len`.
-   */
+  /* `snprintf` writes a maximum of `len` bytes, including the
+   * `\0` byte, and returns the number of bytes written,
+   * excluding the `\0` byte. Thus, `len` was too small and the
+   * output was truncated  if `n_printed >= len`. */
   assert (n_printed == (len - 1));
 
   vfprintf (stream, fmt_buf, argp);

@@ -29,25 +29,25 @@ typedef enum {
   ELF_ENDIAN_LITTLE,
 } Endianness;
 
-// ELF program header table.
+/* ELF program header table. */
 typedef struct {
   uint32_t n_headers;
   Elf64_Phdr *headers;
 } ElfProgTable;
 
-// ELF section header table.
+/* ELF section header table. */
 typedef struct {
   uint32_t n_headers;
-  // Symbol table index in `headers`.
+  /* Symbol table index in `headers`. */
   uint32_t symtab_idx;
-  // String table indices in `headers`.
+  /* String table indices in `headers`. */
   uint32_t shstrtab_idx;
   uint32_t strtab_idx;
   Elf64_Shdr *headers;
 } ElfSectTable;
 
 typedef struct {
-  // Privately memory-mapped content of file.
+  /* Memory-mapped content of file. */
   byte *bytes;
   size_t n_bytes;
 } ElfData;
@@ -65,44 +65,47 @@ typedef enum {
   ELF_PARSE_IO_ERR,   /* Error during I/O. */
   ELF_PARSE_INVALID,  /* Invalid file. */
   ELF_PARSE_DISLIKE,  /* Theoretically a valid ELF file but
-                         some feature used is not supported. */
+                       * some feature used is not supported. */
 } ElfParseResult;
 
 const char *elf_parse_result_name(ElfParseResult res);
 
 /* Parse an ELF file and store the info in `elf`.
-   Returns `ELF_PARSE_OK` on success. `*elf` might
-   be changed even if the result is ultimately an error. */
+ * Returns `ELF_PARSE_OK` on success. `*elf` might
+ * be changed even if the result is ultimately an error. */
 ElfParseResult se_parse_elf(const char *filepath, ElfFile *elf);
 
-// Returns `SP_ERR` if unmapping the ELF file didn't work.
+/* Returns `SP_ERR` if un-mapping the ELF file didn't work. */
 SprayResult se_free_elf(ElfFile elf);
 
-/* Symbol table interface. */
 
-// Get the symbol table entry for the symbol name.
-// Returns `NULL` in no such symbol was found.
+/***************************/
+/* Symbol table interface. */
+/***************************/
+
+/* Get the symbol table entry for the symbol name.
+ * Returns `NULL` in no such symbol was found. */
 const Elf64_Sym *se_symbol_from_name(const char *name, const ElfFile *elf);
 
-// Get the symbol table entry for the symbol that
-// belongs to the given instruction address.
+/* Get the symbol table entry for the symbol that
+ * belongs to the given instruction address. */
 const Elf64_Sym *se_symbol_from_addr(dbg_addr addr, const ElfFile *elf);
 
-// Access different fields in a symbol. The way information
-// is stored in the different members of a symbol is a bit
-// weird so these wrappers make the code more readable.
+/* Access different fields in a symbol. The way information
+ * is stored in the different members of a symbol is a bit
+ * weird so these wrappers make the code more readable. */
 
 int se_symbol_binding(const Elf64_Sym *sym);
 int se_symbol_type(const Elf64_Sym *sym);
 int se_symbol_visibility(const Elf64_Sym *sym);
 
-// Get start (low PC) and end (high PC) address of function symbol.
-// Return values are meaningless in this context if the symbol is
-// not a function.
+/* Get start (low PC) and end (high PC) address of function symbol.
+ * Return values are meaningless in this context if the symbol is
+ * not a function. */
 dbg_addr se_symbol_start_addr(const Elf64_Sym *sym);
 dbg_addr se_symbol_end_addr(const Elf64_Sym *sym);
 
-// Looks up the symbol name in the string table.
+/* Looks up the symbol name in the string table. */
 const char *se_symbol_name(const Elf64_Sym *sym, const ElfFile *elf);
 
-#endif  // _SPRAY_PARSE_ELF_H_
+#endif  /* _SPRAY_PARSE_ELF_H_ */

@@ -20,10 +20,11 @@
 /* Initialized libdwarf's debug info. Returns NULL on error. */
 Dwarf_Debug sd_dwarf_init(const char *filepath, Dwarf_Error *error);
 
-/*
- * INFORMATION ABOUT THE CURRENT POSITION OF THE
- * EXECUTING PROGRAM IN THE PROGRAM SOURCE FILES.
- */
+
+/**************************************************/
+/* Information about the current position of the  */
+/* executing program in the program source files. */
+/**************************************************/
 
 /* Get the file path of the source file that contains the
  * code that the given PC points to. The string that's returned
@@ -74,13 +75,11 @@ SprayResult sd_effective_start_addr(Dwarf_Debug dbg,
                                     dbg_addr *function_start);
 
 
-/*
- * INFORMATION ABOUT LOCATION AND TYPE OF RUNTIME VARIABLES.
- */
+/*************************************************************/
+/* Information about location and type of runtime variables. */
+/*************************************************************/
 
-/*
- * Type information.
- */
+/* Type information. */
 
 typedef struct {
   enum {
@@ -99,7 +98,8 @@ typedef struct {
     BASE_TYPE_DOUBLE,
     BASE_TYPE_LONG_DOUBLE,
   } tag;
-  unsigned char size;		/* Number of bytes used to represent this base type. */
+  /* Number of bytes used to represent this base type. */
+  unsigned char size;
 } SdBasetype;
 
 /* See the DWARF 5 standard 5.3. */
@@ -147,8 +147,7 @@ typedef struct {
  * to find out what type the variable has.
  *
  * `SdLocattr`'s memory is handled by `libdwarf`. Only `SdType`
- * must be deleted after it's been used by the user.
-*/
+ * must be deleted after it's been used by the user. */
 typedef struct {
   SdLocattr loc;	/* Runtime location. */
   SdType type;		/* Type. */
@@ -176,9 +175,7 @@ SprayResult sd_runtime_variable(Dwarf_Debug dbg,
 				unsigned *decl_line);
 
 
-/*
- * Location information.
- */
+/* Location information. */
 
 typedef struct SdExpression SdLocdesc;
 typedef struct SdLocRange SdLocRange;
@@ -300,6 +297,6 @@ typedef struct SdExpression {
   SdOperation *operations;
 } SdExpression;
 
-#endif  // UNIT_TESTS
+#endif  /* UNIT_TESTS */
 
-#endif  // _SPRAY_DWARF_H_
+#endif  /* _SPRAY_DWARF_H_ */

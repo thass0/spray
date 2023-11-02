@@ -126,13 +126,13 @@ parse_long_flag (const char *flag, Flags *flags)
 }
 
 /* Parse all flags in the command line arguments. Flags start with
- either (1) a single dash followed by a single character or (2) a
- double dash followed by a string. Parsing stops once one of the
- given arguments doesn't fulfill either (1) or (2).
- -1 is returned if the arguments contain invalid flags or the arguments
- to this function are invalid. On success the number of arguments that
- were processed thus far is returned. It is an error if there are no
- arguments left after parsing all flags. */
+ * either (1) a single dash followed by a single character or (2) a
+ * double dash followed by a string. Parsing stops once one of the
+ * given arguments doesn't fulfill either (1) or (2).
+ * -1 is returned if the arguments contain invalid flags or the arguments
+ * to this function are invalid. On success the number of arguments that
+ * were processed thus far is returned. It is an error if there are no
+ * arguments left after parsing all flags. */
 int
 parse_flags (int argc, char **argv, Flags *flags)
 {
@@ -197,11 +197,12 @@ parse_args (int argc, char **argv, Args *args)
       int file_idx = flags_res;
       args->file = argv[file_idx];
 
-      /* Are there any arguments that should be passed to the debugged executable?
-       */
+      /* Are there any arguments that should be
+       * passed to the debugged executable?  */
       if (file_idx + 1 < argc)
 	{
-	  /* The arguments passed to the debugged executable include its name. */
+	  /* The arguments passed to the debugged
+	   * executable include its name. */
 	  args->args = argv + file_idx;
 	  args->n_args = argc - file_idx;
 	}
@@ -231,7 +232,7 @@ set_args (const Args *args)
   free (GLOBAL_ARGS.args);
 
   /* Allocate one pointer more than needed so that the
-     array is terminated by a NULL pointer. */
+   * array is terminated by a NULL pointer. */
   GLOBAL_ARGS.args = calloc (args->n_args + 1, sizeof (char *));
   for (size_t i = 0; i < args->n_args; i++)
     {

@@ -21,10 +21,9 @@
 #include <sys/personality.h>
 
 
-// ========================
-// PC and Address Utilities
-// ========================
-
+/****************************/
+/* PC and Address Utilities */
+/****************************/
 
 void
 print_info (const char *fmt, ...)
@@ -58,8 +57,8 @@ get_pc (pid_t pid)
 }
 
 /* Get the program counter and remove any offset which is
-   added to the physical process counter in PIEs. The DWARF
-   debug info doesn't know about this offset. */
+ * added to the physical process counter in PIEs. The DWARF
+ * debug info doesn't know about this offset. */
 dbg_addr
 get_dbg_pc (Debugger *dbg)
 {
@@ -79,14 +78,12 @@ set_pc (pid_t pid, real_addr pc)
 bool
 is_user_breakpoint (Debugger *dbg)
 {
-  /*
-     The debugger might insert breakpoints internally to implement
-     different kinds of stepping behavior. Such breakpoints are
-     always deleted right after they have been hit. Thus, at any
-     stopped state, it's possible to determine if the breakpoint
-     that lead to the state was created by the user, based on
-     whether it still exists.
-   */
+  /* The debugger might insert breakpoints internally to implement
+   * different kinds of stepping behavior. Such breakpoints are
+   * always deleted right after they have been hit. Thus, at any
+   * stopped state, it's possible to determine if the breakpoint
+   * that lead to the state was created by the user, based on
+   * whether it still exists. */
 
   return lookup_breakpoint (dbg->breakpoints, get_pc (dbg->pid));
 }
@@ -126,16 +123,14 @@ print_current_source (Debugger *dbg)
 }
 
 
-// =============================
-// Stepping and Breakpoint Logic
-// =============================
+/*********************************/
+/* Stepping and Breakpoint Logic */
+/*********************************/
 
 SprayResult wait_for_signal (Debugger * dbg);
 
-/*
- Execute the instruction at the breakpoints location
- and stop the tracee again.
-*/
+/* Execute the instruction at the breakpoints location
+ * and stop the tracee again. */
 SprayResult
 single_step_breakpoint (Debugger *dbg)
 {
@@ -159,7 +154,7 @@ single_step_breakpoint (Debugger *dbg)
 }
 
 /* Continue execution of child process. If the PC is currently
-   hung up on a breakpoint then that breakpoint is stepped-over. */
+ * hung up on a breakpoint then that breakpoint is stepped-over. */
 SprayResult
 continue_execution (Debugger *dbg)
 {
@@ -207,6 +202,7 @@ wait_for_signal (Debugger *dbg)
    * continue to poke at it. Effectively this is just
    * waiting until the next breakpoint sends the tracee
    * another SIGTRAP. */
+
   /* In general the following events are awaited by `waitpid`:
    * - child is terminated
    * - child is stopped by a signal
@@ -221,27 +217,27 @@ wait_for_signal (Debugger *dbg)
    * what state the tracee is in now that we can
    * inspect it. */
 
-  // Did the tracee terminate normally?
+  /* Did the tracee terminate normally? */
   if (WIFEXITED (wait_status))
     {
       print_info ("Child exited with code %d", WEXITSTATUS (wait_status));
       /* Return an error, because the debugger cannot continue now. */
       return SP_ERR;
     }
-  // Was the tracee terminated by a signal?
+  /* Was the tracee terminated by a signal? */
   else if (WIFSIGNALED (wait_status))
     {
       print_info ("Child was terminated by signal SIG%s",
 		  sigabbrev_np (WTERMSIG (wait_status)));
       return SP_ERR;
     }
-  // Did the tracee receive a `SIGCONT` signal?
+  /* Did the tracee receive a `SIGCONT` signal? */
   else if (WIFCONTINUED (wait_status))
     {
       print_info ("Child was resumed");
       return SP_OK;
     }
-  // Was the tracee stopped by another signal?
+  /* Was the tracee stopped by another signal? */
   else if (WIFSTOPPED (wait_status))
     {
       siginfo_t siginfo = { 0 };
@@ -256,19 +252,15 @@ wait_for_signal (Debugger *dbg)
 	case SIGTRAP:
 	  handle_sigtrap (dbg, siginfo);
 
-	  /*
-	     If `siginfo.si_code == SI_KERNEL || siginfo.si_code == TRAP_BRKPT`,
-	     then this signal was caused by a breakpoint. See the `siginfo_t`
-	     man-page for more.
-	   */
+	  /* If `siginfo.si_code == SI_KERNEL || siginfo.si_code == TRAP_BRKPT`,
+	   * then this signal was caused by a breakpoint. See the `siginfo_t`
+	   * man-page for more. */
 
 	  return SP_OK;
 	case SIGWINCH:
-	  /*
-	     Ignore changes in window size by telling the
-	     tracee to continue in that case and then wait for
-	     the next interesting signal.
-	   */
+	  /* Ignore changes in window size by telling the
+	   * tracee to continue in that case and then wait for
+	   * the next interesting signal. */
 	  continue_execution (dbg);
 	  return wait_for_signal (dbg);
 	default:
@@ -302,10 +294,10 @@ single_step_instruction (Debugger *dbg)
 }
 
 /* Set a breakpoint on the current return address.
-   Used for source-level stepping. Returns whether or
-   not the breakpoint must be removed again after use.
-   If it was to be removed,  the value of `return_address`
-   is set to the address where the breakpoint was created. */
+ * Used for source-level stepping. Returns whether or
+ * breakpoint must be removed again after use.
+ * If it was to be removed,  the value of `return_address`
+ * is set to the address where the breakpoint was created. */
 bool
 set_return_address_breakpoint (Breakpoints *breakpoints, pid_t pid,
 			       real_addr *return_address)
@@ -314,8 +306,8 @@ set_return_address_breakpoint (Breakpoints *breakpoints, pid_t pid,
   assert (return_address != NULL);
 
   /* The return address is stored 8 bytes after the
-     start of the stack frame. This is where we want
-     to set a breakpoint. */
+   * start of the stack frame. This is where we want
+   * to set a breakpoint. */
   uint64_t frame_pointer = 0;
   SprayResult res = get_register_value (pid, rbp, &frame_pointer);
   assert (res == SP_OK);
@@ -371,10 +363,8 @@ single_step_line (Debugger *dbg)
 
   uint32_t init_line = pos->line;
 
-  /*
-     Single step instructions until we find a valid line
-     with a different line number than before.
-   */
+  /* Single step instructions until we find a valid line
+   * with a different line number than before. */
   unsigned n_instruction_steps = 0;
   while (!pos->is_exact || pos->line == init_line)
     {
@@ -383,10 +373,8 @@ single_step_line (Debugger *dbg)
 
       n_instruction_steps++;
 
-      /*
-         Should we continue searching? We stop after
-         a certain number of attempts has been made.
-       */
+      /* Should we continue searching? We stop after
+       * a certain number of attempts has been made. */
       pos = addr_position (get_dbg_pc (dbg), dbg->info);
       if (pos == NULL || n_instruction_steps >= SINGLE_STEP_SEARCH_LIMIT)
 	{
@@ -404,11 +392,9 @@ step_over (Debugger *dbg)
 {
   assert (dbg != NULL);
 
-  /*
-     This functions sets breakpoints all over the current DWARF
-     subprogram except for the next line so that we stop right
-     after executing the code in it.
-   */
+  /* This functions sets breakpoints all over the current DWARF
+   * subprogram except for the next line so that we stop right
+   * after executing the code in it. */
 
   const DebugSymbol *func = sym_by_addr (get_dbg_pc (dbg), dbg->info);
   if (func == NULL)
@@ -456,20 +442,20 @@ step_over (Debugger *dbg)
 }
 
 
-// =================
-// Command Execution
-// =================
+/*********************/
+/* Command Execution */
+/*********************/
 
 /* This amount of indentation ensures that the
-   contents of memory reads are indented the
-   same amount as register reads which are
-   preceeded by a register name. */
+ * contents of memory reads are indented the
+ * same amount as register reads which are
+ * preceeded by a register name. */
 #define MEM_READ_INDENT "         "
 
 /* Message displayed right after the new value
-   of a memory location or register written to
-   was displayed. This is useful as confirmation
-   that the write operation was successful. */
+ * of a memory location or register written to
+ * was displayed. This is useful as confirmation
+ * that the write operation was successful. */
 #define WRITE_READ_MSG "(read after write)"
 
 void
@@ -713,8 +699,8 @@ execmd_delete (Breakpoints *breakpoints, real_addr addr)
 }
 
 /* Execute the instruction at the current breakpoint,
-   continue the tracee and wait until it receives the
-   next signal. */
+ * continue the tracee and wait until it receives the
+ * next signal. */
 void
 execmd_continue (Debugger *dbg)
 {
@@ -783,9 +769,9 @@ execmd_backtrace (Debugger *dbg)
 }
 
 
-// ===============
-// Command Parsing
-// ===============
+/*******************/
+/* Command Parsing */
+/*******************/
 
 static inline const char *
 next_token (char *const *tokens, size_t *i)
@@ -864,10 +850,10 @@ bool
 is_valid_identifier (const char *ident)
 {
   /* Regular expression for identifiers from the 2011 ISO C
-     standard grammar (https://www.quut.com/c/ANSI-C-grammar-l-2011.html):
-     L   [a-zA-Z_]
-     A   [a-zA-Z_0-9]
-     {L}{A}*
+   * standard grammar (https://www.quut.com/c/ANSI-C-grammar-l-2011.html):
+   * L   [a-zA-Z_]
+   * A   [a-zA-Z_0-9]
+   * {L}{A}*
    */
   regex_t ident_regex;
   int comp_res = regcomp (&ident_regex,
@@ -877,8 +863,9 @@ is_valid_identifier (const char *ident)
   assert (comp_res == 0);
   int match = regexec (&ident_regex,
 		       ident,
-		       0,	// We are not interested
-		       NULL,	// in any sub-expressions.
+		       /* Ignore sub-expressions. */
+		       0,
+		       NULL,
 		       0);
   regfree (&ident_regex);
   if (match == 0)
@@ -947,7 +934,8 @@ parse_break_location (Debugger dbg, const char *location, dbg_addr *dest)
     {
       char *location_cpy = strdup (location);
       const char *filepath = strtok (location_cpy, ":");
-      assert (filepath != NULL);	// OK since `location` was validated.
+      /* OK since `location` was validated. */
+      assert (filepath != NULL);
 
       unsigned lineno = 0;
       SprayResult res = parse_lineno (strtok (NULL, ":"), &lineno);
@@ -1217,7 +1205,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	    }
 
 	  /* Parse the input value using the correct base. By default,
-	     that same base will be used to print confirmation, too. */
+	   * that same base will be used to print confirmation, too. */
 	  uint64_t value = 0;
 	  if (parse_base10 (value_str, &value) == SP_OK)
 	    {
@@ -1297,8 +1285,8 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	}
     }
   while (0);			/* Only run this block once. The
-				   loop is only used to make `break` available
-				   for  skipping subsequent steps on error. */
+				 * loop is only used to make `break` available
+				 * for  skipping subsequent steps on error. */
 }
 
 void
@@ -1338,19 +1326,19 @@ handle_debug_command (Debugger *dbg, const char *line)
 }
 
 
-// =======================
-// Debugger Initialization
-// =======================
+/***************************/
+/* Debugger Initialization */
+/***************************/
 
 void
 init_load_address (Debugger *dbg)
 {
   assert (dbg != NULL);
 
-  // Is this a dynamic executable?
+  /* Is this a dynamic executable? */
   if (is_dyn_exec (dbg->info))
     {
-      // Open the process' `/proc/<pid>/maps` file.
+      /* Open the process' `/proc/<pid>/maps` file. */
       char proc_maps_filepath[PROC_MAPS_FILEPATH_LEN];
       snprintf (proc_maps_filepath,
 		PROC_MAPS_FILEPATH_LEN, "/proc/%d/maps", dbg->pid);
@@ -1358,9 +1346,9 @@ init_load_address (Debugger *dbg)
       FILE *proc_map = fopen (proc_maps_filepath, "r");
       assert (proc_map != NULL);
 
-      // Read the first address from the file.
-      // This is OK since address space
-      // layout randomization is disabled.
+      /* Read the first address from the file.
+       * This is OK since address space
+       * layout randomization is disabled. */
       char *addr = NULL;
       size_t n = 0;
       ssize_t nread = getdelim (&addr, &n, (int) '-', proc_map);
@@ -1372,7 +1360,7 @@ init_load_address (Debugger *dbg)
 
       free (addr);
 
-      // Now update the debugger instance on success.
+      /* Now update the debugger instance on success. */
       dbg->load_address = load_address;
     }
   else
@@ -1411,15 +1399,15 @@ setup_debugger (const char *prog_name, char *prog_argv[], Debugger *store)
     {
       /* Start the child process. */
 
-      // Disable address space layout randomization.
+      /* Disable address space layout randomization. */
       personality (ADDR_NO_RANDOMIZE);
 
-      // Flag *this* process as the tracee.
+      /* Flag *this* process as the tracee. */
       pt_trace_me ();
 
-      // Replace the current process with the
-      // given program to debug. Only pass its
-      // name to it.
+      /* Replace the current process with the
+       * given program to debug. Only pass its
+       * name to it. */
       execv (prog_name, prog_argv);
     }
   else if (pid >= 1)
@@ -1427,12 +1415,11 @@ setup_debugger (const char *prog_name, char *prog_argv[], Debugger *store)
       /* Parent process */
 
       /* Wait until the tracee has received the initial
-         SIGTRAP. Don't handle the signal like in `wait_for_signal`. */
+       * SIGTRAP. Don't handle the signal like in `wait_for_signal`. */
       int wait_status;
       int options = 0;
       waitpid (pid, &wait_status, options);
 
-      // Now we can finally touch `store` 😄.
       *store = (Debugger)
       {
 	.prog_name = prog_name,.pid = pid,.breakpoints =

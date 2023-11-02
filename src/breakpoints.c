@@ -9,7 +9,7 @@
 typedef struct
 {
   real_addr addr;		/* The address is the only member that's
-				   used to compare and look up breakpoints. */
+				 * used to compare and look up breakpoints. */
   bool is_enabled;
   uint8_t orig_data;
 } Breakpoint;
@@ -27,7 +27,7 @@ breakpoint_compare (const void *a, const void *b, void *udata)
   const Breakpoint *breakpoint_a = (Breakpoint *) a;
   const Breakpoint *breakpoint_b = (Breakpoint *) b;
   /* `compare` assumes that strings are used in its implementation.
-     Mimicking `strcmp`, 0 is returned when the keys are equal. */
+   * Mimicking `strcmp`, 0 is returned when the keys are equal. */
   return !(breakpoint_a->addr.value == breakpoint_b->addr.value);
 }
 
@@ -108,8 +108,8 @@ enable_breakpoint (Breakpoints *breakpoints, real_addr addr)
     }
 
   /* Only enable the breakpoint if it's currently disabled.
-     Re-activating an already active breakpoint would delete the
-     original instructions that were overwritten to insert the trap. */
+   * Re-activating an already active breakpoint would delete the
+   * original instructions that were overwritten to insert the trap. */
   if (!to_enable->is_enabled)
     {
       /* Read the word at `bp->addr` in the tracee's memory. */
@@ -125,9 +125,9 @@ enable_breakpoint (Breakpoints *breakpoints, real_addr addr)
       uint64_t orig_data = (uint8_t) (word & BTM_BYTE_MASK);
 
       /* Set the least significant bytes to the instruction `int 3`.
-         When this instruction is executed, the tracee raises an
-         interrupt and it is sent a trap signal. Receiving this
-         signal stops it. */
+       * When this instruction is executed, the tracee raises an
+       * interrupt and it is sent a trap signal. Receiving this
+       * signal stops it. */
       uint64_t int3_data = ((word & ~BTM_BYTE_MASK) | INT3);
 
       /* Write the trap to the tracee's memory. */
@@ -138,8 +138,8 @@ enable_breakpoint (Breakpoints *breakpoints, real_addr addr)
 	}
 
       /* Update the entry in the hash map. All data belonging to
-         the breakpoint is updated here at once, after the memory write
-         to the tracee's memory has completed successfully. */
+       * the breakpoint is updated here at once, after the memory write
+       * to the tracee's memory has completed successfully. */
       Breakpoint updated = {
 	.addr = to_enable->addr,
 	.is_enabled = true,
@@ -160,9 +160,9 @@ disable_breakpoint (Breakpoints *breakpoints, real_addr addr)
 
   if (to_disable != NULL && to_disable->is_enabled)
     {
-      // `ptrace` only operates on whole words, so we need
-      // to read what's currently there first, then replace the
-      // modified low byte and write it to the address.
+      /* `ptrace` only operates on whole words, so we need
+       * to read what's currently there first, then replace the
+       * modified low byte and write it to the address. */
 
       uint64_t modified_word = 0;
       SprayResult res =

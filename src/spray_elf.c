@@ -14,12 +14,12 @@ enum
   CHECK_SECTION_HEADER = 0xffff,
 };
 
-// Validates the content of the given `Elf64_Ehdr` and
-// parses all values of interest. Some values (`n_prog_hdrs`,
-// `n_sect_hdrs` and `shstrtab_idx`) might be too
-// large to be stored in the `Elf64_Ehdr`. Then they are set to
-// `CHECK_SECTION_HEADER` to signal that they should be read from
-// the inital section header.
+/* Validates the content of the given `Elf64_Ehdr` and
+ * parses all values of interest. Some values (`n_prog_hdrs`,
+ * `n_sect_hdrs` and `shstrtab_idx`) might be too
+ * large to be stored in the `Elf64_Ehdr`. Then they are set to
+ * `CHECK_SECTION_HEADER` to signal that they should be read from
+ * the inital section header. */
 ElfParseResult
 parse_elf_header (const Elf64_Ehdr *elf_src,
 		  ElfFile *elf_dest,
@@ -35,39 +35,39 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
   assert (n_sect_hdrs != NULL);
   assert (shstrtab_idx != NULL);
 
-  // Is the magic number invalid?
-  if ((elf_src->e_ident[EI_MAG0] != ELFMAG0)	// 0x7f
-      || (elf_src->e_ident[EI_MAG1] != ELFMAG1)	// 'E'
-      || (elf_src->e_ident[EI_MAG2] != ELFMAG2)	// 'L'
-      || (elf_src->e_ident[EI_MAG3] != ELFMAG3)	// 'F'
+  /* Is the magic number invalid? */
+  if ((elf_src->e_ident[EI_MAG0] != ELFMAG0)	/* 0x7f */
+      || (elf_src->e_ident[EI_MAG1] != ELFMAG1)	/* 'E'  */
+      || (elf_src->e_ident[EI_MAG2] != ELFMAG2)	/* 'L'  */
+      || (elf_src->e_ident[EI_MAG3] != ELFMAG3)	/* 'F'  */
     )
     {
       return ELF_PARSE_INVALID;
     }
 
-  // Is this ELF file meant for something different than 64 bit?
+  /* Is this ELF file meant for something different than 64 bit? */
   if (elf_src->e_ident[EI_CLASS] != ELFCLASS64)
     {
       return ELF_PARSE_DISLIKE;
     }
 
-  // Is the file's data encoding two's complement and little-endian?
+  /* Is the file's data encoding two's complement and little-endian? */
   if (elf_src->e_ident[EI_DATA] == ELFDATA2LSB)
     {
       elf_dest->endianness = ELF_ENDIAN_LITTLE;
     }
-  // Is the file's data encoding two's complement and big-endian?
+  /* Is the file's data encoding two's complement and big-endian? */
   else if (elf_src->e_ident[EI_DATA] == ELFDATA2MSB)
     {
       elf_dest->endianness = ELF_ENDIAN_BIG;
     }
-  // Is the file's data encoding missing?
+  /* Is the file's data encoding missing? */
   else
     {
       return ELF_PARSE_DISLIKE;
     }
 
-  // Is the ABI suppored? `ELFOSABI_NONE` is the same as `SYSV`.
+  /* Is the ABI suppored? `ELFOSABI_NONE` is the same as `SYSV`. */
   if ((elf_src->e_ident[EI_OSABI] != ELFOSABI_LINUX)
       && (elf_src->e_ident[EI_OSABI] != ELFOSABI_NONE)
       && (elf_src->e_ident[EI_OSABI] != ELFOSABI_SYSV))
@@ -75,9 +75,9 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
       return ELF_PARSE_DISLIKE;
     }
 
-  // `EI_VERSION` and `EI_ABIVERSION` are basically unused
-  // and must conform to the values below to be valid.
-  // `e_version` is the same.
+  /* `EI_VERSION` and `EI_ABIVERSION` are basically unused
+   * and must conform to the values below to be valid.
+   * `e_version` is the same. */
   if (elf_src->e_ident[EI_VERSION] != EV_CURRENT
       || elf_src->e_ident[EI_ABIVERSION] != 0
       || elf_src->e_version != EV_CURRENT)
@@ -85,29 +85,31 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
       return ELF_PARSE_INVALID;
     }
 
-  // Is the object file type in the accepted range?
+  /* Is the object file type in the accepted range? */
   if (elf_src->e_type <= ELF_TYPE_CORE)
     {
-      // `e_type` maps to `elf_type` in this range.
+      /* `e_type` maps to `elf_type` in this range. */
       elf_dest->type = (ElfType) elf_src->e_type;
     }
   else
     {
-      // Object file type is in the reserved range.
+      /* Object file type is in the reserved range. */
       return ELF_PARSE_INVALID;
     }
 
-  // Is the target instruction set architecture something
-  // different than x86?  We're x86 only here!
+  /* Is the target instruction set architecture something
+   * different than x86?  We're x86 only here! */
   if (elf_src->e_machine != EM_X86_64)
     {
       return ELF_PARSE_DISLIKE;
     }
 
 
+  /*********************************************/
   /* Program and section header table parsing. */
-
-  // Is this file missing a program header table?
+  /*********************************************/
+  
+  /* Is this file missing a program header table? */
   if (elf_src->e_phoff == 0)
     {
       return ELF_PARSE_DISLIKE;
@@ -117,7 +119,7 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
       *prog_table_off = elf_src->e_phoff;
     }
 
-  // Is this file missing a section header table?
+  /* Is this file missing a section header table? */
   if (elf_src->e_shoff == 0)
     {
       return ELF_PARSE_DISLIKE;
@@ -127,7 +129,7 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
       *sect_table_off = elf_src->e_shoff;
     }
 
-  // Are the entry sizes in the header tables meant for 64-bit?
+  /* Are the entry sizes in the header tables meant for 64-bit? */
   if (elf_src->e_phentsize != sizeof (Elf64_Phdr) ||
       elf_src->e_shentsize != sizeof (Elf64_Shdr))
     {
@@ -135,13 +137,13 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
     }
 
   /* Some of the values in the ELF header don't fit
-     its data types anymore. E.g. if there are more
-     than 0xffff program headers, the `e_phnum` field
-     cannot store how many of them there are. In this
-     case, the first entry in the section header table
-     stores the actual real value. */
+   * its data types anymore. E.g. if there are more
+   * than 0xffff program headers, the `e_phnum` field
+   * cannot store how many of them there are. In this
+   * case, the first entry in the section header table
+   * stores the actual real value. */
 
-  // Does the number of program headers exceed the representable range?
+  /* Does the number of program headers exceed the representable range? */
   if (elf_src->e_phnum == PN_XNUM)
     {
       *n_prog_hdrs = CHECK_SECTION_HEADER;
@@ -153,12 +155,12 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
 
   if (elf_src->e_shnum == 0)
     {
-      // `e_shnum` being 0 signals one of two options:
-      // (1) The number of section table headers lies outside
-      //     the range that can be represented in 16 bits and
-      //     the actual value is found in `sh_size`.
-      // (2) The number of entries in really just 0. Then `sh_size`
-      //     will be 0, too.
+      /* `e_shnum` being 0 signals one of two options:
+       * (1) The number of section table headers lies outside
+       *     the range that can be represented in 16 bits and
+       *     the actual value is found in `sh_size`.
+       * (2) The number of entries in really just 0. Then `sh_size`
+       *     will be 0, too. */
       *n_sect_hdrs = CHECK_SECTION_HEADER;
     }
   else
@@ -166,8 +168,8 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
       *n_sect_hdrs = elf_src->e_shnum;
     }
 
-  // Is the index of the section name string table outside
-  // the representable range?
+  /* Is the index of the section name string table outside
+   * the range that can be represented? */
   if (elf_src->e_shstrndx == SHN_XINDEX)
     {
       *shstrtab_idx = CHECK_SECTION_HEADER;
@@ -180,10 +182,10 @@ parse_elf_header (const Elf64_Ehdr *elf_src,
   return ELF_PARSE_OK;
 }
 
-// The initial section header is reserved to store values that
-// didn't fit into the ELF header. If any of the argument's values
-// is set to `CHECK_SECTION_HEADER`, then it will be set to the
-// value in this header.
+/* The initial section header is reserved to store values that
+ * didn't fit into the ELF header. If any of the argument's values
+ * is set to `CHECK_SECTION_HEADER`, then it will be set to the
+ * value in this header. */
 void
 parse_init_section (const Elf64_Shdr *init_section_header,
 		    uint32_t *n_prog_hdrs, uint32_t *n_sect_hdrs,
@@ -210,7 +212,7 @@ parse_init_section (const Elf64_Shdr *init_section_header,
     }
 }
 
-// Helper to get bit mask value more clearly.
+/* Helpers to check bit masks. */
 bool
 is_set (int value, int mask)
 {
@@ -227,7 +229,7 @@ bool
 is_valid_symtab (Elf64_Shdr *shdr, const char *name)
 {
   return str_eq (name, ".symtab") && shdr->sh_type == SHT_SYMTAB &&
-    // `SHF_ALLOC` is always set for .dynsym.
+    /* `SHF_ALLOC` is always set for .dynsym. */
     is_unset (shdr->sh_flags, SHF_ALLOC) &&
     shdr->sh_entsize == sizeof (Elf64_Sym);
 }
@@ -235,8 +237,9 @@ is_valid_symtab (Elf64_Shdr *shdr, const char *name)
 bool
 is_valid_strtab (Elf64_Shdr *shdr, const char *name)
 {
-  return str_eq (name, ".strtab") &&
-    shdr->sh_type == SHT_STRTAB && is_unset (shdr->sh_flags, SHF_ALLOC);
+  return str_eq (name, ".strtab")
+    && shdr->sh_type == SHT_STRTAB
+    && is_unset (shdr->sh_flags, SHF_ALLOC);
 }
 
 SprayResult
@@ -249,10 +252,10 @@ find_table_sections (Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
   assert (symtab_idx != NULL);
   assert (strtab_idx != NULL);
 
-  // NOTE: To check if a given index has been set already,
-  // we can check if it is zero. This relies on the fact
-  // that the section header at index zero is reserved and
-  // cannot be used for any of the entries we are looking for.
+  /* NOTE: To check if a given index has been set already,
+   * we can check if it is zero. This relies on the fact
+   * that the section header at index zero is reserved and
+   * cannot be used for any of the entries we are looking for. */
 
   Elf64_Shdr *cur_hdr = NULL;
   const char *name = NULL;
@@ -260,11 +263,13 @@ find_table_sections (Elf64_Shdr *sect_headers, uint32_t n_sect_hdrs,
     {
       cur_hdr = &sect_headers[i];
       name = &shstrtab[cur_hdr->sh_name];
-      if (is_valid_symtab (cur_hdr, name) && *symtab_idx == 0)
+      if (is_valid_symtab (cur_hdr, name)
+	  && *symtab_idx == 0)
 	{
 	  *symtab_idx = i;
 	}
-      else if (is_valid_strtab (cur_hdr, name) && *strtab_idx == 0)
+      else if (is_valid_strtab (cur_hdr, name)
+	       && *strtab_idx == 0)
 	{
 	  *strtab_idx = i;
 	}
@@ -298,8 +303,8 @@ file_size (int fd, size_t *dest)
 }
 
 /* Cast pointers pointing into the memory mapped ELF
-   file to specific structures. Using these functions
-   is much more readable than plain casts. */
+ * file to specific structures. Using these functions
+ * is much more readable than plain casts. */
 
 static inline Elf64_Ehdr *
 ehdr_at (byte *bytes, size_t off)
@@ -337,14 +342,14 @@ se_parse_elf (const char *filepath, ElfFile *elf_store)
   assert (filepath != NULL);
   assert (elf_store != NULL);
 
-  // Acquire file descriptor for `mmap`.
+  /* Acquire file descriptor for `mmap`. */
   int fd = open (filepath, O_RDONLY);
   if (fd == -1)
     {
       return ELF_PARSE_IO_ERR;
     }
 
-  // Get the number of bytes in the file.
+  /* Get the number of bytes in the file. */
   size_t n_bytes = 0;
   if (file_size (fd, &n_bytes) == SP_ERR)
     {
@@ -396,18 +401,18 @@ se_parse_elf (const char *filepath, ElfFile *elf_store)
 
   Elf64_Shdr *sect_headers = shdr_at (bytes, sect_table_off);
 
-  // Fill-in missing values if they weren't found in the ELF header.
+  /* Fill-in missing values if they weren't found in the ELF header. */
   parse_init_section (sect_headers, &n_prog_hdrs, &n_sect_hdrs,
 		      &shstrtab_idx);
 
 
-  // Find the section headers for the symbol table and the string table.
+  /* Find the section headers for the symbol table and the string table. */
   uint32_t symtab_idx = 0;
   uint32_t strtab_idx = 0;
   /* Get the section header string table that contains the names of
-     the sections in the section header table. `sh_name` is an index into
-     that table, and thus the table can be used to read the names of the
-     different sections. */
+   * the sections in the section header table. `sh_name` is an index into
+   * that table, and thus the table can be used to read the names of the
+   * different sections. */
   Elf64_Shdr *shstrtab_hdr = &sect_headers[shstrtab_idx];
   const char *shstrtab = strtab_at (bytes, shstrtab_hdr->sh_offset);
 
@@ -559,10 +564,9 @@ dbg_addr
 se_symbol_end_addr (const Elf64_Sym *sym)
 {
   assert (sym != NULL);
-  return (dbg_addr)
-  {				// The symbol's size is the offset from the
-    // start address if the symbol is a function.
-  sym->st_value + sym->st_size};
+  /* The symbol's size is the offset from the
+   * start address if the symbol is a function. */
+  return (dbg_addr) { sym->st_value + sym->st_size };
 }
 
 const char *
