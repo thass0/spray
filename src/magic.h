@@ -11,7 +11,8 @@
 
 #define unused(x) (void) (x);
 
-enum magic_numbers {
+enum magic_numbers
+{
   /* `int 3` instruction code. */
   INT3 = 0xcc,
   /* Mask of lowest byte in number. */
@@ -35,28 +36,31 @@ enum magic_numbers {
    * `single_step_line` until giving up trying to find another
    * line. Can be fairly large since the program will likely
    * end after this limit was reached. */
-  SINGLE_STEP_SEARCH_LIMIT=128,
+  SINGLE_STEP_SEARCH_LIMIT = 128,
 };
 
-typedef enum {
+typedef enum
+{
   SP_OK,
   SP_ERR,
 } SprayResult;
 
 /* Calculate the number of digits in the given number. */
-unsigned n_digits(double num);
+unsigned n_digits (double num);
 
 /* Print n space characters to standard out. */
-void indent_by(unsigned n_spaces);
+void indent_by (unsigned n_spaces);
 
 /* Helper to test if two strings are equal (`strcmp(...) == 0`) */
-bool str_eq(const char *restrict a, const char *restrict b);
+bool str_eq (const char *restrict a, const char *restrict b);
 
-typedef struct {
+typedef struct
+{
   uint64_t value;
 } real_addr;
 
-typedef struct {
+typedef struct
+{
   uint64_t value;
 } dbg_addr;
 
@@ -71,36 +75,37 @@ typedef struct {
  * addresses. */
 
 /* Convert a real address to a debug address. */
-dbg_addr real_to_dbg(real_addr offset, real_addr real);
+dbg_addr real_to_dbg (real_addr offset, real_addr real);
 
 /* Convert a debug address to a real address. */
-real_addr dbg_to_real(real_addr offset, dbg_addr dwarf);
+real_addr dbg_to_real (real_addr offset, dbg_addr dwarf);
 
 /* `printf` format string for addresses. */
 #define ADDR_FORMAT "0x%016lx"
 
 /* Filters to format the output. */
 
-typedef enum PrintFilter {
-  PF_NONE, /* No filter. */
-  PF_HEX,  /* Hexadecimal number. */
-  PF_BITS,  /* Binary data. */
-  PF_ADDR, /* Address. */
-  PF_DEC,  /* Signed decimal number. */
-  PF_BYTES, /* Hexadecimal bytes. */
+typedef enum PrintFilter
+{
+  PF_NONE,			/* No filter. */
+  PF_HEX,			/* Hexadecimal number. */
+  PF_BITS,			/* Binary data. */
+  PF_ADDR,			/* Address. */
+  PF_DEC,			/* Signed decimal number. */
+  PF_BYTES,			/* Hexadecimal bytes. */
 } PrintFilter;
 
-PrintFilter parse_filter(const char *filter_str);
+PrintFilter parse_filter (const char *filter_str);
 
 /* Turn `current` into `_default` if `current` is `PF_NONE`. */
-PrintFilter default_filter(PrintFilter current, PrintFilter _default);
+PrintFilter default_filter (PrintFilter current, PrintFilter _default);
 
-void print_filtered(uint64_t value, PrintFilter filter);
+void print_filtered (uint64_t value, PrintFilter filter);
 
 /* Print `filepath` as relative to the current working directory.
  *
  * `filepath` must not be `NULL`. */
-void print_as_relative_filepath(const char *filepath);
+void print_as_relative_filepath (const char *filepath);
 
 
 /* FORMAT OF MESSAGES
@@ -128,14 +133,14 @@ void print_as_relative_filepath(const char *filepath);
  *                                      It only adds visual clutter. */
 
 /* Print messages not tied to the UI to stderr */
-void spray_err(const char *msg, ...);
-void spray_warn(const char *msg, ...);
-void spray_hint(const char *msg, ...);
+void spray_err (const char *msg, ...);
+void spray_warn (const char *msg, ...);
+void spray_hint (const char *msg, ...);
 
 /* Print messages tied to the debugger REPL to stdout */
-void repl_err(const char *msg, ...);
-void repl_warn(const char *msg, ...);
-void repl_hint(const char *msg, ...);
+void repl_err (const char *msg, ...);
+void repl_warn (const char *msg, ...);
+void repl_hint (const char *msg, ...);
 
 
-#endif  /* _SPRAY_MAGIC_H_ */
+#endif /* _SPRAY_MAGIC_H_ */

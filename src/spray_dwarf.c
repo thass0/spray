@@ -735,8 +735,8 @@ sd_get_filepath (Dwarf_Debug dbg, Dwarf_Die die)
   Dwarf_Error error = NULL;
   int res = DW_DLV_OK;
 
-  if (sd_has_at (dbg, die, DW_AT_name) &&
-      sd_has_at (dbg, die, DW_AT_comp_dir))
+  if (sd_has_at (dbg, die, DW_AT_name)
+      && sd_has_at (dbg, die, DW_AT_comp_dir))
     {
       char *file_name = NULL;
       char *dir_name = NULL;
@@ -761,9 +761,8 @@ sd_get_filepath (Dwarf_Debug dbg, Dwarf_Die die)
 	  return NULL;
 	}
 
-      char *filepath =
-	(char *) calloc (strlen (dir_name) + strlen (file_name) + 2,
-			 sizeof (char));
+      char *filepath = calloc (strlen (dir_name) + strlen (file_name) + 2,
+			       sizeof (char));
       strcpy (filepath, dir_name);
       strcat (filepath, "/");
       strcat (filepath, file_name);

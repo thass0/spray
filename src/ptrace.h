@@ -16,16 +16,16 @@
 
 #include "magic.h"
 
-SprayResult pt_read_memory(pid_t pid, real_addr addr, uint64_t *read);
-SprayResult pt_write_memory(pid_t pid, real_addr addr, uint64_t write);
+SprayResult pt_read_memory (pid_t pid, real_addr addr, uint64_t * read);
+SprayResult pt_write_memory (pid_t pid, real_addr addr, uint64_t write);
 
-SprayResult pt_read_registers(pid_t pid, struct user_regs_struct *regs);
-SprayResult pt_write_registers(pid_t pid, struct user_regs_struct *regs);
+SprayResult pt_read_registers (pid_t pid, struct user_regs_struct *regs);
+SprayResult pt_write_registers (pid_t pid, struct user_regs_struct *regs);
 
-SprayResult pt_continue_execution(pid_t pid);
-SprayResult pt_trace_me(void);
-SprayResult pt_single_step(pid_t pid);
+SprayResult pt_continue_execution (pid_t pid);
+SprayResult pt_trace_me (void);
+SprayResult pt_single_step (pid_t pid);
 
-SprayResult pt_get_signal_info(pid_t pid, siginfo_t *siginfo);
+SprayResult pt_get_signal_info (pid_t pid, siginfo_t * siginfo);
 
 #endif /* _SPRAY_PTRACE_H_ */

@@ -8,12 +8,9 @@
 /* Call this to initialize `print_source`. The program
  * will crash if `print_source` is called without being
  * initialized. */
-void init_print_source(void);
+void init_print_source (void);
 
-SprayResult print_source(
-  const char *source_filepath,
-  unsigned lineno,
-  unsigned n_context
-);
+SprayResult print_source (const char *source_filepath,
+			  unsigned lineno, unsigned n_context);
 
-#endif  /* _SPRAY_PRINT_SOURCE_H_ */
+#endif /* _SPRAY_PRINT_SOURCE_H_ */
