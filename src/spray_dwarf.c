@@ -3064,27 +3064,37 @@ typedef struct
   char **filepaths;
 } Filepaths;
 
-enum
-{ FILEPATHS_ALLOC = 8 };
-
 bool
 callback__get_filepaths (Dwarf_Debug dbg,
 			 Dwarf_Die cu_die,
-			 SearchFor search_for, SearchFindings search_findings)
+			 SearchFor search_for,
+			 SearchFindings search_findings)
 {
   unused (search_for);
 
+  enum { FILEPATHS_ALLOC = 8 };
+
   if (sd_has_tag (dbg, cu_die, DW_TAG_compile_unit))
     {
+      Dwarf_Error error = NULL;
       Filepaths *filepaths = (Filepaths *) search_findings.data;
 
-      char *this_filepath = sd_get_filepath (dbg, cu_die);
-      /* Important: if `this_filepath` is `NULL` and is still
-       * stored in the array, then all subsequent strings will
-       * be leaked later on. */
-      if (this_filepath != NULL)
+      char **srcfiles = NULL;
+      Dwarf_Signed n_srcfiles = 0;
+      int res = dwarf_srcfiles (cu_die, &srcfiles, &n_srcfiles, &error);
+      if (res != DW_DLV_OK)
 	{
-	  if (filepaths->idx >= filepaths->nalloc)
+	  if (res == DW_DLV_ERROR)
+	    {
+	      dwarf_dealloc_error (dbg, error);
+	    }
+
+	  return false;
+	}
+
+      for (int i = 0; i < n_srcfiles; i++)
+	{
+	  if (filepaths-> idx >= filepaths->nalloc)
 	    {
 	      filepaths->nalloc += FILEPATHS_ALLOC;
 	      filepaths->filepaths =
@@ -3092,9 +3102,14 @@ callback__get_filepaths (Dwarf_Debug dbg,
 			 sizeof (char *) * filepaths->nalloc);
 	      assert (filepaths->filepaths != NULL);
 	    }
-	  filepaths->filepaths[filepaths->idx] = this_filepath;
-	  filepaths->idx++;
+
+	  filepaths->filepaths[filepaths->idx] = strdup (srcfiles[i]);
+	  assert (filepaths->filepaths[filepaths->idx] != NULL);
+	  
+	  filepaths->idx ++;
 	}
+
+      dwarf_dealloc (dbg, srcfiles, DW_DLA_LIST);
     }
 
   /* Never signal success so as to walk all CU DIEs. */
@@ -3145,7 +3160,8 @@ sd_get_filepaths (Dwarf_Debug dbg)
 bool
 callback__get_srclines (Dwarf_Debug dbg,
 			Dwarf_Die cu_die,
-			SearchFor search_for, SearchFindings search_findings)
+			SearchFor search_for,
+			SearchFindings search_findings)
 {
   const char *filepath = (const char *) search_for.data;
   LineTable *line_table = (LineTable *) search_findings.data;
@@ -3458,9 +3474,7 @@ sd_get_subprog_pc_range (Dwarf_Debug dbg, const char *fn_name)
 	{
 	  dwarf_dealloc_error (dbg, error);
 	}
-      return (SubprogPcRange)
-      {
-      .is_set = false};
+      return (SubprogPcRange) { .is_set = false };
     }
   else
     {

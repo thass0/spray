@@ -23,6 +23,7 @@
 #define INCLUDE_VARIABLE_BIN "tests/assets/include-variable.bin"
 #define WRONG_COMPILER_BIN "tests/assets/wrong-compiler.bin"
 #define TYPE_EXAMPLES_BIN "tests/assets/type-examples.bin"
+#define MANY_FILES_BIN "tests/assets/many-files.bin"
 
 // Create a test
 #define TEST(name) \

@@ -500,6 +500,52 @@ TEST (type_attribute_form)
 }
 
 
+
+bool
+ends_with (const char *str, const char *end)
+{
+  if (str == NULL || end == NULL)
+    return 0;
+
+  size_t lenstr = strlen (str);
+  size_t lenend = strlen (end);
+
+  if (lenend > lenstr)
+    return 0;
+
+  return strncmp(str + lenstr - lenend, end, lenend) == 0;
+}
+
+TEST(get_filepaths_works)
+{
+  Dwarf_Error error = NULL;
+  Dwarf_Debug dbg = sd_dwarf_init (MANY_FILES_BIN, &error);
+  assert_ptr_not_null (dbg);
+
+  char **filepaths = sd_get_filepaths (dbg);
+  char *expected_ends[6] = {
+    "tests/assets/many-files/foo1.c",
+    "tests/assets/many-files/baz.h",
+    "tests/assets/many-files/foo2.c",
+    "tests/assets/many-files/bar1.h",
+    "tests/assets/many-files/bar2.h",
+    "tests/assets/many-files/main.c",
+  };
+
+  for (int i = 0; filepaths[i] != NULL; i++)
+    {
+      assert_int (i, <, 6);	/* Don't exceed the number of expected ends. */
+      assert_true (ends_with (filepaths[i], expected_ends[i]));
+      free (filepaths[i]);
+    }
+
+  free (filepaths);
+
+  dwarf_finish (dbg);
+  return MUNIT_OK;
+}
+
+
 MunitTest dwarf_tests[] = {
   REG_TEST (get_line_entry_from_pc_works),
   REG_TEST (iterating_lines_works),
@@ -514,5 +560,6 @@ MunitTest dwarf_tests[] = {
   REG_TEST (finding_variable_declration_files_works),
   REG_TEST (validating_compilers_works),
   REG_TEST (type_attribute_form),
+  REG_TEST (get_filepaths_works),
   {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}
 };

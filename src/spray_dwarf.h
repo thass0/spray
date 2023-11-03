@@ -312,6 +312,8 @@ typedef struct SdExpression
   SdOperation *operations;
 } SdExpression;
 
+char ** sd_get_filepaths (Dwarf_Debug dbg);
+
 #endif /* UNIT_TESTS */
 
 #endif /* _SPRAY_DWARF_H_ */
