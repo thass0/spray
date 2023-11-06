@@ -14,6 +14,7 @@ PRINT_ARGS_BIN = 'tests/assets/print-args.bin'
 COMMENTED_BIN = 'tests/assets/commented.bin'
 CUSTOM_TYPES_BIN = 'tests/assets/custom-types.bin'
 TYPE_EXAMPLES_BIN = 'tests/assets/type-examples.bin'
+DEREF_POINTERS_BIN = 'tests/assets/deref_pointers.bin'
 
 
 def random_string() -> str:
@@ -159,7 +160,7 @@ class TestFilters:
         p a | addr
         p a | dec
         p a | bytes""", """\
-         103 (read after write) (tests/assets/simple.c:10)
+         103 (tests/assets/simple.c:10, read after write)
          0x67 (tests/assets/simple.c:10)
          00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111 (tests/assets/simple.c:10)
          0x0000000000000067 (tests/assets/simple.c:10)
@@ -177,9 +178,9 @@ class TestFilters:
         t a 0x600 | bytes
         t a 0x700 | hex
         t a 0x800""", """\
-         00 00 00 00 00 00 06 00 (read after write) (tests/assets/simple.c:10)
-         0x700 (read after write) (tests/assets/simple.c:10)
-         0x800 (read after write) (tests/assets/simple.c:10)
+         00 00 00 00 00 00 06 00 (tests/assets/simple.c:10, read after write)
+         0x700 (tests/assets/simple.c:10, read after write)
+         0x800 (tests/assets/simple.c:10, read after write)
 """)
 
     def test_filter_set_errors(self):
@@ -187,17 +188,31 @@ class TestFilters:
         assert_ends_with('t a 0x10 |', 'Invalid filter')
         assert_ends_with('t a 0x10 | blah-invalid-filter', 'Invalid filter')
 
+    def test_dereference_filter(self):
+        assert_ends_with('n\nn\nn\np ip | deref\np ip | *',
+                         """\
+         42 (at 0x00007fffffffd8b8)
+         42 (at 0x00007fffffffd8b8)
+""", DEREF_POINTERS_BIN)
+
+    def test_dereference_register(self):
+        # 0x401163 some executable code address.
+        assert_ends_with('set %rax 0x401163\np %rax | *',
+                         """\
+     rax 0x401163 (read after write)
+         f0 45 89 ff ff ff a8 e8 (at 0x0000000000401163)
+""")
 
 class TestTypedPrint():
     def test_print_typed_variables(self):
         assert_ends_with('b tests/assets/type_examples.c:24\nc\np a\np b\np c\n p d\np e\np f\np g\np h\np i\np j\np k\np l\np m\n', """
          1 (tests/assets/type_examples.c:1)
          2 (tests/assets/type_examples.c:2)
-         0x3 (tests/assets/type_examples.c:3)
-         0x4 (tests/assets/type_examples.c:4)
-         0x5 (tests/assets/type_examples.c:5)
-         0x6 (tests/assets/type_examples.c:6)
-         0x7 (tests/assets/type_examples.c:7)
+         0x0000000000000003 (tests/assets/type_examples.c:3)
+         0x0000000000000004 (tests/assets/type_examples.c:4)
+         0x0000000000000005 (tests/assets/type_examples.c:5)
+         0x0000000000000006 (tests/assets/type_examples.c:6)
+         0x0000000000000007 (tests/assets/type_examples.c:7)
          'a' (tests/assets/type_examples.c:11)
          98 (tests/assets/type_examples.c:12)
          99 (tests/assets/type_examples.c:13)
@@ -222,6 +237,21 @@ class TestTypedPrint():
          00 00 00 00 00 00 00 ff (tests/assets/type_examples.c:22)
 """, TYPE_EXAMPLES_BIN)
 
+    def test_filter_pointers(self):
+        assert_ends_with('n\nn\nn\nn\np ip\np ip | bytes\np ip | *\np x | *\n',
+                         """\
+         0x00007fffffffd8b8 (tests/assets/deref_pointers.c:3)
+         00 00 7f ff ff ff d8 b8 (tests/assets/deref_pointers.c:3)
+         42 (at 0x00007fffffffd8b8)
+         'T' (at 0x0000000000402010)
+""", DEREF_POINTERS_BIN)
+
+    def test_deref_non_pointers(self):
+        assert_ends_with('n\nn\nn\np ptr | deref\np i | bytes',
+                         """\
+         00 00 00 00 00 00 00 2a (not a pointer!) (at 0x00007fffffffd8b8)
+         00 00 00 00 00 00 00 2a (tests/assets/deref_pointers.c:2)
+""", DEREF_POINTERS_BIN)
 
 class TestBreakpointCommands:
     def test_breakpoint_set_and_delete(self):

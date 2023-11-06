@@ -53,55 +53,46 @@ dbg_to_real (real_addr offset, dbg_addr dwarf)
   dwarf.value + offset.value};
 }
 
-PrintFilter
-parse_filter (const char *filter_str)
+FormatFilter
+parse_format (const char *str)
 {
-  const char *hex_filter = "hex";
-  const char *bits_filter = "bits";
-  const char *addr_filter = "addr";
-  const char *dec_filter = "dec";
-  const char *bytes_filter = "bytes";
-  if (filter_str != NULL)
+  if (str != NULL)
     {
-      if (str_eq (filter_str, hex_filter))
+      if (str_eq (str, "hex"))
 	{
-	  return PF_HEX;
+	  return FMT_HEX;
 	}
-      else if (str_eq (filter_str, hex_filter))
+      else if (str_eq (str, "bits"))
 	{
-	  return PF_HEX;
+	  return FMT_BITS;
 	}
-      else if (str_eq (filter_str, bits_filter))
+      else if (str_eq (str, "addr"))
 	{
-	  return PF_BITS;
+	  return FMT_ADDR;
 	}
-      else if (str_eq (filter_str, addr_filter))
+      else if (str_eq (str, "dec"))
 	{
-	  return PF_ADDR;
+	  return FMT_DEC;
 	}
-      else if (str_eq (filter_str, dec_filter))
+      else if (str_eq (str, "bytes"))
 	{
-	  return PF_DEC;
-	}
-      else if (str_eq (filter_str, bytes_filter))
-	{
-	  return PF_BYTES;
+	  return FMT_BYTES;
 	}
       else
 	{
-	  return PF_NONE;
+	  return FMT_NONE;
 	}
     }
   else
     {
-      return PF_NONE;
+      return FMT_NONE;
     }
 }
 
-PrintFilter
-default_filter (PrintFilter current, PrintFilter _default)
+FormatFilter
+default_format (FormatFilter current, FormatFilter _default)
 {
-  if (current == PF_NONE)
+  if (current == FMT_NONE)
     {
       return _default;
     }
@@ -113,7 +104,7 @@ default_filter (PrintFilter current, PrintFilter _default)
 
 /* Macros for printing binary numbers. https://stackoverflow.com/a/25108449 */
 #define PRINTF_BITS_PATTERN_INT8 "%c%c%c%c%c%c%c%c"
-#define PRINTF_BITS_INT8(i)		\
+#define PRINTF_BITS_INT8(i)			\
   (((i) & 0x80ll) ? '1' : '0'),			\
     (((i) & 0x40ll) ? '1' : '0'),		\
     (((i) & 0x20ll) ? '1' : '0'),		\
@@ -139,11 +130,11 @@ default_filter (PrintFilter current, PrintFilter _default)
 
 /* Macros for printing bytes made up of two hexadecimal digits each. */
 #define PRINTF_BYTES_PATTERN_INT8 "%02hx"
-#define PRINTF_BYTES_PATTERN_INT16                                              \
+#define PRINTF_BYTES_PATTERN_INT16				\
   PRINTF_BYTES_PATTERN_INT8 " " PRINTF_BYTES_PATTERN_INT8
-#define PRINTF_BYTES_PATTERN_INT32                                              \
+#define PRINTF_BYTES_PATTERN_INT32				\
   PRINTF_BYTES_PATTERN_INT16 " " PRINTF_BYTES_PATTERN_INT16
-#define PRINTF_BYTES_PATTERN_INT64                                              \
+#define PRINTF_BYTES_PATTERN_INT64				\
   PRINTF_BYTES_PATTERN_INT32 " " PRINTF_BYTES_PATTERN_INT32
 #define PRINTF_BYTES_INT16(i) ((uint8_t)((i) >> 8) & 0xff), ((uint8_t)(i) & 0xff)
 #define PRINTF_BYTES_INT32(i) PRINTF_BYTES_INT16((i) >> 16), PRINTF_BYTES_INT16(i)
@@ -152,38 +143,41 @@ default_filter (PrintFilter current, PrintFilter _default)
 #define HEX_FORMAT "0x%lx"
 #define DEC_FORMAT "%ld"
 
-void
-print_filtered (uint64_t value, PrintFilter filter)
+char *
+print_format (uint64_t value, FormatFilter filter)
 {
+  /* A 512 byte maximum means at most 8 characters per bit.
+   * That should be sufficient (+1 for '\0') */
+  int n = 513;
+  char *buf = malloc (n);
+  assert (buf != NULL);
+  
   switch (filter)
     {
-    case PF_NONE:
-    case PF_DEC:
+    case FMT_NONE:
+    case FMT_DEC:
       /* Signed decimal numbers are the default. */
-      printf (DEC_FORMAT, (int64_t) value);
+      snprintf (buf, n, DEC_FORMAT, (int64_t) value);
       break;
-    case PF_HEX:
-      printf (HEX_FORMAT, value);
+    case FMT_HEX:
+      snprintf (buf, n, HEX_FORMAT, value);
       break;
-    case PF_BITS:
-      printf (PRINTF_BITS_PATTERN_INT64, PRINTF_BITS_INT64 (value));
+    case FMT_BITS:
+      snprintf (buf, n, PRINTF_BITS_PATTERN_INT64,
+		PRINTF_BITS_INT64 (value));
       break;
-    case PF_ADDR:
-      printf (ADDR_FORMAT, value);
+    case FMT_ADDR:
+      snprintf (buf, n, ADDR_FORMAT, value);
       break;
-    case PF_BYTES:
-      printf (PRINTF_BYTES_PATTERN_INT64, PRINTF_BYTES_INT64 (value));
+    case FMT_BYTES:
+      snprintf (buf, n, PRINTF_BYTES_PATTERN_INT64,
+		PRINTF_BYTES_INT64 (value));
       break;
     }
+
+  return buf;
 }
 
-/* Return the part of `abs_filepath` that's relative to
- * the present working directory. It is assumed that 
- *
- * On success, the pointer that's returned points into
- * `abs_filepath`.
- *
- * Otherwise, `NULL` is returned to signal an error. */
 const char *
 relative_filepath (const char *abs_filepath)
 {

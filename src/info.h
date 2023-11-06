@@ -125,16 +125,16 @@ typedef struct RuntimeVariable RuntimeVariable;
 /* Return the location of the variable as a runtime address.
  * The return value is meaningless if `is_addr_loc == false`.
  * Check that that's not the case first! */
-real_addr var_loc_addr (RuntimeVariable * var);
+real_addr var_loc_addr (const RuntimeVariable *var);
 
 /* Return the location of the variable as a register.
  * The return value is meaningless if `is_reg_loc == false`.
  * Check that that's not the case first! */
-x86_reg var_loc_reg (RuntimeVariable * var);
+x86_reg var_loc_reg (const RuntimeVariable *var);
 
 /* Check the type of a location description. */
-bool is_addr_loc (RuntimeVariable * var);
-bool is_reg_loc (RuntimeVariable * var);
+bool is_addr_loc (const RuntimeVariable *var);
+bool is_reg_loc (const RuntimeVariable *var);
 
 /* Return the path of the file and the line number in the file
  * where the variable described by `var` was declared.
@@ -142,20 +142,32 @@ bool is_reg_loc (RuntimeVariable * var);
  * Both of them are optional. `0` indicates that there is no
  * line number (since line numbers start at 1!), and `NULL` is
  * returned if there is no path. */
-const char *var_loc_path (RuntimeVariable * var);
-unsigned var_loc_line (RuntimeVariable * var);
+const char *var_loc_path (const RuntimeVariable *var);
+unsigned var_loc_line (const RuntimeVariable *var);
 
-/* Print the path and the line of the given variable.
+/* Print the path and the line of the given variable into
+ * a string that's returned. The caller should free the string.
  *
  * This function uses the values as `var_loc_path` and
  * `var_loc_line` return.
  *
  * `var` must not be `NULL`. */
-void print_var_loc (RuntimeVariable * var);
+char *print_var_loc (const RuntimeVariable *var);
 
-/* Use the type of the variable to print it. */
-void print_var_value (RuntimeVariable * var,
-		      uint64_t value, PrintFilter filter);
+/* Use the type of the variable and return it's value in a string.
+ * The caller should free the string. */
+char *print_var_value (const RuntimeVariable *var, uint64_t value,
+		       FormatFilter filter);
+
+/* Same as `print_var_value`, but `value` is the result of dereferencing
+ * the given variable, and not the value of the variable by itself. The
+ * caller should free the given string. */
+char *print_var_deref_value (const RuntimeVariable *var, uint64_t deref,
+			     FormatFilter filter);
+
+/* Mask off all bits of value that are not part of the type's value.
+ * E.g. only the LSB is returned for `char`s. */
+uint64_t mask_var_value (const RuntimeVariable *var, uint64_t value);
 
 /* Get the location of the variable with the
  * given name in the scope around `pc`.
@@ -171,6 +183,6 @@ RuntimeVariable *init_var (dbg_addr pc,
 			   pid_t pid, const DebugInfo * info);
 
 /* Delete a `RuntimeVariable` pointer as returned by `init_var`. */
-void del_var (RuntimeVariable * var);
+void del_var (RuntimeVariable *var);
 
 #endif /* _SPRAY_INFO_H_ */

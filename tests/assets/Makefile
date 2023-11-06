@@ -15,7 +15,8 @@ VARIABLES = recurring_variables.c
 POINTERS = pointers.c
 TYPE_EXAMPLES = type_examples.c
 MANY_FILES = many-files/foo1.c many-files/foo2.c many-files/main.c
-TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin extern-variables.bin include-variable.bin wrong-compiler.bin type-examples.bin many-files.bin
+DEREF_POINTERS = deref_pointers.c
+TARGETS = 64bit-linux-simple.bin 32bit-linux-simple.bin nested-functions.bin multi-file.bin print-args.bin frame-pointer-nested-functions.bin no-frame-pointer-nested-functions.bin commented.bin custom-types.bin recurring-variables.bin pointers.bin extern-variables.bin include-variable.bin wrong-compiler.bin type-examples.bin many-files.bin deref_pointers.bin
 
 all: $(TARGETS)
 
@@ -53,7 +54,8 @@ type-examples.bin: $(TYPE_EXAMPLES)
 	$(CC) $(CFLAGS) $< -o $@
 many-files.bin: $(MANY_FILES)
 	$(CC) $(CFLAGS) $(MANY_FILES) -o $@
-
+deref_pointers.bin: $(DEREF_POINTERS)
+	$(CC) $(CFLAGS) $< -o $@
 
 clean:
 	$(RM) $(TARGETS)

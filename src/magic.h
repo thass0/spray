@@ -85,22 +85,34 @@ real_addr dbg_to_real (real_addr offset, dbg_addr dwarf);
 
 /* Filters to format the output. */
 
-typedef enum PrintFilter
-{
-  PF_NONE,			/* No filter. */
-  PF_HEX,			/* Hexadecimal number. */
-  PF_BITS,			/* Binary data. */
-  PF_ADDR,			/* Address. */
-  PF_DEC,			/* Signed decimal number. */
-  PF_BYTES,			/* Hexadecimal bytes. */
-} PrintFilter;
+typedef enum
+  {
+    FMT_NONE,			/* No filter. */
+    FMT_HEX,			/* Hexadecimal number. */
+    FMT_BITS,			/* Binary data. */
+    FMT_ADDR,			/* Address. */
+    FMT_DEC,			/* Signed decimal number. */
+    FMT_BYTES,			/* Hexadecimal bytes. */
+  } FormatFilter;
 
-PrintFilter parse_filter (const char *filter_str);
+FormatFilter parse_format (const char *str);
 
-/* Turn `current` into `_default` if `current` is `PF_NONE`. */
-PrintFilter default_filter (PrintFilter current, PrintFilter _default);
+/* Turn `current` into `_default` if `current` is `FMT_NONE`. */
+FormatFilter default_format (FormatFilter current, FormatFilter _default);
 
-void print_filtered (uint64_t value, PrintFilter filter);
+/* Format the given value based on `filter` and return the formatted string.
+ * The caller should free the string. */
+char *
+print_format (uint64_t value, FormatFilter filter);
+
+/* Return the part of `abs_filepath` that's relative to
+ * the present working directory.
+ *
+ * On success, the pointer that's returned points into
+ * `abs_filepath`.
+ *
+ * Otherwise, `NULL` is returned to signal an error. */
+const char *relative_filepath (const char *abs_filepath);
 
 /* Print `filepath` as relative to the current working directory.
  *

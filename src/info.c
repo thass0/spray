@@ -607,7 +607,7 @@ typedef struct RuntimeVariable
 } RuntimeVariable;
 
 real_addr
-var_loc_addr (RuntimeVariable *var)
+var_loc_addr (const RuntimeVariable *var)
 {
   if ((var != NULL) && (var->loc.tag == LOC_ADDR))
     {
@@ -622,7 +622,7 @@ var_loc_addr (RuntimeVariable *var)
 }
 
 x86_reg
-var_loc_reg (RuntimeVariable *var)
+var_loc_reg (const RuntimeVariable *var)
 {
   if ((var != NULL) && (var->loc.tag == LOC_REG))
     {
@@ -635,66 +635,79 @@ var_loc_reg (RuntimeVariable *var)
 }
 
 bool
-is_addr_loc (RuntimeVariable *var)
+is_addr_loc (const RuntimeVariable *var)
 {
   return (var != NULL) && (var->loc.tag == LOC_ADDR);
 }
 
 bool
-is_reg_loc (RuntimeVariable *var)
+is_reg_loc (const RuntimeVariable *var)
 {
   return (var != NULL) && (var->loc.tag == LOC_REG);
 }
 
 const char *
-var_loc_path (RuntimeVariable *var)
+var_loc_path (const RuntimeVariable *var)
 {
   assert (var != NULL);
   return var->decl_file;
 }
 
 unsigned
-var_loc_line (RuntimeVariable *var)
+var_loc_line (const RuntimeVariable *var)
 {
   assert (var != NULL);
   return var->decl_line;
 }
 
-void
-print_var_loc (RuntimeVariable *var)
+char *
+print_var_loc (const RuntimeVariable *var)
 {
+  int n = 256;
+  char *buf = malloc (n);
+  assert (buf != NULL);
+
   if (var == NULL)
     {
-      printf ("<?>:<?>");
+      strcpy (buf, "<?>:<?>");
     }
   else
     {
       const char *var_path = var_loc_path (var);
-      if (var_path != NULL)
+      if (var_path == NULL)
 	{
-	  print_as_relative_filepath (var_path);
+	  var_path = "<?>";
 	}
       else
 	{
-	  printf ("<?>");
+	  var_path = relative_filepath (var_path);
 	}
-
-      printf (":");
 
       unsigned var_line = var_loc_line (var);
-      if (var_line > 0)
-	{			/* Line numbers start at 1! */
-	  printf ("%u", var_line);
+      int line_n = n_digits ((double) var_line) + 1;
+      char *line_buf = malloc (line_n);
+
+      if (var_line > 0)		/* Lines start at 1! */
+	{
+	  snprintf (line_buf, line_n, "%u", var_line);
 	}
       else
 	{
-	  printf ("<?>");
+	  strcpy (buf, "<?>");
 	}
+      
+      snprintf (buf, n, "%s:%s",
+		var_path == NULL ? "<?>" : var_path,
+	        line_buf);
+
+      free (line_buf);
     }
+
+  return buf;
 }
 
-void
-print_base_type (SdBasetype base_type, uint64_t value, PrintFilter filter)
+uint64_t
+mask_var_value_ (SdBasetype base_type, uint64_t value)
 {
   /* `-1` starts out being all ones. By shifting it to the
    * left by `base_type.size * 8` bits, the first
@@ -709,69 +722,119 @@ print_base_type (SdBasetype base_type, uint64_t value, PrintFilter filter)
       /* A left-shift by `>= sizeof(type) * 8` bits is UB. */
       mask = ~(mask << shift_by);
     }
-  value &= mask;
+  return value & mask;
+}
 
-  if (filter == PF_NONE)
+uint64_t
+mask_var_value (const RuntimeVariable *var, uint64_t value)
+{
+  if (var != NULL)
     {
+      SdTypenode *node = NULL;
+      for (size_t i = 0; i < var->type.n_nodes; i++)
+	{
+	  node = &var->type.nodes[i];
+	  if (node->tag == NODE_BASE_TYPE)
+	    {
+	      return mask_var_value_ (node->base_type, value);
+	    }
+	  else if (node->tag == NODE_MODIFIER
+		   && node->modifier == TYPE_MOD_POINTER)
+	    {
+	      return value;	/* Don't remote bytes from pointers! */
+	    }
+	}
+    }
+
+  return value;
+}
+
+char *
+print_base_type (SdBasetype base_type, uint64_t value,
+		 FormatFilter filter)
+{  
+  value = mask_var_value_ (base_type, value);
+  
+  if (filter == FMT_NONE)
+    {
+      int n = 513;
+      char *buf = malloc (n);
+      assert (buf != NULL);
+
       switch (base_type.tag)
 	{
 	case BASE_TYPE_CHAR:
-	  printf ("'%c'", (char) value);
+	  snprintf (buf, n, "'%c'", (char) value);
 	  break;
 	case BASE_TYPE_SIGNED_CHAR:
-	  printf ("%hhd", (signed char) value);
+	  snprintf (buf, n, "%hhd", (signed char) value);
 	  break;
 	case BASE_TYPE_UNSIGNED_CHAR:
-	  printf ("%hhu", (signed char) value);
+	  snprintf (buf, n, "%hhu", (signed char) value);
 	  break;
 	case BASE_TYPE_SHORT:
-	  printf ("%hd", (short) value);
+	  snprintf (buf, n, "%hd", (short) value);
 	  break;
 	case BASE_TYPE_UNSIGNED_SHORT:
-	  printf ("%hu", (unsigned short) value);
+	  snprintf (buf, n, "%hu", (unsigned short) value);
 	  break;
 	case BASE_TYPE_INT:
-	  printf ("%d", (int) value);
+	  snprintf (buf, n, "%d", (int) value);
 	  break;
 	case BASE_TYPE_UNSIGNED_INT:
-	  printf ("%u", (int) value);
+	  snprintf (buf, n, "%u", (int) value);
 	  break;
 	case BASE_TYPE_LONG:
-	  printf ("%ld", (long) value);
+	  snprintf (buf, n, "%ld", (long) value);
 	  break;
 	case BASE_TYPE_UNSIGNED_LONG:
-	  printf ("%lu", (unsigned long) value);
+	  snprintf (buf, n, "%lu", (unsigned long) value);
 	  break;
 	case BASE_TYPE_LONG_LONG:
-	  printf ("%lld", (long long) value);
+	  snprintf (buf, n, "%lld", (long long) value);
 	  break;
 	case BASE_TYPE_UNSIGNED_LONG_LONG:
-	  printf ("%llu", (unsigned long long) value);
+	  snprintf (buf, n, "%llu", (unsigned long long) value);
 	  break;
 	case BASE_TYPE_FLOAT:
-	  printf ("%f", (float) value);
+	  snprintf (buf, n, "%f", (float) value);
 	  break;
 	case BASE_TYPE_DOUBLE:
-	  printf ("%f", (double) value);
+	  snprintf (buf, n, "%f", (double) value);
 	  break;
 	case BASE_TYPE_LONG_DOUBLE:
-	  printf ("%Lf", (long double) value);
+	  snprintf (buf, n, "%Lf", (long double) value);
 	  break;
 	}
+
+      return buf;
     }
   else
     {
-      print_filtered (value, filter);
+      return print_format (value, filter);
     }
 }
 
-void
-print_var_value (RuntimeVariable *var, uint64_t value, PrintFilter filter)
+/* Append a message to the value printed by `print_format`. */
+char *
+print_format_with (uint64_t value, FormatFilter filter, const char *msg)
+{
+  char *val_str = print_format (value, filter);
+  int n = strlen (val_str) + strlen (msg) + 2;
+  char *buf = malloc (n);
+  assert (buf != NULL);
+  snprintf (buf, n, "%s %s", val_str, msg);
+  free (val_str);
+  return buf;  
+}
+
+char *
+print_var_value (const RuntimeVariable *var, uint64_t value,
+		 FormatFilter filter)
 {
   if (var == NULL)
     {
-      print_filtered (value, filter);
-      printf (" (no type!)");
+      return print_format_with (value, filter, "(no type!)");
     }
   else
     {
@@ -782,14 +845,12 @@ print_var_value (RuntimeVariable *var, uint64_t value, PrintFilter filter)
 	  switch (node->tag)
 	    {
 	    case NODE_BASE_TYPE:
-	      print_base_type (node->base_type, value, filter);
-	      return;
+	      return print_base_type (node->base_type, value, filter);
 	    case NODE_MODIFIER:
 	      if (node->modifier == TYPE_MOD_POINTER)
 		{
-		  /* Only stop at pointers. */
-		  printf ("%p", (void *) value);
-		  return;
+		  FormatFilter f = default_format (filter, FMT_ADDR);
+		  return print_format (value, f);
 		}
 	      /* Continue iterating, until a printable node has been found. */
 	      break;
@@ -802,14 +863,48 @@ print_var_value (RuntimeVariable *var, uint64_t value, PrintFilter filter)
 
       /* The loop returns from this function after printing the value.
        * Thus, if we get here, the value could not be printed with any node. */
-      print_filtered (value, filter);
-      printf (" (no applicable type!)");
+      return print_format_with (value, filter, "(no applicable type!)");
+    }
+}
+
+char *
+print_var_deref_value (const RuntimeVariable *var, uint64_t deref,
+		       FormatFilter filter)
+{
+  if (var == NULL)
+    {
+      return print_format_with (deref, filter, "(no type!)");
+    }
+  else
+    {
+      SdTypenode *node = NULL;
+      bool from_pointer = false;
+      for (size_t i = 0; i < var->type.n_nodes; i++)
+	{
+	  node = &var->type.nodes[i];
+
+	  if (node->tag == NODE_BASE_TYPE && from_pointer)
+	    {
+	      return print_base_type (node->base_type, deref, FMT_NONE);
+	    }
+	  else if (node->tag == NODE_MODIFIER
+		   && node->modifier == TYPE_MOD_POINTER)
+	    {
+	      from_pointer = true;
+	    }
+	  /* More modifiers between the pointer and the base type are OK. */
+	  else if (node->tag != NODE_MODIFIER)
+	    {
+	      from_pointer = false;
+	    }
+	}
+
+      return print_format_with (deref, filter, "(not a pointer!)");
     }
 }
 
 RuntimeVariable *
-init_var (dbg_addr pc,
-	  real_addr load_address,
+init_var (dbg_addr pc, real_addr load_address,
 	  const char *var_name, pid_t pid, const DebugInfo *info)
 {
   if (var_name == NULL || info == NULL)

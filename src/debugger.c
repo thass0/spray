@@ -441,22 +441,163 @@ step_over (Debugger *dbg)
   return exec_res;
 }
 
+/***************************************/
+/* Filtered printing of command output */
+/***************************************/
+
+typedef enum
+  {
+    PF_NONE = FMT_NONE,
+    PF_HEX = FMT_HEX,
+    PF_BITS = FMT_BITS,
+    PF_ADDR = FMT_ADDR,
+    PF_DEC = FMT_DEC,
+    PF_BYTES = FMT_BYTES,
+    /* Interpret the value that would usually be printed as an address,
+     * read the value at that address in memory and print that value. */
+    PF_DEREF,
+  } PrintFilter;
+
+typedef enum
+  {
+    MEM_READ,			/* A memory location was read. */
+    /* A memory location was read as confirmation of a write. */
+    MEM_READ_CONFIRM,
+    REG_READ,
+    REG_READ_CONFIRM,
+    VAR_READ,			/* A variable was read. */
+    VAR_READ_CONFIRM,
+  } PrintValueInfo;
+
+/* Print the given value based on (the list of) filter(s).
+ * TODO: Use a list of filters. */
+void
+print_filtered (pid_t pid, uint64_t value, PrintFilter filter,
+		PrintValueInfo info, const void *extra)
+{
+  if (filter == PF_DEREF)
+    {
+      real_addr addr = { 0 };
+      if (info == VAR_READ)
+	addr.value = mask_var_value (extra, value);
+      else
+	addr.value = value;
+
+      uint64_t deref = { 0 };
+      SprayResult res = pt_read_memory (pid, addr, &deref);
+      if (res == SP_OK)
+	{
+	  char *deref_str = NULL;
+
+	  if (info == VAR_READ)
+	    {
+	      deref_str = print_var_deref_value (extra, deref, FMT_BYTES);
+	    }
+	  else
+	    {
+	      deref_str = print_format (deref, FMT_BYTES);
+	    }
+
+	  printf ("         %s (at " ADDR_FORMAT ")\n", deref_str, addr.value);
+	  free (deref_str);
+	}
+      else
+	{
+	  repl_err ("Failed to dereference " ADDR_FORMAT, addr.value);
+	}
+    }
+  else
+    {
+      /* Can cast because all variants except for `PF_DEREF` are the same. */
+      FormatFilter f = (FormatFilter) filter;
+
+      char *value_str = NULL;
+      char *loc_str = NULL;	/* Only used for variables. */
+      if (info == VAR_READ || info == VAR_READ_CONFIRM)
+	{
+	  const RuntimeVariable *var = extra;
+	  value_str = print_var_value (var, value, f);
+	  loc_str = print_var_loc (var);
+	}
+      else
+	{
+	  value_str = print_format (value, f);
+	}
+
+      switch (info)
+	{
+	case MEM_READ:
+	  unused(extra);
+	  printf ("         %s\n", value_str);
+	  break;
+	case MEM_READ_CONFIRM:
+	  unused(extra);
+	  printf ("         %s (read after write)\n", value_str);
+	  break;
+	case REG_READ:
+	  {
+	    const char *reg_name = extra;
+	    printf ("%8s %s\n", reg_name, value_str);
+	    break;
+	  }
+	case REG_READ_CONFIRM:
+	  {
+	    const char *reg_name = extra;
+	    printf ("%8s %s (read after write)\n", reg_name, value_str);
+	    break;
+	  }
+	case VAR_READ:
+	  printf ("         %s (%s)\n", value_str, loc_str);
+	  break;
+	case VAR_READ_CONFIRM:
+	  printf ("         %s (%s, read after write)\n", value_str, loc_str);
+	  break;
+	}
+
+      free (value_str);
+      free (loc_str);
+    }
+}
+
+/* Parse a string specifying a print filter (the one between pipes). */
+PrintFilter
+parse_filter (const char *str)
+{
+  if (str != NULL)
+    {
+      if (str_eq (str, "deref")
+	  || str_eq (str, "*"))
+	{
+	  return PF_DEREF;
+	}
+      else
+	{
+	  FormatFilter f = parse_format(str);
+	  return (PrintFilter) f;
+	}
+    }
+  else
+    {
+      return PF_NONE;
+    }
+}
+
+PrintFilter
+default_filter (PrintFilter current, PrintFilter _default)
+{
+  if (current == PF_NONE)
+    {
+      return _default;
+    }
+  else
+    {
+      return current;
+    }
+}
 
 /*********************/
 /* Command Execution */
 /*********************/
-
-/* This amount of indentation ensures that the
- * contents of memory reads are indented the
- * same amount as register reads which are
- * preceeded by a register name. */
-#define MEM_READ_INDENT "         "
-
-/* Message displayed right after the new value
- * of a memory location or register written to
- * was displayed. This is useful as confirmation
- * that the write operation was successful. */
-#define WRITE_READ_MSG "(read after write)"
 
 void
 exec_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
@@ -465,9 +606,8 @@ exec_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
   SprayResult res = pt_read_memory (pid, addr, &read);
   if (res == SP_OK)
     {
-      printf (MEM_READ_INDENT);
-      print_filtered (read, default_filter (filter, PF_BYTES));
-      printf ("\n");
+      PrintFilter f = default_filter (filter, PF_BYTES);
+      print_filtered (pid, read, f, MEM_READ, NULL);
     }
   else
     {
@@ -478,7 +618,7 @@ exec_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
 
 void
 exec_set_memory (pid_t pid, real_addr addr, uint64_t word,
-		   PrintFilter filter)
+		 PrintFilter filter)
 {
   SprayResult write_res = pt_write_memory (pid, addr, word);
   if (write_res == SP_ERR)
@@ -493,9 +633,8 @@ exec_set_memory (pid_t pid, real_addr addr, uint64_t word,
   SprayResult read_res = pt_read_memory (pid, addr, &stored);
   if (read_res == SP_OK)
     {
-      printf (MEM_READ_INDENT);
-      print_filtered (stored, default_filter (filter, PF_BYTES));
-      printf (" " WRITE_READ_MSG "\n");
+      PrintFilter f = default_filter (filter, PF_BYTES);
+      print_filtered(pid, stored, f, MEM_READ_CONFIRM, NULL);
     }
   else
     {
@@ -505,17 +644,15 @@ exec_set_memory (pid_t pid, real_addr addr, uint64_t word,
 }
 
 void
-exec_print_register (pid_t pid,
-		       x86_reg reg,
-		       const char *restrict reg_name, PrintFilter filter)
+exec_print_register (pid_t pid, x86_reg reg,
+		     const char *restrict reg_name, PrintFilter filter)
 {
   uint64_t reg_word = 0;
   SprayResult res = get_register_value (pid, reg, &reg_word);
   if (res == SP_OK)
     {
-      printf ("%8s ", reg_name);
-      print_filtered (reg_word, default_filter (filter, PF_BYTES));
-      printf ("\n");
+      PrintFilter f = default_filter (filter, PF_BYTES);
+      print_filtered (pid, reg_word, f, REG_READ, reg_name);
     }
   else
     {
@@ -525,10 +662,9 @@ exec_print_register (pid_t pid,
 }
 
 void
-exec_set_register (pid_t pid,
-		     x86_reg reg,
-		     const char *restrict reg_name,
-		     uint64_t word, PrintFilter filter)
+exec_set_register (pid_t pid, x86_reg reg,
+		   const char *restrict reg_name,
+		   uint64_t word, PrintFilter filter)
 {
   SprayResult write_res = set_register_value (pid, reg, word);
   if (write_res == SP_ERR)
@@ -542,9 +678,8 @@ exec_set_register (pid_t pid,
   SprayResult read_res = get_register_value (pid, reg, &written);
   if (read_res == SP_OK)
     {
-      printf ("%8s ", reg_name);
-      print_filtered (written, default_filter (filter, PF_BYTES));
-      printf (" " WRITE_READ_MSG "\n");
+      PrintFilter f = default_filter (filter, PF_BYTES);
+      print_filtered (pid, written, f, REG_READ_CONFIRM, reg_name);
     }
   else
     {
@@ -556,7 +691,7 @@ exec_set_register (pid_t pid,
 
 void
 exec_print_variable (Debugger *dbg, const char *var_name,
-		       PrintFilter filter)
+		     PrintFilter filter)
 {
   assert (dbg != NULL);
   assert (var_name != NULL);
@@ -597,11 +732,7 @@ exec_print_variable (Debugger *dbg, const char *var_name,
     }
   else
     {
-      printf (MEM_READ_INDENT);
-      print_var_value (var, value, filter);
-      printf (" (");
-      print_var_loc (var);
-      printf (")\n");
+      print_filtered (dbg->pid, value, filter, VAR_READ, var);
     }
 
   del_var (var);
@@ -674,12 +805,7 @@ exec_set_variable (Debugger *dbg,
 	}
     }
 
-  /* Print the value that's been read after the write. */
-  printf (MEM_READ_INDENT);
-  print_var_value (var, value, filter);
-  printf (" " WRITE_READ_MSG " (");
-  print_var_loc (var);
-  printf (")\n");
+  print_filtered (dbg->pid, value, filter, VAR_READ_CONFIRM, var);
 
   del_var (var);
 }
@@ -1284,9 +1410,9 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	  repl_err ("Unknown command");
 	}
     }
-  while (0);			/* Only run this block once. The
-				 * loop is only used to make `break` available
-				 * for  skipping subsequent steps on error. */
+  /* Only run this block once. The loop is only added to make
+   * `break` available for skipping subsequent steps on error. */
+  while (0);
 }
 
 void
