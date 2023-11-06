@@ -459,7 +459,7 @@ step_over (Debugger *dbg)
 #define WRITE_READ_MSG "(read after write)"
 
 void
-execmd_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
+exec_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
 {
   uint64_t read = { 0 };
   SprayResult res = pt_read_memory (pid, addr, &read);
@@ -477,7 +477,7 @@ execmd_print_memory (pid_t pid, real_addr addr, PrintFilter filter)
 }
 
 void
-execmd_set_memory (pid_t pid, real_addr addr, uint64_t word,
+exec_set_memory (pid_t pid, real_addr addr, uint64_t word,
 		   PrintFilter filter)
 {
   SprayResult write_res = pt_write_memory (pid, addr, word);
@@ -505,7 +505,7 @@ execmd_set_memory (pid_t pid, real_addr addr, uint64_t word,
 }
 
 void
-execmd_print_register (pid_t pid,
+exec_print_register (pid_t pid,
 		       x86_reg reg,
 		       const char *restrict reg_name, PrintFilter filter)
 {
@@ -525,7 +525,7 @@ execmd_print_register (pid_t pid,
 }
 
 void
-execmd_set_register (pid_t pid,
+exec_set_register (pid_t pid,
 		     x86_reg reg,
 		     const char *restrict reg_name,
 		     uint64_t word, PrintFilter filter)
@@ -555,7 +555,7 @@ execmd_set_register (pid_t pid,
 }
 
 void
-execmd_print_variable (Debugger *dbg, const char *var_name,
+exec_print_variable (Debugger *dbg, const char *var_name,
 		       PrintFilter filter)
 {
   assert (dbg != NULL);
@@ -611,7 +611,7 @@ execmd_print_variable (Debugger *dbg, const char *var_name,
 #define SET_VAR_READ_ERR "Wrote to variable %s, but failed to read its new value for validation"
 
 void
-execmd_set_variable (Debugger *dbg,
+exec_set_variable (Debugger *dbg,
 		     const char *var_name, uint64_t value, PrintFilter filter)
 {
   assert (dbg != NULL);
@@ -685,14 +685,14 @@ execmd_set_variable (Debugger *dbg,
 }
 
 void
-execmd_break (Breakpoints *breakpoints, real_addr addr)
+exec_break (Breakpoints *breakpoints, real_addr addr)
 {
   assert (breakpoints != NULL);
   enable_breakpoint (breakpoints, addr);
 }
 
 void
-execmd_delete (Breakpoints *breakpoints, real_addr addr)
+exec_delete (Breakpoints *breakpoints, real_addr addr)
 {
   assert (breakpoints != NULL);
   disable_breakpoint (breakpoints, addr);
@@ -702,7 +702,7 @@ execmd_delete (Breakpoints *breakpoints, real_addr addr)
  * continue the tracee and wait until it receives the
  * next signal. */
 void
-execmd_continue (Debugger *dbg)
+exec_continue (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -712,7 +712,7 @@ execmd_continue (Debugger *dbg)
 }
 
 void
-execmd_inst (Debugger *dbg)
+exec_inst (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -721,7 +721,7 @@ execmd_inst (Debugger *dbg)
 }
 
 void
-execmd_leave (Debugger *dbg)
+exec_leave (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -730,7 +730,7 @@ execmd_leave (Debugger *dbg)
 }
 
 void
-execmd_step (Debugger *dbg)
+exec_step (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -740,7 +740,7 @@ execmd_step (Debugger *dbg)
 }
 
 void
-execmd_next (Debugger *dbg)
+exec_next (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -749,7 +749,7 @@ execmd_next (Debugger *dbg)
 }
 
 void
-execmd_backtrace (Debugger *dbg)
+exec_backtrace (Debugger *dbg)
 {
   assert (dbg != NULL);
 
@@ -1047,7 +1047,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	{
 	  if (!end_of_tokens (tokens, i))
 	    break;
-	  execmd_continue (dbg);
+	  exec_continue (dbg);
 	}
       else if (is_command (cmd, 'b', "break"))
 	{
@@ -1065,7 +1065,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 		    {
 		      break;
 		    }
-		  execmd_break (dbg->breakpoints,
+		  exec_break (dbg->breakpoints,
 				dbg_to_real (dbg->load_address, addr));
 		}
 	      else
@@ -1088,7 +1088,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 		{
 		  if (!end_of_tokens (tokens, i))
 		    break;
-		  execmd_delete (dbg->breakpoints,
+		  exec_delete (dbg->breakpoints,
 				 dbg_to_real (dbg->load_address, addr));
 		}
 	      else
@@ -1141,7 +1141,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	      bool valid_reg = get_register_from_name (reg_name, &reg);
 	      if (valid_reg)
 		{
-		  execmd_print_register (dbg->pid, reg, reg_name, filter);
+		  exec_print_register (dbg->pid, reg, reg_name, filter);
 		}
 	      else
 		{
@@ -1151,11 +1151,11 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	  else if (is_valid_identifier (loc_str))
 	    {
 	      warn_register_name_conflict (loc_str);
-	      execmd_print_variable (dbg, loc_str, filter);
+	      exec_print_variable (dbg, loc_str, filter);
 	    }
 	  else if (parse_base16 (loc_str, &addr.value) == SP_OK)
 	    {
-	      execmd_print_memory (dbg->pid, addr, filter);
+	      exec_print_memory (dbg->pid, addr, filter);
 	    }
 	  else
 	    {
@@ -1229,7 +1229,7 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	      bool valid_reg = get_register_from_name (reg_name, &reg);
 	      if (valid_reg)
 		{
-		  execmd_set_register (dbg->pid, reg, reg_name, value,
+		  exec_set_register (dbg->pid, reg, reg_name, value,
 				       filter);
 		}
 	      else
@@ -1239,11 +1239,11 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	    }
 	  else if (is_valid_identifier (loc_str))
 	    {
-	      execmd_set_variable (dbg, loc_str, value, filter);
+	      exec_set_variable (dbg, loc_str, value, filter);
 	    }
 	  else if (parse_base16 (loc_str, &addr.value) == SP_OK)
 	    {
-	      execmd_set_memory (dbg->pid, addr, value, filter);
+	      exec_set_memory (dbg->pid, addr, value, filter);
 	    }
 	  else
 	    {
@@ -1255,29 +1255,29 @@ handle_debug_command_tokens (Debugger *dbg, char *const *tokens)
 	{
 	  if (!end_of_tokens (tokens, i))
 	    break;
-	  execmd_inst (dbg);
+	  exec_inst (dbg);
 	}
       else if (is_command (cmd, 'l', "leave"))
 	{
 	  if (!end_of_tokens (tokens, i))
 	    break;
-	  execmd_leave (dbg);
+	  exec_leave (dbg);
 	}
       else if (is_command (cmd, 's', "step"))
 	{
 	  if (!end_of_tokens (tokens, i))
 	    break;
-	  execmd_step (dbg);
+	  exec_step (dbg);
 	}
       else if (is_command (cmd, 'n', "next"))
 	{
 	  if (!end_of_tokens (tokens, i))
 	    break;
-	  execmd_next (dbg);
+	  exec_next (dbg);
 	}
       else if (is_command (cmd, 'a', "backtrace"))
 	{
-	  execmd_backtrace (dbg);
+	  exec_backtrace (dbg);
 	}
       else
 	{
