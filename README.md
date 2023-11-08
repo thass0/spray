@@ -183,6 +183,9 @@ The following table shows how different filters format the same 64-bit word with
 | `addr` (*address*)    | `0x0000000000000067`                                                      |
 | `bits`                | `00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111` |
 | `bytes`               | `00 00 00 00 00 00 00 67`                                                 |
+| `deref` `*`           | *Prints the value found at memory address `0x67`*                         |
+
+Except for `deref`, all the above simply change the way the output is formatted. `deref`, abbreviated as `*`, interprets the value that would be printed as a memory address, and prints whatever is found it memory that address. Using `deref`, you can inspect that value that a pointer points to.
 
 ## 🛠️Contributing
 
