@@ -1,4 +1,8 @@
-(load "src/c-syntax.scm")
+(cond-expand
+  ;; Tests are run using `csi` and require this load.
+  (csi
+   (load "src/c-syntax.scm"))
+  (else ))
 
 (module tokenizer
     ;; Take a string (C source code) and create a list of tokens
@@ -15,7 +19,7 @@
   (import traversal)
   (import (except (srfi-1) assoc member))
   (import (except (srfi-13) string->list string-fill! string-copy))
-  (import format)		       ; `format`
+  (import format)			; `format`
 
   (import c-tokens)
   (import c-regex)
@@ -355,7 +359,7 @@
       (lambda (code-line)
 	(tokenize-code code-line '() #t))
       code-lines))
-    )  ; End procedure tokenize.
+    )					; End procedure tokenize.
 
   (define (color-tokens token-lines types-env start-lineno active-lineno use-color)
     (define (def-color color)
@@ -447,5 +451,5 @@
 	 (format-lineno token-line idx)
 	 (format-tokens token-line)
 	 "\n"))
-      token-lines)))  ; End procedure color-tokens.
+      token-lines)))			; End procedure color-tokens.
   )  ; End module tokenizer.

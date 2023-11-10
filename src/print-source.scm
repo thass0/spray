@@ -1,5 +1,3 @@
-(load "src/tokenize.scm")
-
 (module source-files (load-source-file!
 		      sf-name
 		      sf-token-lines
@@ -198,12 +196,12 @@
   (define (load-source-file! filepath)
     (let ((lookup (hash-table-lookup source-files filepath)))
       (if lookup
-	  lookup  ; The file has been read already. Return that result.
+	  lookup	   ; The file has been read already. Return that result.
 	  (let ((token-lines (tokenize	; Read this new file.
 			      (file->list filepath))))
 	    (if (not token-lines)
 		'()
-		(begin	    ; Recurse over all of the file's includes.
+		(begin		      ; Recurse over all of the file's includes.
 		  (let loop ((filepaths (filter-filepaths filepath token-lines))
 			     (includes '()))
 		    (if (pair? filepaths)
