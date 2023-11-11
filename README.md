@@ -72,7 +72,7 @@ starts a debugging session with the executable `a.out`.
 
 ## ⌨️ Commands
 
-Spray's REPL offers the following commands. You can view them by running `spray --help`, too. In addition to that, `spray --help` also gives you all the command line parameters that Spray accepts.
+Spray's REPL offers the following commands to interact with a running program.
 
 ### Reading and writing values
 
