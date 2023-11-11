@@ -7,8 +7,7 @@
  </p>
 </p>
 
-![Spray debugging itself](.assets/using_spray.png) 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
+[![Spray Demo](https://asciinema.org/a/620413.svg)](https://asciinema.org/a/620413)
 
 > You can watch a tiny demo of using Spray to interact with a running program here: https://youtu.be/mjwIrfQkURc
 
