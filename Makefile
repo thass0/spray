@@ -12,7 +12,7 @@ OBJECTS += $(BUILD_DIR)/hashmap.o $(BUILD_DIR)/linenoise.o $(BUILD_DIR)/print-so
 BINARY = $(BUILD_DIR)/spray
 DEPS = $(OBJECTS:%.o=%.d)
 
-.PHONY = all bin clean run test unit integration assets
+.PHONY = all bin clean run test unit integration assets install docker
 
 # === SPRAY ===
 
@@ -21,6 +21,15 @@ all: $(BINARY) assets
 
 run: all
 	./$(BINARY) $(args)
+
+install: $(BINARY)
+	cp $(BINARY) $$HOME/.local/bin/
+
+docker: $(BINARY)
+	docker create -i ubuntu
+	docker cp $(BINARY) `docker ps -q -l`:/opt/spray
+	docker start `docker ps -q -l`
+	docker exec -i `docker ps -q -l` bash
 
 $(BINARY): $(OBJECTS)
 	$(CC) $(CFLAGS) $(OBJECTS) -o $(BINARY) $(LDFLAGS)
