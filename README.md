@@ -10,6 +10,8 @@
 ![Spray debugging itself](.assets/using_spray.png) 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *Spray debugging itself*
 
+> You can watch a tiny demo of using Spray to interact with a running program here: https://youtu.be/mjwIrfQkURc
+
 Spray is a small debugger for C code that comes with minimal mental overhead. All functionality aims to be simple and easy to grasp.
 
 In Spray you can easily control the execution of running programs, and inspect and modify their state.
