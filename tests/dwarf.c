@@ -230,16 +230,14 @@ TEST (finding_basic_variable_types_works)
   dbg_addr addr = { 0x0 };
 
   SdTypenode a_nodes[1] = {
-    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_INT,.size = 4}
-     },
+    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_INT,.size = 4}},
   };
   SdType a = {.n_nodes = 1,.nodes = (SdTypenode *) & a_nodes };
   ASSERT_TYPE ("a", addr, a);
 
   SdTypenode b_nodes[2] = {
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_CONST},
-    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_LONG,.size = 8}
-     },
+    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_LONG,.size = 8}},
   };
   SdType b = {.n_nodes = 2,.nodes = (SdTypenode *) & b_nodes };
   ASSERT_TYPE ("b", addr, b);
@@ -252,8 +250,8 @@ TEST (finding_basic_variable_types_works)
 
   SdTypenode d_nodes[2] = {
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_POINTER},
-    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_LONG_LONG,.size = 8}
-     },
+    {.tag = NODE_BASE_TYPE,
+     .base_type = {.tag = BASE_TYPE_LONG_LONG,.size = 8}},
   };
   SdType d = {.n_nodes = 2,.nodes = (SdTypenode *) & d_nodes };
   ASSERT_TYPE ("d", addr, d);
@@ -262,8 +260,7 @@ TEST (finding_basic_variable_types_works)
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_POINTER},
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_CONST},
     {.tag = NODE_BASE_TYPE,.base_type =
-     {.tag = BASE_TYPE_UNSIGNED_INT,.size = 4}
-     },
+     {.tag = BASE_TYPE_UNSIGNED_INT,.size = 4}},
   };
   SdType e = {.n_nodes = 3,.nodes = (SdTypenode *) & e_nodes };
   ASSERT_TYPE ("e", addr, e);
@@ -271,8 +268,7 @@ TEST (finding_basic_variable_types_works)
   SdTypenode f_nodes[3] = {
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_CONST},
     {.tag = NODE_MODIFIER,.modifier = TYPE_MOD_POINTER},
-    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_INT,.size = 4}
-     },
+    {.tag = NODE_BASE_TYPE,.base_type = {.tag = BASE_TYPE_INT,.size = 4}},
   };
   SdType f = {.n_nodes = 3,.nodes = (SdTypenode *) & f_nodes };
   ASSERT_TYPE ("f", addr, f);

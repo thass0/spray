@@ -439,12 +439,14 @@ se_parse_elf (const char *filepath, ElfFile *elf_store)
 
   Elf64_Phdr *prog_headers = phdr_at (bytes, prog_table_off);
   elf_store->prog_table = (ElfProgTable)
-  {
-  .n_headers = n_prog_hdrs,.headers = prog_headers,};
+    {
+      .n_headers = n_prog_hdrs,.headers = prog_headers
+    };
 
   elf_store->data = (ElfData)
-  {
-  .bytes = bytes,.n_bytes = n_bytes,};
+    {
+      .bytes = bytes,.n_bytes = n_bytes
+    };
 
   return ELF_PARSE_OK;
 }
@@ -555,9 +557,7 @@ dbg_addr
 se_symbol_start_addr (const Elf64_Sym *sym)
 {
   assert (sym != NULL);
-  return (dbg_addr)
-  {
-  sym->st_value};
+  return (dbg_addr) {sym->st_value};
 }
 
 dbg_addr

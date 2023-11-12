@@ -40,17 +40,13 @@ str_eq (const char *restrict a, const char *restrict b)
 dbg_addr
 real_to_dbg (real_addr offset, real_addr real)
 {
-  return (dbg_addr)
-  {
-  real.value - offset.value};
+  return (dbg_addr) {real.value - offset.value};
 }
 
 real_addr
 dbg_to_real (real_addr offset, dbg_addr dwarf)
 {
-  return (real_addr)
-  {
-  dwarf.value + offset.value};
+  return (real_addr) {dwarf.value + offset.value};
 }
 
 FormatFilter

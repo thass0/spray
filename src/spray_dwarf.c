@@ -616,9 +616,7 @@ sd_free_line_table (LineTable *line_table)
   assert (line_table != NULL);
   free (line_table->lines);
   dwarf_srclines_dealloc_b (line_table->line_context);
-  *line_table = (LineTable)
-  {
-  0};
+  *line_table = (LineTable) {0};
 }
 
 int
@@ -1081,9 +1079,7 @@ sd_init_loc_attr (Dwarf_Debug dbg,
 	  || class == DW_FORM_CLASS_LOCLISTSPTR
 	  || class == DW_FORM_CLASS_BLOCK)
 	{
-	  *attr_dest = (SdLocattr)
-	  {
-	  .loc = loc,};
+	  *attr_dest = (SdLocattr) {.loc = loc};
 	  return SP_OK;
 	}
       else
@@ -2410,9 +2406,7 @@ sd_n_operands (SdOperator opcode)
 dbg_addr
 dwarf_addr_to_dbg_addr (Dwarf_Addr addr)
 {
-  return (dbg_addr)
-  {
-  addr};
+  return (dbg_addr) {addr};
 }
 
 #ifndef UNIT_TESTS
@@ -2452,9 +2446,11 @@ sd_init_loc_range (Dwarf_Bool debug_addr_missing,
   else
     {
       *range_dest = (SdLocRange)
-      {
-      .meaningful = true,.lowpc = dwarf_addr_to_dbg_addr (lowpc),.highpc =
-	  dwarf_addr_to_dbg_addr (highpc),};
+	{
+	  .meaningful = true,
+	  .lowpc = dwarf_addr_to_dbg_addr (lowpc),
+	  .highpc = dwarf_addr_to_dbg_addr (highpc),
+	};
     }
 }
 
@@ -2701,11 +2697,9 @@ SdLocation
 sd_loc_as_addr (uint64_t addr)
 {
   return (SdLocation)
-  {
-    .tag = LOC_ADDR,.addr = (real_addr)
     {
-    addr}
-  ,};
+      .tag = LOC_ADDR,.addr = (real_addr) {addr}
+    };
 }
 
 /* Create a register instance of `SdLocation`. */
@@ -2713,8 +2707,9 @@ SdLocation
 sd_loc_reg (x86_reg reg)
 {
   return (SdLocation)
-  {
-  .tag = LOC_REG,.reg = reg,};
+    {
+      .tag = LOC_REG,.reg = reg
+    };
 }
 
 /* Evaluation stack. */
@@ -2730,8 +2725,7 @@ typedef struct LocEvalStack
   size_t n_alloc;
 } LocEvalStack;
 
-enum
-{ LOC_EVAL_STACK_BLOCK = 32 };
+enum { LOC_EVAL_STACK_BLOCK = 32 };
 
 LocEvalStack
 init_eval_stack (void)
@@ -3255,8 +3249,9 @@ sd_get_line_table (Dwarf_Debug dbg, const char *filepath)
 	  dwarf_dealloc_error (dbg, error);
 	}
       return (LineTable)
-      {
-      .is_set = false};
+	{
+	  .is_set = false
+	};
     }
   else
     {
@@ -3330,8 +3325,9 @@ sd_line_entry_from_pc (Dwarf_Debug dbg, dbg_addr pc)
   if (!line_table.is_set)
     {
       return (LineEntry)
-      {
-      .is_ok = false};
+	{
+	  .is_ok = false
+	};
     }
 
   for (unsigned i = 0; i < line_table.n_lines; i++)
@@ -3352,8 +3348,9 @@ sd_line_entry_from_pc (Dwarf_Debug dbg, dbg_addr pc)
     {
       sd_free_line_table (&line_table);
       return (LineEntry)
-      {
-      .is_ok = false};
+	{
+	  .is_ok = false
+	};
     }
   else
     {
@@ -3378,8 +3375,9 @@ sd_line_entry_at (Dwarf_Debug dbg, const char *filepath, unsigned lineno)
   if (!line_table.is_set)
     {
       return (LineEntry)
-      {
-      .is_ok = false};
+	{
+	  .is_ok = false
+	};
     }
 
   unsigned line_idx = 0;
@@ -3389,8 +3387,9 @@ sd_line_entry_at (Dwarf_Debug dbg, const char *filepath, unsigned lineno)
     {
       sd_free_line_table (&line_table);
       return (LineEntry)
-      {
-      .is_ok = false};
+	{
+	  .is_ok = false
+	};
     }
   else
     {
@@ -3440,12 +3439,8 @@ callback__find_subprog_pc_range_by_subprog_name (Dwarf_Debug dbg,
 	  return false;
 	}
 
-      range->lowpc = (dbg_addr)
-      {
-      lowpc};
-      range->highpc = (dbg_addr)
-      {
-      highpc};
+      range->lowpc = (dbg_addr) {lowpc};
+      range->highpc = (dbg_addr) {highpc};
       range->is_set = true;
       return true;
     }

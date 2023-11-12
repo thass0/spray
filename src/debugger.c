@@ -44,15 +44,11 @@ get_pc (pid_t pid)
   SprayResult res = get_register_value (pid, rip, &store);
   if (res == SP_OK)
     {
-      return (real_addr)
-      {
-      store};
+      return (real_addr) {store};
     }
   else
     {
-      return (real_addr)
-      {
-      0};
+      return (real_addr) {0};
     }
 }
 
@@ -185,10 +181,7 @@ handle_sigtrap (Debugger *dbg, siginfo_t siginfo)
     {
       /* Go back to real breakpoint address. */
       real_addr pc = get_pc (dbg->pid);
-      set_pc (dbg->pid, (real_addr)
-	      {
-	      pc.value - 1}
-      );
+      set_pc (dbg->pid, (real_addr) {pc.value - 1});
     }
 }
 
@@ -1491,9 +1484,7 @@ init_load_address (Debugger *dbg)
     }
   else
     {
-      dbg->load_address = (real_addr)
-      {
-      0};
+      dbg->load_address = (real_addr) {0};
     }
 }
 

@@ -83,10 +83,7 @@ const Breakpoint *
 get_breakpoint (Breakpoints *breakpoints, real_addr addr)
 {
   assert (breakpoints != NULL);
-  return hashmap_get (breakpoints->map, &(Breakpoint)
-		      {
-		      .addr = addr}
-  );
+  return hashmap_get (breakpoints->map, &(Breakpoint) {.addr = addr});
 }
 
 SprayResult
@@ -99,10 +96,7 @@ enable_breakpoint (Breakpoints *breakpoints, real_addr addr)
   /* Do we need to create the breakpoint first? */
   if (to_enable == NULL)
     {
-      hashmap_set (breakpoints->map, &(Breakpoint)
-		   {
-		   .addr = addr}
-      );
+      hashmap_set (breakpoints->map, &(Breakpoint) {.addr = addr});
       to_enable = get_breakpoint (breakpoints, addr);
       assert (to_enable != NULL);
     }

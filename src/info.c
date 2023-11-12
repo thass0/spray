@@ -295,9 +295,7 @@ sym_start_addr (const DebugSymbol *sym)
 {
   if (sym == NULL)
     {
-      return (dbg_addr)
-      {
-      0};
+      return (dbg_addr) {0};
     }
   else
     {
@@ -310,9 +308,7 @@ sym_end_addr (const DebugSymbol *sym)
 {
   if (sym == NULL)
     {
-      return (dbg_addr)
-      {
-      0};
+      return (dbg_addr) {0};
     }
   else
     {
@@ -325,9 +321,7 @@ sym_addr (const DebugSymbol *sym)
 {
   if (sym == NULL)
     {
-      return (dbg_addr)
-      {
-      0};
+      return (dbg_addr) {0};
     }
   else
     {
