@@ -7,3 +7,9 @@
 [submodule "dependencies/munit"]
 	path = dependencies/munit
 	url = https://github.com/nemequ/munit.git
+[submodule "dependencies/tree-sitter-c"]
+	path = dependencies/tree-sitter-c
+	url = https://github.com/tree-sitter/tree-sitter-c
+[submodule "dependencies/tree-sitter"]
+	path = dependencies/tree-sitter
+	url = https://github.com/tree-sitter/tree-sitter

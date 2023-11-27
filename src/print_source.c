@@ -2,27 +2,36 @@
 #include "args.h"
 
 #include <stdbool.h>
-#include <chicken.h>
+#include <tree_sitter/api.h>
 
-void
-init_print_source (void)
+TSLanguage *tree_sitter_c (void);
+
+/* Highlight the given string and return a string that contains
+ * ANSI escape characters to represent the colors. */
+char *
+highlight (const char *src)
 {
-  CHICKEN_run (C_toplevel);
+  unused (src);
+  TSParser *parser = ts_parser_new ();
+  ts_parser_set_language(parser, tree_sitter_c ());
+  return NULL;
 }
-
-/* Defined in `src/source-files.scm`. */
-extern int print_source_extern (const char *filepath,
-				unsigned lineno,
-				unsigned n_context_lines, bool use_color);
 
 SprayResult
 print_source (const char *filepath, unsigned lineno, unsigned n_context)
 {
+  unused (filepath);
+  unused (lineno);
+  unused (n_context);
+
   bool use_color = !get_args ()->flags.no_color;
-  int res = print_source_extern (filepath,
-				 lineno,
-				 n_context,
-				 use_color);
+  unused (use_color);
+  int res = 0;
+
+  /* int res = print_source_extern (filepath, */
+  /* 				 lineno, */
+  /* 				 n_context, */
+  /* 				 use_color); */
   if (res == 0)
     {
       return SP_OK;
@@ -31,4 +40,10 @@ print_source (const char *filepath, unsigned lineno, unsigned n_context)
     {
       return SP_ERR;
     }
+}
+
+void
+init_print_source (void)
+{
+  ;
 }
