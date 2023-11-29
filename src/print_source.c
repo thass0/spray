@@ -86,36 +86,27 @@ read_file (const char *filepath)
     return NULL;
 
   if (fseek (fp, 0, SEEK_END))
-    {
-      fclose (fp);
-      return NULL;
-    }
+    goto exit_fp;
 
   long n = ftell (fp);
   if (n == -1)
-    {
-      fclose (fp);
-      return NULL;
-    }
+    goto exit_fp;
 
   if (fseek (fp, 0, SEEK_SET))
-    {
-      fclose (fp);
-      return NULL;
-    }
+    goto exit_fp;
 
   char *text = malloc (n + 1);
   if (text == NULL)
-    {
-      fclose (fp);
-      return NULL;
-    }
+    goto exit_fp;
 
   fread (text, n, 1, fp);
   fclose (fp);
-
   text[n] = '\0';
   return text;
+
+ exit_fp:
+  fclose (fp);
+  return NULL;
 }
 
 const SourceFile *
