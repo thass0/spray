@@ -1,4 +1,4 @@
-/* Utilities, miscellaneous functions and magic numbers.  ✨. */
+/* Utilities, miscellaneous functions and magic numbers. */
 
 #pragma once
 

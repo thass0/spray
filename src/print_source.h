@@ -5,12 +5,13 @@
 
 #include "magic.h"
 
-/* Call this to initialize `print_source`. The program
- * will crash if `print_source` is called without being
- * initialized. */
-void init_print_source (void);
+typedef struct Sources Sources;
 
-SprayResult print_source (const char *source_filepath,
-			  unsigned lineno, unsigned n_context);
+Sources *init_sources (void);
+
+SprayResult print_source (Sources *sources, const char *filepath,
+			  int lineno, int radius);
+
+void free_sources (Sources *sources);
 
 #endif /* _SPRAY_PRINT_SOURCE_H_ */

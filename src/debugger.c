@@ -105,7 +105,7 @@ print_current_source (Debugger *dbg)
 	  printf ("\n");
 	}
 
-      SprayResult res = print_source (filepath, pos->line, 3);
+      SprayResult res = print_source (dbg->sources, filepath, pos->line, 3);
       if (res == SP_ERR)
 	{
 	  repl_err ("Failed to read source file %s. Can't print source",
@@ -1540,14 +1540,17 @@ setup_debugger (const char *prog_name, char *prog_argv[], Debugger *store)
       int options = 0;
       waitpid (pid, &wait_status, options);
 
-      *store = (Debugger)
-      {
-	.prog_name = prog_name,.pid = pid,.breakpoints =
-	  init_breakpoints (pid),.info = info,
-	  /* `load_address` is initialized by `init_load_address`. */
-      .load_address.value = 0,.history = init_history (),};
+      *store = (Debugger) {
+	.prog_name = prog_name,
+	.pid = pid,
+	.breakpoints = init_breakpoints (pid),
+	.sources = init_sources (),
+	.info = info,
+	/* `load_address` is initialized by `init_load_address`. */
+	.load_address.value = 0,
+	.history = init_history (),
+      };
       init_load_address (store);
-      init_print_source ();
     }
 
   return 0;
@@ -1557,6 +1560,7 @@ SprayResult
 del_debugger (Debugger dbg)
 {
   free_breakpoints (dbg.breakpoints);
+  free_sources (dbg.sources);
   free_history (dbg.history);
   return free_debug_info (&dbg.info);
 }

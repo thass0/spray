@@ -1,8 +1,8 @@
 #include "breakpoints.h"
 
 #include "magic.h"
-#include "hashmap.h"
 
+#include <hashmap.h>
 #include <assert.h>
 #include <string.h>
 
