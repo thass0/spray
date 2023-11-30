@@ -191,8 +191,8 @@ class TestFilters:
     def test_dereference_filter(self):
         assert_ends_with('n\nn\nn\np ip | deref\np ip | *',
                          """\
-         42 (at 0x00007fffffffd8b8)
-         42 (at 0x00007fffffffd8b8)
+         42 (at 0x00007fffffffd658)
+         42 (at 0x00007fffffffd658)
 """, DEREF_POINTERS_BIN)
 
     def test_dereference_register(self):
@@ -240,16 +240,16 @@ class TestTypedPrint():
     def test_filter_pointers(self):
         assert_ends_with('n\nn\nn\nn\np ip\np ip | bytes\np ip | *\np x | *\n',
                          """\
-         0x00007fffffffd8b8 (tests/assets/deref_pointers.c:3)
-         00 00 7f ff ff ff d8 b8 (tests/assets/deref_pointers.c:3)
-         42 (at 0x00007fffffffd8b8)
+         0x00007fffffffd658 (tests/assets/deref_pointers.c:3)
+         00 00 7f ff ff ff d6 58 (tests/assets/deref_pointers.c:3)
+         42 (at 0x00007fffffffd658)
          'T' (at 0x0000000000402010)
 """, DEREF_POINTERS_BIN)
 
     def test_deref_non_pointers(self):
         assert_ends_with('n\nn\nn\np ptr | deref\np i | bytes',
                          """\
-         00 00 00 00 00 00 00 2a (not a pointer!) (at 0x00007fffffffd8b8)
+         00 00 00 00 00 00 00 2a (not a pointer!) (at 0x00007fffffffd658)
          00 00 00 00 00 00 00 2a (tests/assets/deref_pointers.c:2)
 """, DEREF_POINTERS_BIN)
 
@@ -390,8 +390,8 @@ class TestBacktrace:
         assert_ends_with('b add\nc\nbacktrace', """\
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df4c4b <?>
-  0x00007ffff7df4b8a <?>
+  0x00007ffff7debc4b <?>
+  0x00007ffff7debb8a <?>
   0x00000000004011be main:17
   0x0000000000401183 mul:11
   0x000000000040113a add:4
@@ -404,7 +404,7 @@ HINT: Try to compile again with `-fno-omit-frame-pointer`.
 
 How did we even get here? (backtrace)
   0x0000000000401065 _start
-  0x00007ffff7df4c4b <?>
+  0x00007ffff7debc4b <?>
   0x0000000000401138 add:4
 """, NO_FRAME_POINTER_BIN)
 

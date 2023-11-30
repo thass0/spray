@@ -1,5 +1,7 @@
 #include "print_source.h"
+
 #include "args.h"
+#include "highlight.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -8,12 +10,9 @@
 #include <assert.h>
 #include <string.h>
 #include <hashmap.h>
-#include <tree_sitter/api.h>
 
-#define FALSE 0
 #define TRUE 7
-
-TSLanguage *tree_sitter_c (void);
+#define FALSE 0
 
 /**********************************/
 /* Source file and hash map logic */
@@ -28,6 +27,7 @@ typedef struct
 {
   char *filepath;
   char *text;
+  int n_lines;
 } SourceFile;
 
 int
@@ -75,6 +75,46 @@ free_sources (Sources *sources)
   free (sources);
 }
 
+
+/***********************/
+/* Manage file content */
+/***********************/
+
+int
+count_lines (char *text)
+{
+  int n = 1;
+  while ((text = strchr (text, '\n')))
+    {
+      text ++, n++;
+    }
+  return n;
+}
+
+/* Return a pointer to the start of the nth line
+ * in the given string. The first line (the start
+ * of the string itself) has the line number 1. */
+char *
+nth_line (int n, char *text)
+{
+  if (n < 1 || text == NULL)
+    return NULL;
+
+  if (n == 1)
+    return text;
+
+  int c = 1;
+  while ((text = strchr (text, '\n')))
+    {
+      text ++;			/* Skip the '\n' itself. */
+      c ++;
+      if (c == n)
+	return text;
+    }
+
+  return strchr (text, '\0');
+}
+
 char *
 read_file (const char *filepath)
 {
@@ -120,11 +160,20 @@ load_file (Sources *sources, const char *filepath)
   if (text == NULL)
     return NULL;
 
-  /* Store the loaded file. */
-  
+  /* Color the source code if needed. */
+  bool use_color = !get_args ()->flags.no_color;
+  if (use_color)
+    {
+      char *highlighted = highlight (text);
+      free (text);
+      text = highlighted;
+    }
+
+  /* Store the loaded file. */  
   SourceFile file = {0};
   file.filepath = strdup (filepath);
   file.text = text;
+  file.n_lines = count_lines (text);
 
   hashmap_set (sources->map, &file);
   return hashmap_get (sources->map, &file);
@@ -148,9 +197,9 @@ get_or_load_file (Sources *sources, const char *filepath)
 }
 
 
-/**********************/
-/* Source line ranges */
-/**********************/
+/*********************************/
+/* Print snippets of source code */
+/*********************************/
 
 int
 start_lineno (int lineno, int radius)
@@ -173,22 +222,6 @@ end_lineno (int lineno, int radius)
   return lineno + radius + 1 + extend;
 }
 
-/*************************************/
-/* Highlight and print lines of code */
-/*************************************/
-
-/* Highlight the given string and return a string that contains
- * ANSI escape characters to represent the colors. */
-char *
-highlight (const char *src)
-{
-  unused (src);
-  TSParser *parser = ts_parser_new ();
-  ts_parser_set_language(parser, tree_sitter_c ());
-  
-  return NULL;
-}
-
 /* Return `true` if `line` contains characters
  * that are visible to the eye. */
 int
@@ -208,38 +241,43 @@ is_visible (char *line)
   return FALSE;
 }
 
-/* void */
-/* print_lines (int n, char *lines[n], int lineno, int radius) */
-/* { */
-/*   bool use_color = !get_args ()->flags.no_color; */
-/*   unused (use_color); */
 
-/*   int start_raw = start_lineno (lineno, radius); */
-/*   int end_raw = end_lineno (lineno, radius); */
+void
+print_lines (char *text, int n_lines, int lineno, int radius)
+{
+  int start_raw = start_lineno (lineno, radius);
+  int end_raw = end_lineno (lineno, radius);
 
-/*   int start, end; */
+  int start, end;
   
-/*   if (start_raw >= n) */
-/*     start = n - 1; */
-/*   else */
-/*     start = start_raw; */
+  if (start_raw >= n_lines)
+    start = n_lines - 1;
+  else
+    start = start_raw;
 
-/*   if (end_raw > n) */
-/*     end = n; */
-/*   else */
-/*     end = end_raw; */
+  if (end_raw > n_lines)
+    end = n_lines;
+  else
+    end = end_raw;
 
-/*   for (int i = start; i < end; i++) */
-/*     { */
-/*       /\* TODO: Coloring *\/ */
-/*       if (i == lineno) */
-/* 	printf (" -> %s\n", lines[i]); */
-/*       else if (is_visible (lines[i])) */
-/* 	printf ("    %s\n", lines[i]); */
-/*       else */
-/* 	printf ("\n"); */
-/*     } */
-/* } */
+  for (int i = start; i < end; i++)
+    {
+      char *this_line = nth_line (i, text);
+      char *next_line = nth_line (i + 1, text);
+      char save = next_line[0];
+      next_line[0] = '\0';
+
+      printf (" %4d", i);
+      if (i == lineno)
+	printf (" -> %s", this_line);
+      else if (is_visible (this_line))
+	printf ("    %s", this_line);
+      else
+	printf ("\n");
+
+      next_line[0] = save;
+    }
+}
 
 SprayResult
 print_source (Sources *sources, const char *filepath, int lineno, int radius)
@@ -247,9 +285,6 @@ print_source (Sources *sources, const char *filepath, int lineno, int radius)
   if (sources == NULL || filepath == NULL)
     return SP_ERR;
 
-  unused (lineno);
-  unused (radius);
-  
   const SourceFile *file = get_or_load_file (sources, filepath);
   if (file == NULL)
     {      
@@ -257,8 +292,7 @@ print_source (Sources *sources, const char *filepath, int lineno, int radius)
     }
   else
     {
-      /* print_lines (file->text, lineno, radius); */
-      puts (file->text);
+      print_lines (file->text, file->n_lines, lineno, radius);
       return SP_OK;
     }
 }
