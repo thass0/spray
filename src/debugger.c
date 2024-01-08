@@ -1503,7 +1503,10 @@ setup_debugger (const char *prog_name, char *prog_argv[], Debugger *store)
   DebugInfo *info = init_debug_info (prog_name);
   if (info == NULL)
     {
-      repl_err ("Failed to initialize debugging information");
+      repl_err ("Failed to initialize debug information");
+      repl_hint ("Did you compile %s with debug information enabled? "
+                 "E.g. clang -g",
+                 prog_name);
       return -1;
     }
 
