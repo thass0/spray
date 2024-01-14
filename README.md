@@ -1,9 +1,9 @@
 <p align="center">
 	<h2 align="center">🐛🐛🐛 Spray 🐛🐛🐛</h3>
  <p align="center">
-  <a href="https://github.com/d4ckard/spray/#%EF%B8%8F-installation">Get started</a> -
-  <a href="https://github.com/d4ckard/spray/issues">Issues</a> -
-  <a href="https://github.com/d4ckard/spray/issues/new">Bug report</a>
+  <a href="https://github.com/thass0/spray/#%EF%B8%8F-installation">Get started</a> -
+  <a href="https://github.com/thass0/spray/issues">Issues</a> -
+  <a href="https://github.com/thass0/spray/issues/new">Bug report</a>
  </p>
 </p>
 
@@ -44,7 +44,7 @@ so if you want to build Spray, you need to install libdwarf first. Then, to inst
 have to [clone all the submodules](https://stackoverflow.com/a/4438292) too.
 
 ```sh
-git clone --recurse-submodules https://github.com/d4ckard/spray.git
+git clone --recurse-submodules https://github.com/thass0/spray.git
 cd spray
 make
 ```
@@ -197,7 +197,7 @@ features.
 
 It's possible that some of the tests fail due to off-by-one errors when
 making assertions about specific values found in the example binaries that
-are used in the tests. Refer to [this issue](https://github.com/d4ckard/spray/issues/2)
+are used in the tests. Refer to [this issue](https://github.com/thass0/spray/issues/2)
 for more details. You can ignore tests that fail for this reason only.
 
 ## 📖 References

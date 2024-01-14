@@ -26,7 +26,7 @@ print_help_message (const char *me)
 	   "A description of the commands available in Spray's REPL and\n"
 	   "of how to use Spray can be found in the README.md file.\n"
 	   "\n"
-	   "spray <https://github.com/d4ckard/spray>\n",
+	   "spray <https://github.com/thass0/spray>\n",
 	   me);
 }
 
